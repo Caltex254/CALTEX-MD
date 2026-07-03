@@ -69,7 +69,7 @@ const reminderPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         if (ctx.args.length < 2) {
           await ctx.reply(
-            '❌ Usage: !remind <time> <message>\n\n' +
+            '❌ Usage: .remind <time> <message>\n\n' +
             '⏱️ *Time Formats:*\n' +
             '• Xm - minutes (e.g., 30m)\n' +
             '• Xh - hours (e.g., 2h)\n' +
@@ -77,9 +77,9 @@ const reminderPlugin: Plugin = {
             '• daily / weekly\n' +
             '• 6pm, 14:30\n\n' +
             '📝 *Examples:*\n' +
-            '!remind 30m Check server\n' +
-            '!remind 2h Team meeting\n' +
-            '!remind daily Standup update'
+            '.remind 30m Check server\n' +
+            '.remind 2h Team meeting\n' +
+            '.remind daily Standup update'
           );
           return;
         }

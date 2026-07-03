@@ -15,8 +15,8 @@ import { Badge } from '@/components/ui/badge'
 
 const navItems = [
   { id: 'overview', label: 'Dashboard', icon: Home, emoji: '🏠' },
+  { id: 'pairing', label: 'Pair Device', icon: Link2, emoji: '🔗' },
   { id: 'qr', label: 'QR Login', icon: QrCode, emoji: '📱' },
-  { id: 'pairing', label: 'Pairing', icon: Link2, emoji: '🔗' },
   { id: 'sessions', label: 'Sessions', icon: KeyRound, emoji: '🔐' },
   { id: 'plugins', label: 'Plugins', icon: Puzzle, emoji: '🔌' },
   { id: 'users', label: 'Users', icon: Users, emoji: '👥' },

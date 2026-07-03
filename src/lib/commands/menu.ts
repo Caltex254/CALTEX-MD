@@ -89,9 +89,9 @@ const menuPlugin: Plugin = {
         }
 
         text += '┃━━━━━━━━━━━━━━━━━━━\n';
-        text += '┃ 💡 *Type !help <category> for commands*\n';
-        text += '┃ 📌 Prefix: *!*\n';
-        text += '┃ ☠️ Bug Menu: *!bugmenu*\n';
+        text += '┃ 💡 *Type .help <category> for commands*\n';
+        text += '┃ 📌 Prefix: *.*\n';
+        text += '┃ ☠️ Bug Menu: *.bugmenu*\n';
         text += '╰━━━━━━━━━━━━━━━━━━━\n';
 
         await ctx.reply(text);

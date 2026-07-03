@@ -230,7 +230,7 @@ const moderationPlugin: Plugin = {
         const target = ctx.args[0]?.replace('@', '');
         const reason = ctx.args.slice(1).join(' ') || 'No reason specified';
         if (!target) {
-          await ctx.reply('❌ Usage: !warn @user <reason>\nExample: !warn @628123 spamming');
+          await ctx.reply('❌ Usage: .warn @user <reason>\nExample: .warn @628123 spamming');
           return;
         }
         const state = getGroupState(ctx.jid);
@@ -270,7 +270,7 @@ const moderationPlugin: Plugin = {
         }
         const target = ctx.args[0]?.replace('@', '');
         if (!target) {
-          await ctx.reply('❌ Usage: !unwarn @user');
+          await ctx.reply('❌ Usage: .unwarn @user');
           return;
         }
         const state = getGroupState(ctx.jid);
@@ -437,7 +437,7 @@ const moderationPlugin: Plugin = {
         const msg = ctx.args.join(' ');
         if (!msg) {
           await ctx.reply(
-            '❌ Usage: !setwelcome <message>\n\nVariables: @user = mentioned user\nExample: !setwelcome Welcome @user to our group! 🎉'
+            '❌ Usage: .setwelcome <message>\n\nVariables: @user = mentioned user\nExample: .setwelcome Welcome @user to our group! 🎉'
           );
           return;
         }
@@ -461,7 +461,7 @@ const moderationPlugin: Plugin = {
         const msg = ctx.args.join(' ');
         if (!msg) {
           await ctx.reply(
-            '❌ Usage: !setgoodbye <message>\n\nVariables: @user = mentioned user\nExample: !setgoodbye Goodbye @user! We\'ll miss you 👋'
+            '❌ Usage: .setgoodbye <message>\n\nVariables: @user = mentioned user\nExample: .setgoodbye Goodbye @user! We\'ll miss you 👋'
           );
           return;
         }

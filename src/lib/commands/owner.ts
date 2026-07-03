@@ -11,7 +11,7 @@ const ownerState: {
   bannedUsers: Set<string>;
   premiumUsers: Set<string>;
 } = {
-  prefix: '!',
+  prefix: '.',
   bannedUsers: new Set(),
   premiumUsers: new Set(),
 };
@@ -37,7 +37,7 @@ const ownerPlugin: Plugin = {
         }
         const newPrefix = ctx.args[0];
         if (!newPrefix || newPrefix.length !== 1) {
-          await ctx.reply('❌ Usage: !setprefix <single character>\nExample: !setprefix #');
+          await ctx.reply('❌ Usage: .setprefix <single character>\nExample: .setprefix #');
           return;
         }
         const oldPrefix = ownerState.prefix;
@@ -59,7 +59,7 @@ const ownerPlugin: Plugin = {
         }
         const message = ctx.args.join(' ');
         if (!message) {
-          await ctx.reply('❌ Usage: !broadcast <message>\nExample: !broadcast Maintenance at 10pm');
+          await ctx.reply('❌ Usage: .broadcast <message>\nExample: .broadcast Maintenance at 10pm');
           return;
         }
         // In production, this would iterate all chats and send
@@ -83,7 +83,7 @@ const ownerPlugin: Plugin = {
         }
         const target = ctx.args[0]?.replace('@', '') + '@s.whatsapp.net';
         if (!ctx.args[0]) {
-          await ctx.reply('❌ Usage: !ban @user\nExample: !ban @6281234567890');
+          await ctx.reply('❌ Usage: .ban @user\nExample: .ban @6281234567890');
           return;
         }
         ownerState.bannedUsers.add(target);
@@ -104,7 +104,7 @@ const ownerPlugin: Plugin = {
         }
         const target = ctx.args[0]?.replace('@', '') + '@s.whatsapp.net';
         if (!ctx.args[0]) {
-          await ctx.reply('❌ Usage: !unban @user');
+          await ctx.reply('❌ Usage: .unban @user');
           return;
         }
         const removed = ownerState.bannedUsers.delete(target);
@@ -130,7 +130,7 @@ const ownerPlugin: Plugin = {
         const user = ctx.args[0]?.replace('@', '');
         const action = ctx.args[1]?.toLowerCase();
         if (!user || !action) {
-          await ctx.reply('❌ Usage: !premium @user <on|off>\nExample: !premium @6281234567890 on');
+          await ctx.reply('❌ Usage: .premium @user <on|off>\nExample: .premium @6281234567890 on');
           return;
         }
         const target = user + '@s.whatsapp.net';

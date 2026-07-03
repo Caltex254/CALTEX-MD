@@ -70,7 +70,7 @@ const languagePlugin: Plugin = {
             await ctx.reply(
               `🌐 *Language Settings*\n\n` +
               `Current: ${langInfo?.flag || '🌐'} *${langInfo?.name || current}*\n\n` +
-              `💡 Use !language <code> to change\nExample: !language sw`
+              `💡 Use .language <code> to change\nExample: .language sw`
             );
             return;
           }
@@ -78,7 +78,7 @@ const languagePlugin: Plugin = {
           if (!found) {
             await ctx.reply(
               `❌ Language "${langCode}" not supported.\n\n` +
-              `💡 Use !languages to see available options.`
+              `💡 Use .languages to see available options.`
             );
             return;
           }
@@ -106,7 +106,7 @@ const languagePlugin: Plugin = {
         for (const lang of SUPPORTED_LANGUAGES) {
           text += `${lang.flag} *${lang.name}* → ${lang.code}\n`;
         }
-        text += '\n💡 Use !language <code> to set your preference';
+        text += '\n💡 Use .language <code> to set your preference';
         await ctx.reply(text);
       },
     },

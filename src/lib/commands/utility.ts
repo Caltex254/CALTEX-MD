@@ -227,9 +227,9 @@ const utilityPlugin: Plugin = {
           const cmds = registry.getCommandsByCategory(cat);
           const emoji = emojis[cat] || '📦';
           text += `${emoji} *${cat.toUpperCase()}* (${cmds.length})\n`;
-          text += cmds.map(c => `  ↳ !${c.name}${c.isPremiumOnly ? ' 👑' : ''}`).join('\n') + '\n\n';
+          text += cmds.map(c => `  ↳ .${c.name}${c.isPremiumOnly ? ' 👑' : ''}`).join('\n') + '\n\n';
         }
-        text += '━'.repeat(25) + '\n👑 = Premium | !help <cmd> for details';
+        text += '━'.repeat(25) + '\n👑 = Premium | .help <cmd> for details';
         await ctx.reply(text);
       },
     },
@@ -253,7 +253,7 @@ const utilityPlugin: Plugin = {
           `🔌 Plugins: ${stats.totalPlugins}\n` +
           `📝 Commands: ${stats.totalCommands}\n` +
           `📂 Categories: ${stats.categories}\n\n` +
-          `💡 Use !menu to see all commands.`
+          `💡 Use .menu to see all commands.`
         );
       },
     },

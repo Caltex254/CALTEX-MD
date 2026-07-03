@@ -8,24 +8,31 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Save, RotateCcw } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Save, RotateCcw, Shield, Lock } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 export function SettingsPanel() {
   const { token } = useDashboardStore()
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [forbidden, setForbidden] = useState(false)
 
   useEffect(() => { fetchSettings() }, [])
 
   const fetchSettings = async () => {
     try {
       const res = await fetch('/api/settings', { headers: { Authorization: `Bearer ${token}` } })
+      if (res.status === 403) {
+        setForbidden(true)
+        return
+      }
       const data = await res.json()
       if (data.success) {
         const map: Record<string, string> = {}
         ;(data.data.settings || []).forEach((s: any) => { map[s.key] = s.value })
         setSettings(map)
+        setForbidden(false)
       }
     } catch {}
   }
@@ -48,10 +55,36 @@ export function SettingsPanel() {
     setSettings((prev) => ({ ...prev, [key]: value }))
   }
 
+  // Show access denied for non-admin users
+  if (forbidden) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">Settings</h3>
+          <Badge variant="destructive" className="gap-1"><Lock className="h-3 w-3" /> Admin Only</Badge>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center space-y-4">
+            <Lock className="h-12 w-12 text-muted-foreground mx-auto" />
+            <div>
+              <p className="font-semibold text-lg">Admin Access Required</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Settings can only be modified by the bot administrator. This includes bot configuration, anti-features, auto-features, and message settings.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Settings</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">Settings</h3>
+          <Badge variant="outline" className="gap-1 text-green-600 border-green-600"><Shield className="h-3 w-3" /> Admin</Badge>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchSettings}><RotateCcw className="h-4 w-4 mr-1" /> Reset</Button>
           <Button size="sm" onClick={saveSettings} disabled={saving}><Save className="h-4 w-4 mr-1" /> Save</Button>
@@ -70,9 +103,9 @@ export function SettingsPanel() {
         <TabsContent value="general" className="mt-4">
           <Card>
             <CardContent className="p-4 space-y-4">
-              <div><Label>Bot Prefix</Label><Input value={settings['prefix'] || '!'} onChange={(e) => updateSetting('prefix', e.target.value)} /></div>
+              <div><Label>Bot Prefix</Label><Input value={settings['prefix'] || '.'} onChange={(e) => updateSetting('prefix', e.target.value)} /></div>
               <div><Label>Bot Name</Label><Input value={settings['botName'] || 'CALTEX MD'} onChange={(e) => updateSetting('botName', e.target.value)} /></div>
-              <div><Label>Owner Number</Label><Input value={settings['ownerNumber'] || ''} onChange={(e) => updateSetting('ownerNumber', e.target.value)} placeholder="e.g. 1234567890" /></div>
+              <div><Label>Owner Number</Label><Input value={settings['ownerNumber'] || ''} onChange={(e) => updateSetting('ownerNumber', e.target.value)} placeholder="e.g. 254104906247" /></div>
             </CardContent>
           </Card>
         </TabsContent>

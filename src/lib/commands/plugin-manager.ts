@@ -44,7 +44,7 @@ const pluginManagerPlugin: Plugin = {
             text += `   📝 ${p.description?.substring(0, 40) || 'No description'}\n`;
             text += `   📝 ${cmdCount} cmd(s) | 👤 ${p.author}\n\n`;
           }
-          text += '💡 !plugininfo <name> for details';
+          text += '💡 .plugininfo <name> for details';
           await ctx.reply(text);
         } catch (error) {
           console.error('[Plugins] Error:', error);
@@ -66,7 +66,7 @@ const pluginManagerPlugin: Plugin = {
         }
         const name = ctx.args[0];
         if (!name) {
-          await ctx.reply('❌ Usage: !plugininfo <name>');
+          await ctx.reply('❌ Usage: .plugininfo <name>');
           return;
         }
         try {
@@ -89,7 +89,7 @@ const pluginManagerPlugin: Plugin = {
             text += `📝 *Commands (${plugin.commands.length}):*\n`;
             for (const cmd of plugin.commands) {
               const premium = cmd.isPremiumOnly ? ' 👑' : '';
-              text += `  !${cmd.name}${premium} - ${cmd.description}\n`;
+              text += `  .${cmd.name}${premium} - ${cmd.description}\n`;
             }
           }
           await ctx.reply(text);
@@ -113,7 +113,7 @@ const pluginManagerPlugin: Plugin = {
         }
         const name = ctx.args[0];
         if (!name) {
-          await ctx.reply('❌ Usage: !enableplugin <name>');
+          await ctx.reply('❌ Usage: .enableplugin <name>');
           return;
         }
         try {
@@ -149,7 +149,7 @@ const pluginManagerPlugin: Plugin = {
         }
         const name = ctx.args[0];
         if (!name) {
-          await ctx.reply('❌ Usage: !disableplugin <name>');
+          await ctx.reply('❌ Usage: .disableplugin <name>');
           return;
         }
         if (name === 'plugin-manager') {
@@ -189,7 +189,7 @@ const pluginManagerPlugin: Plugin = {
         }
         const name = ctx.args[0];
         if (!name) {
-          await ctx.reply('❌ Usage: !reloadplugin <name>');
+          await ctx.reply('❌ Usage: .reloadplugin <name>');
           return;
         }
         await ctx.react('🔄');
@@ -253,7 +253,7 @@ const pluginManagerPlugin: Plugin = {
         }
         const pluginPath = ctx.args[0];
         if (!pluginPath) {
-          await ctx.reply('❌ Usage: !installplugin <path>\nExample: !installplugin ./custom-plugins/my-plugin.ts');
+          await ctx.reply('❌ Usage: .installplugin <path>\nExample: .installplugin ./custom-plugins/my-plugin.ts');
           return;
         }
         await ctx.react('📥');
@@ -299,7 +299,7 @@ const pluginManagerPlugin: Plugin = {
         }
         const name = ctx.args[0];
         if (!name) {
-          await ctx.reply('❌ Usage: !removeplugin <name>');
+          await ctx.reply('❌ Usage: .removeplugin <name>');
           return;
         }
         if (name === 'plugin-manager') {

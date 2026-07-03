@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateToken, comparePassword, hashPassword } from '@/lib/auth';
 
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS_HASH = process.env.ADMIN_PASS || 'admin123';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'waynekipkoech1';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const storedHash = await hashPassword(ADMIN_PASS_HASH);
+    const storedHash = await hashPassword(ADMIN_PASS);
     const isValid = await comparePassword(password, storedHash);
 
     if (!isValid) {

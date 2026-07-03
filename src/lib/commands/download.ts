@@ -45,7 +45,7 @@ const downloadPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url || !isValidUrl(url)) {
-          await ctx.reply('❌ Usage: !yta <youtube url>\nExample: !yta https://youtube.com/watch?v=...');
+          await ctx.reply('❌ Usage: .yta <youtube url>\nExample: .yta https://youtube.com/watch?v=...');
           return;
         }
         if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
@@ -67,7 +67,7 @@ const downloadPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url || !isValidUrl(url)) {
-          await ctx.reply('❌ Usage: !ytv <youtube url>\nExample: !ytv https://youtube.com/watch?v=...');
+          await ctx.reply('❌ Usage: .ytv <youtube url>\nExample: .ytv https://youtube.com/watch?v=...');
           return;
         }
         if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
@@ -89,7 +89,7 @@ const downloadPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url || !isValidUrl(url)) {
-          await ctx.reply('❌ Usage: !ig <instagram url>\nExample: !ig https://instagram.com/reel/...');
+          await ctx.reply('❌ Usage: .ig <instagram url>\nExample: .ig https://instagram.com/reel/...');
           return;
         }
         if (!url.includes('instagram.com')) {
@@ -111,7 +111,7 @@ const downloadPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url || !isValidUrl(url)) {
-          await ctx.reply('❌ Usage: !tiktok <tiktok url>\nExample: !tiktok https://tiktok.com/@user/video/...');
+          await ctx.reply('❌ Usage: .tiktok <tiktok url>\nExample: .tiktok https://tiktok.com/@user/video/...');
           return;
         }
         if (!url.includes('tiktok.com')) {
@@ -133,7 +133,7 @@ const downloadPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url || !isValidUrl(url)) {
-          await ctx.reply('❌ Usage: !fb <facebook url>\nExample: !fb https://facebook.com/watch/...');
+          await ctx.reply('❌ Usage: .fb <facebook url>\nExample: .fb https://facebook.com/watch/...');
           return;
         }
         if (!url.includes('facebook.com') && !url.includes('fb.watch')) {
@@ -155,7 +155,7 @@ const downloadPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url || !isValidUrl(url)) {
-          await ctx.reply('❌ Usage: !twitter <twitter url>\nExample: !twitter https://twitter.com/user/status/...');
+          await ctx.reply('❌ Usage: .twitter <twitter url>\nExample: .twitter https://twitter.com/user/status/...');
           return;
         }
         if (!url.includes('twitter.com') && !url.includes('x.com')) {
@@ -178,8 +178,8 @@ const downloadPlugin: Plugin = {
         const url = ctx.args[0];
         if (!url || !isValidUrl(url)) {
           await ctx.reply(
-            '❌ Usage: !media <url>\n\nSupported platforms:\n' +
-            '• YouTube • Instagram • TikTok\n• Facebook • Twitter/X\n\nExample: !media https://youtube.com/watch?v=...'
+            '❌ Usage: .media <url>\n\nSupported platforms:\n' +
+            '• YouTube • Instagram • TikTok\n• Facebook • Twitter/X\n\nExample: .media https://youtube.com/watch?v=...'
           );
           return;
         }

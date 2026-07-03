@@ -87,7 +87,7 @@ const premiumPlugin: Plugin = {
         const plan = ctx.args[1]?.toLowerCase();
         const duration = ctx.args[2]?.toLowerCase();
         if (!user || !plan || !duration) {
-          await ctx.reply('❌ Usage: !addpremium @user <plan> <duration>\n\n📋 Plans: basic, pro, enterprise\n⏱️ Duration: 1d, 7d, 30d, 1y\n\nExample: !addpremium @6281234567890 pro 30d');
+          await ctx.reply('❌ Usage: .addpremium @user <plan> <duration>\n\n📋 Plans: basic, pro, enterprise\n⏱️ Duration: 1d, 7d, 30d, 1y\n\nExample: .addpremium @6281234567890 pro 30d');
           return;
         }
         const validPlans = ['basic', 'pro', 'enterprise'];
@@ -138,7 +138,7 @@ const premiumPlugin: Plugin = {
         }
         const user = ctx.args[0]?.replace('@', '');
         if (!user) {
-          await ctx.reply('❌ Usage: !delpremium @user\nExample: !delpremium @6281234567890');
+          await ctx.reply('❌ Usage: .delpremium @user\nExample: .delpremium @6281234567890');
           return;
         }
         const targetJid = user + '@s.whatsapp.net';

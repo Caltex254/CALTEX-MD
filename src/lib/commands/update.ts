@@ -109,7 +109,7 @@ const updatePlugin: Plugin = {
             `🏷️ Current: v${CURRENT_VERSION}\n` +
             `🆕 Latest: v${latest}\n` +
             `📊 Status: ${isUpToDate ? '✅ Up to date' : '⚠️ Update available'}\n\n` +
-            (isUpToDate ? '' : `📝 *Release Notes:*\n${release.notes.substring(0, 400)}\n\n💡 Use *!update* to update.`);
+            (isUpToDate ? '' : `📝 *Release Notes:*\n${release.notes.substring(0, 400)}\n\n💡 Use *.update* to update.`);
           await ctx.reply(text);
         } catch (error) {
           console.error('[CheckUpdate] Error:', error);

@@ -34,7 +34,7 @@ const autoreplyPlugin: Plugin = {
           if (replies.length === 0) {
             await ctx.reply(
               '📋 No auto-reply rules configured.\n\n' +
-              '💡 Use !setreply <trigger>|<response> to create one.'
+              '💡 Use .setreply <trigger>|<response> to create one.'
             );
             return;
           }
@@ -46,7 +46,7 @@ const autoreplyPlugin: Plugin = {
             text += `   💬 ${r.response.substring(0, 40)}\n`;
             text += `   ${scope} | ${type} | Used: ${r.matchCount}x\n\n`;
           }
-          text += '💡 !setreply to add | !delreply to remove';
+          text += '💡 .setreply to add | .delreply to remove';
           await ctx.reply(text);
         } catch (error) {
           console.error('[AutoReply] Error:', error);
@@ -70,12 +70,12 @@ const autoreplyPlugin: Plugin = {
         const separatorIndex = fullInput.indexOf('|');
         if (separatorIndex === -1) {
           await ctx.reply(
-            '❌ Usage: !setreply <trigger>|<response> [-regex] [-group <jid>]\n\n' +
+            '❌ Usage: .setreply <trigger>|<response> [-regex] [-group <jid>]\n\n' +
             '📝 *Examples:*\n' +
-            '!setreply hello|Hi there! 👋\n' +
-            '!setreply price|Check our prices at example.com\n' +
-            '!setreply ^hello$|Hi there! -regex\n' +
-            '!setreply hi|Hello! -group 123@g.us'
+            '.setreply hello|Hi there! 👋\n' +
+            '.setreply price|Check our prices at example.com\n' +
+            '.setreply ^hello$|Hi there! -regex\n' +
+            '.setreply hi|Hello! -group 123@g.us'
           );
           return;
         }
@@ -149,7 +149,7 @@ const autoreplyPlugin: Plugin = {
         }
         const trigger = ctx.args.join(' ').trim();
         if (!trigger) {
-          await ctx.reply('❌ Usage: !delreply <trigger>\nExample: !delreply hello');
+          await ctx.reply('❌ Usage: .delreply <trigger>\nExample: .delreply hello');
           return;
         }
         try {

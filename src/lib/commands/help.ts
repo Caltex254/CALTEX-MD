@@ -67,7 +67,7 @@ const helpPlugin: Plugin = {
         const { CommandRegistry } = await import('../plugin-loader');
         const registry = CommandRegistry.getInstance();
         const categories = registry.getCategories();
-        const prefix = '!';
+        const prefix = '.';
 
         let text = '📖 *CALTEX MD - Command List*\n';
         text += '━'.repeat(25) + '\n';
@@ -94,7 +94,7 @@ const helpPlugin: Plugin = {
 
         text += '\n' + '━'.repeat(25) + '\n';
         text += '👑 = Premium only | Total: ' + registry.getAllCommands().length + ' commands';
-        text += '\n\n💡 Use *!help <category>* for specific categories';
+        text += '\n\n💡 Use *.help <category>* for specific categories';
 
         await ctx.reply(text);
       },

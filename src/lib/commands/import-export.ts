@@ -96,9 +96,9 @@ const importExportPlugin: Plugin = {
         const jsonInput = ctx.args.join(' ');
         if (!jsonInput || jsonInput.length < 10) {
           await ctx.reply(
-            '❌ Usage: !importconfig <json>\n\n' +
+            '❌ Usage: .importconfig <json>\n\n' +
             '⚠️ Provide a valid JSON configuration string.\n' +
-            '💡 Use !exportconfig first to get the format.'
+            '💡 Use .exportconfig first to get the format.'
           );
           return;
         }

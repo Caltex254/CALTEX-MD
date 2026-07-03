@@ -33,7 +33,7 @@ const apikeysPlugin: Plugin = {
         try {
           const keys = await db.aPIKey.findMany({ orderBy: { name: 'asc' } });
           if (keys.length === 0) {
-            await ctx.reply('🔑 No API keys configured.\n\n💡 Use !apikeyadd <name> <key> [provider]');
+            await ctx.reply('🔑 No API keys configured.\n\n💡 Use .apikeyadd <name> <key> [provider]');
             return;
           }
           let text = `🔑 *API Keys (${keys.length})*\n` + '━'.repeat(22) + '\n\n';
@@ -44,7 +44,7 @@ const apikeysPlugin: Plugin = {
             text += `   🔐 ${maskKey(k.key)}\n`;
             text += `   🏷️ ${k.provider || 'N/A'} | Last: ${lastUsed}\n\n`;
           }
-          text += '💡 !apikeyadd | !apikeydel | !apikeytoggle';
+          text += '💡 .apikeyadd | .apikeydel | .apikeytoggle';
           await ctx.reply(text);
         } catch (error) {
           console.error('[APIKeys] Error:', error);
@@ -69,11 +69,11 @@ const apikeysPlugin: Plugin = {
         const provider = ctx.args[2]?.toLowerCase();
         if (!name || !key) {
           await ctx.reply(
-            '❌ Usage: !apikeyadd <name> <key> [provider]\n\n' +
+            '❌ Usage: .apikeyadd <name> <key> [provider]\n\n' +
             '📝 *Examples:*\n' +
-            '!apikeyadd openai sk-abc123 openai\n' +
-            '!apikeyadd gemini AIzaSy... google\n' +
-            '!apikeyadd custom mykey123'
+            '.apikeyadd openai sk-abc123 openai\n' +
+            '.apikeyadd gemini AIzaSy... google\n' +
+            '.apikeyadd custom mykey123'
           );
           return;
         }
@@ -116,7 +116,7 @@ const apikeysPlugin: Plugin = {
         }
         const name = ctx.args[0]?.toLowerCase();
         if (!name) {
-          await ctx.reply('❌ Usage: !apikeydel <name>\nExample: !apikeydel openai');
+          await ctx.reply('❌ Usage: .apikeydel <name>\nExample: .apikeydel openai');
           return;
         }
         try {
@@ -147,7 +147,7 @@ const apikeysPlugin: Plugin = {
         }
         const name = ctx.args[0]?.toLowerCase();
         if (!name) {
-          await ctx.reply('❌ Usage: !apikeytoggle <name>\nExample: !apikeytoggle openai');
+          await ctx.reply('❌ Usage: .apikeytoggle <name>\nExample: .apikeytoggle openai');
           return;
         }
         try {

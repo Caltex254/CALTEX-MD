@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth';
+import { withAuth, verifyToken, TokenPayload } from '@/lib/auth';
 import { db } from '@/lib/db';
 
-export const GET = withAuth(async (request: NextRequest) => {
+// Admin-only middleware wrapper for settings
+function withAdminAuth(
+  handler: (request: NextRequest, user: TokenPayload) => Promise<NextResponse>
+) {
+  return async (request: NextRequest): Promise<NextResponse> => {
+    const user = await verifyToken(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - Invalid or missing token' },
+        { status: 401 }
+      );
+    }
+    // Only allow admin role to access settings
+    if (user.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - Admin access required for settings' },
+        { status: 403 }
+      );
+    }
+    return handler(request, user);
+  };
+}
+
+export const GET = withAdminAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
@@ -35,7 +58,7 @@ export const GET = withAuth(async (request: NextRequest) => {
   }
 });
 
-export const PUT = withAuth(async (request: NextRequest) => {
+export const PUT = withAdminAuth(async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { settings } = body;

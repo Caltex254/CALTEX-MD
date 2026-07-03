@@ -56,13 +56,13 @@ const themePlugin: Plugin = {
               `🎨 *Current Theme*\n\n` +
               `🏷️ Name: *${currentTheme}*\n` +
               `📝 ${themeConfig?.description || 'Default theme'}\n\n` +
-              `💡 Use !theme <name> to change\nUse !themes to see all options`
+              `💡 Use .theme <name> to change\nUse .themes to see all options`
             );
             return;
           }
           const theme = await db.themeConfig.findUnique({ where: { name: themeName } });
           if (!theme) {
-            await ctx.reply(`❌ Theme "${themeName}" not found. Use !themes to see available themes.`);
+            await ctx.reply(`❌ Theme "${themeName}" not found. Use .themes to see available themes.`);
             return;
           }
           await db.setting.upsert({
@@ -102,7 +102,7 @@ const themePlugin: Plugin = {
             text += `🏷️ *${t.name}*${active}${def}\n`;
             text += `   📝 ${t.description}\n\n`;
           }
-          text += '💡 Use !theme <name> to apply a theme';
+          text += '💡 Use .theme <name> to apply a theme';
           await ctx.reply(text);
         } catch (error) {
           console.error('[Themes] Error:', error);

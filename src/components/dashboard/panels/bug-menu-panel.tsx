@@ -53,7 +53,7 @@ export function BugMenuPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jid: `${target}@s.whatsapp.net`,
-          text: `!${selectedBug} ${target}`,
+          text: `.${selectedBug} ${target}`,
         }),
       })
 
@@ -77,7 +77,7 @@ export function BugMenuPanel() {
         <CardContent className="flex items-center gap-3 pt-6">
           <AlertTriangle className="h-5 w-5 text-red-500" />
           <p className="text-sm text-red-400">
-            <strong>OWNER ONLY</strong> — Bug commands are restricted to bot owners. Unauthorized use results in an instant ban.
+            <strong>BUG COMMANDS</strong> — These powerful commands are available for all users. Use wisely and responsibly.
           </p>
         </CardContent>
       </Card>

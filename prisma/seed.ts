@@ -7,7 +7,7 @@ async function main() {
 
   // Create default settings
   const settings = [
-    { key: 'bot_prefix', value: '!', category: 'bot', description: 'Command prefix' },
+    { key: 'bot_prefix', value: '.', category: 'bot', description: 'Command prefix' },
     { key: 'bot_name', value: 'CALTEX MD', category: 'bot', description: 'Bot display name' },
     { key: 'bot_owner', value: '+254104906247', category: 'bot', description: 'Owner WhatsApp number' },
     { key: 'auto_read', value: 'false', category: 'auto', description: 'Auto read messages' },

@@ -57,7 +57,7 @@ const groupPlugin: Plugin = {
         }
         const target = ctx.args[0];
         if (!target) {
-          await ctx.reply('❌ Usage: !promote @user\nExample: !promote @6281234567890');
+          await ctx.reply('❌ Usage: .promote @user\nExample: .promote @6281234567890');
           return;
         }
         await ctx.react('⬆️');
@@ -82,7 +82,7 @@ const groupPlugin: Plugin = {
         }
         const target = ctx.args[0];
         if (!target) {
-          await ctx.reply('❌ Usage: !demote @user\nExample: !demote @6281234567890');
+          await ctx.reply('❌ Usage: .demote @user\nExample: .demote @6281234567890');
           return;
         }
         await ctx.react('⬇️');
@@ -107,7 +107,7 @@ const groupPlugin: Plugin = {
         }
         const target = ctx.args[0];
         if (!target) {
-          await ctx.reply('❌ Usage: !add @number\nExample: !add 6281234567890');
+          await ctx.reply('❌ Usage: .add @number\nExample: .add 6281234567890');
           return;
         }
         await ctx.react('➕');
@@ -132,7 +132,7 @@ const groupPlugin: Plugin = {
         }
         const target = ctx.args[0];
         if (!target) {
-          await ctx.reply('❌ Usage: !kick @user\nExample: !kick @6281234567890');
+          await ctx.reply('❌ Usage: .kick @user\nExample: .kick @6281234567890');
           return;
         }
         await ctx.react('❌');
@@ -199,7 +199,7 @@ const groupPlugin: Plugin = {
         }
         const name = ctx.args.join(' ');
         if (!name) {
-          await ctx.reply('❌ Usage: !setname <new name>\nExample: !setname My Awesome Group');
+          await ctx.reply('❌ Usage: .setname <new name>\nExample: .setname My Awesome Group');
           return;
         }
         await ctx.react('✏️');
@@ -224,7 +224,7 @@ const groupPlugin: Plugin = {
         }
         const desc = ctx.args.join(' ');
         if (!desc) {
-          await ctx.reply('❌ Usage: !setdesc <new description>\nExample: !setdesc Welcome to our community!');
+          await ctx.reply('❌ Usage: .setdesc <new description>\nExample: .setdesc Welcome to our community!');
           return;
         }
         await ctx.react('📝');

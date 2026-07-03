@@ -24,7 +24,7 @@ const logger = pino({
 }).child({ module: 'message-handler' });
 
 const DEFAULT_CONFIG: BotConfig = {
-  prefix: '!',
+  prefix: '.',
   ownerJids: [],
   autoReply: {
     enabled: false,
@@ -114,7 +114,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['p'],
         description: 'Check if the bot is alive',
         category: 'general',
-        usage: '!ping',
+        usage: '.ping',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,
@@ -130,7 +130,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['h', 'menu'],
         description: 'Show available commands',
         category: 'general',
-        usage: '!help [category]',
+        usage: '.help [category]',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,
@@ -159,7 +159,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['about'],
         description: 'Show bot information',
         category: 'general',
-        usage: '!info',
+        usage: '.info',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,
@@ -183,13 +183,13 @@ export class MessageHandler extends EventEmitter {
         aliases: ['chat', 'ask'],
         description: 'Chat with AI',
         category: 'ai',
-        usage: '!ai <question>',
+        usage: '.ai <question>',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,
         handler: async (ctx) => {
           if (!ctx.args.length) {
-            await ctx.sock.sendMessage(ctx.jid, { text: '❌ Please provide a question. Usage: !ai <question>' }, { quoted: ctx.message });
+            await ctx.sock.sendMessage(ctx.jid, { text: '❌ Please provide a question. Usage: .ai <question>' }, { quoted: ctx.message });
             return;
           }
           try {
@@ -206,13 +206,13 @@ export class MessageHandler extends EventEmitter {
         aliases: ['tr'],
         description: 'Translate text to a target language',
         category: 'ai',
-        usage: '!translate <lang> <text>',
+        usage: '.translate <lang> <text>',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,
         handler: async (ctx) => {
           if (ctx.args.length < 2) {
-            await ctx.sock.sendMessage(ctx.jid, { text: '❌ Usage: !translate <language> <text>' }, { quoted: ctx.message });
+            await ctx.sock.sendMessage(ctx.jid, { text: '❌ Usage: .translate <language> <text>' }, { quoted: ctx.message });
             return;
           }
           try {
@@ -230,7 +230,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['sum'],
         description: 'Summarize text',
         category: 'ai',
-        usage: '!summarize <text>',
+        usage: '.summarize <text>',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,
@@ -252,7 +252,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['s', 'stiker'],
         description: 'Convert image to sticker',
         category: 'media',
-        usage: '!sticker (reply to image)',
+        usage: '.sticker (reply to image)',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,
@@ -280,7 +280,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['gi'],
         description: 'Show group information',
         category: 'group',
-        usage: '!groupinfo',
+        usage: '.groupinfo',
         ownerOnly: false,
         groupOnly: true,
         adminOnly: false,
@@ -305,7 +305,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['pm'],
         description: 'Promote user to admin',
         category: 'admin',
-        usage: '!promote @user',
+        usage: '.promote @user',
         ownerOnly: false,
         groupOnly: true,
         adminOnly: true,
@@ -328,7 +328,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['dm'],
         description: 'Demote admin to member',
         category: 'admin',
-        usage: '!demote @user',
+        usage: '.demote @user',
         ownerOnly: false,
         groupOnly: true,
         adminOnly: true,
@@ -351,7 +351,7 @@ export class MessageHandler extends EventEmitter {
         aliases: [],
         description: 'Mute group (only admins can send)',
         category: 'admin',
-        usage: '!mute [duration_minutes]',
+        usage: '.mute [duration_minutes]',
         ownerOnly: false,
         groupOnly: true,
         adminOnly: true,
@@ -370,7 +370,7 @@ export class MessageHandler extends EventEmitter {
         aliases: [],
         description: 'Unmute group',
         category: 'admin',
-        usage: '!unmute',
+        usage: '.unmute',
         ownerOnly: false,
         groupOnly: true,
         adminOnly: true,
@@ -388,7 +388,7 @@ export class MessageHandler extends EventEmitter {
         aliases: ['resetai'],
         description: 'Clear AI conversation memory',
         category: 'ai',
-        usage: '!clearai',
+        usage: '.clearai',
         ownerOnly: false,
         groupOnly: false,
         adminOnly: false,

@@ -49,7 +49,7 @@ const aiPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const prompt = ctx.args.join(' ');
         if (!prompt) {
-          await ctx.reply('❌ Usage: !ai <question>\nExample: !ai What is quantum computing?');
+          await ctx.reply('❌ Usage: .ai <question>\nExample: .ai What is quantum computing?');
           return;
         }
         await ctx.react('🤖');
@@ -69,7 +69,7 @@ const aiPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const prompt = ctx.args.join(' ');
         if (!prompt) {
-          await ctx.reply('❌ Usage: !aiimage <description>\nExample: !aiimage a sunset over mountains');
+          await ctx.reply('❌ Usage: .aiimage <description>\nExample: .aiimage a sunset over mountains');
           return;
         }
         await ctx.react('🎨');
@@ -88,7 +88,7 @@ const aiPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const prompt = ctx.args.join(' ');
         if (!prompt) {
-          await ctx.reply('❌ Usage: !aicode <description>\nExample: !aicode Python function to sort a list');
+          await ctx.reply('❌ Usage: .aicode <description>\nExample: .aicode Python function to sort a list');
           return;
         }
         await ctx.react('💻');
@@ -110,7 +110,7 @@ const aiPlugin: Plugin = {
         const targetLang = ctx.args[0];
         const text = ctx.args.slice(1).join(' ');
         if (!targetLang || !text) {
-          await ctx.reply('❌ Usage: !aitranslate <language> <text>\nExample: !aitranslate spanish Hello world');
+          await ctx.reply('❌ Usage: .aitranslate <language> <text>\nExample: .aitranslate spanish Hello world');
           return;
         }
         await ctx.react('🌍');
@@ -131,7 +131,7 @@ const aiPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const text = ctx.args.join(' ');
         if (!text) {
-          await ctx.reply('❌ Usage: !aisummarize <text>\nExample: !aisummarize Long article text here...');
+          await ctx.reply('❌ Usage: .aisummarize <text>\nExample: .aisummarize Long article text here...');
           return;
         }
         await ctx.react('📝');
@@ -154,7 +154,7 @@ const aiPlugin: Plugin = {
         const text = ctx.args.slice(1).join(' ');
         if (!style || !text) {
           await ctx.reply(
-            '❌ Usage: !airewrite <style> <text>\n\nStyles: formal, casual, professional, simple, creative\nExample: !airewrite formal hey whatsup'
+            '❌ Usage: .airewrite <style> <text>\n\nStyles: formal, casual, professional, simple, creative\nExample: .airewrite formal hey whatsup'
           );
           return;
         }
@@ -176,7 +176,7 @@ const aiPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const topic = ctx.args.join(' ');
         if (!topic) {
-          await ctx.reply('❌ Usage: !aiexplain <topic>\nExample: !aiexplain how blockchain works');
+          await ctx.reply('❌ Usage: .aiexplain <topic>\nExample: .aiexplain how blockchain works');
           return;
         }
         await ctx.react('💡');

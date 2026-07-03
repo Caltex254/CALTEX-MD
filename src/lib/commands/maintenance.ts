@@ -36,7 +36,7 @@ const maintenancePlugin: Plugin = {
         if (!action || !['on', 'off', 'status'].includes(action)) {
           const current = await isMaintenanceMode();
           await ctx.reply(
-            `❌ Usage: !maintenance <on|off|status>\n\n` +
+            `❌ Usage: .maintenance <on|off|status>\n\n` +
             `📊 Current Status: ${current ? '🔴 ON' : '🟢 OFF'}\n\n` +
             `When enabled, only owner commands will execute.`
           );
@@ -64,7 +64,7 @@ const maintenancePlugin: Plugin = {
             await ctx.reply(
               `🔴 *Maintenance Mode ENABLED*\n\n` +
               `⚠️ All non-owner commands are now disabled.\n` +
-              `🛠️ Use !maintenance off to disable.`
+              `🛠️ Use .maintenance off to disable.`
             );
           } else {
             await ctx.reply(

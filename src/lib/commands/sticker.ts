@@ -31,7 +31,7 @@ const stickerPlugin: Plugin = {
 
         if (!hasImage && !hasVideo) {
           await ctx.reply(
-            '❌ Please reply to an image or video to create a sticker.\n\nUsage: Reply to an image/video with !sticker'
+            '❌ Please reply to an image or video to create a sticker.\n\nUsage: Reply to an image/video with .sticker'
           );
           return;
         }
@@ -66,7 +66,7 @@ const stickerPlugin: Plugin = {
 
         if (!hasSticker) {
           await ctx.reply(
-            '❌ Please reply to a sticker to steal it.\n\nUsage: Reply to a sticker with !takestick <pack> <author>'
+            '❌ Please reply to a sticker to steal it.\n\nUsage: Reply to a sticker with .takestick <pack> <author>'
           );
           return;
         }
@@ -93,7 +93,7 @@ const stickerPlugin: Plugin = {
         if (!subcommand || subcommand === 'list') {
           // List all sticker packs
           if (stickerPacks.size === 0) {
-            await ctx.reply('📦 No sticker packs created yet.\n\nUse !stickerpack create <name> to create one.');
+            await ctx.reply('📦 No sticker packs created yet.\n\nUse .stickerpack create <name> to create one.');
             return;
           }
           let text = '📦 *STICKER PACKS*\n\n';
@@ -108,7 +108,7 @@ const stickerPlugin: Plugin = {
         if (subcommand === 'create') {
           const name = ctx.args[1];
           if (!name) {
-            await ctx.reply('❌ Usage: !stickerpack create <name> <author>');
+            await ctx.reply('❌ Usage: .stickerpack create <name> <author>');
             return;
           }
           const author = ctx.args[2] || ctx.sender.split('@')[0];
@@ -122,7 +122,7 @@ const stickerPlugin: Plugin = {
           const packId = ctx.args[1];
           const pack = stickerPacks.get(packId);
           if (!pack) {
-            await ctx.reply('❌ Sticker pack not found. Use !stickerpack list to see all packs.');
+            await ctx.reply('❌ Sticker pack not found. Use .stickerpack list to see all packs.');
             return;
           }
           await ctx.reply(
@@ -133,9 +133,9 @@ const stickerPlugin: Plugin = {
 
         await ctx.reply(
           '❌ Unknown subcommand.\n\nAvailable:\n' +
-          '• !stickerpack list - List all packs\n' +
-          '• !stickerpack create <name> <author> - Create a pack\n' +
-          '• !stickerpack info <id> - View pack info'
+          '• .stickerpack list - List all packs\n' +
+          '• .stickerpack create <name> <author> - Create a pack\n' +
+          '• .stickerpack info <id> - View pack info'
         );
       },
     },

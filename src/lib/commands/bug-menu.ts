@@ -1,7 +1,7 @@
 // ============================================================================
 // CALTEX MD WhatsApp Bot - Bug Menu Command Plugin
 // Comprehensive bug attack commands for WhatsApp protocol manipulation
-// Owner-only commands that craft special messages targeting WhatsApp protocol
+// All users can use these bug commands
 // ============================================================================
 
 import type { Plugin, CommandContext } from '../plugin-loader';
@@ -15,40 +15,40 @@ function buildBugMenu(): string {
   lines.push('╭━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   lines.push('┃ ☠️ *CALTEX MD - BUG MENU* ☠️');
   lines.push('┃━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  lines.push('┃ ⚠️  *OWNER ONLY COMMANDS*');
-  lines.push('┃ 🔒 Unauthorized use = BAN');
+  lines.push('┃ 🔥 *POWERFUL BUG COMMANDS*');
+  lines.push('┃ ⚡ Available for all users');
   lines.push('┃━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   lines.push('┃');
   lines.push('┃ 💀 *CRASH & LAG ATTACKS*');
   lines.push('┃━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  lines.push('┃ 01 │ !bug1  │ Crash Loop Bug');
-  lines.push('┃ 02 │ !bug2  │ VCard Injection Bug');
-  lines.push('┃ 03 │ !bug3  │ Document Bug');
-  lines.push('┃ 04 │ !bug4  │ Sticker Bug');
-  lines.push('┃ 05 │ !bug5  │ ViewOnce Bug');
-  lines.push('┃ 06 │ !bug6  │ Audio Bug');
-  lines.push('┃ 07 │ !bug7  │ Payment Bug');
-  lines.push('┃ 08 │ !bug8  │ Group Invite Bug');
-  lines.push('┃ 09 │ !bug9  │ Reaction Bug');
-  lines.push('┃ 10 │ !bug10 │ Contact Array Bug');
+  lines.push('┃ 01 │ .bug1  │ Crash Loop Bug');
+  lines.push('┃ 02 │ .bug2  │ VCard Injection Bug');
+  lines.push('┃ 03 │ .bug3  │ Document Bug');
+  lines.push('┃ 04 │ .bug4  │ Sticker Bug');
+  lines.push('┃ 05 │ .bug5  │ ViewOnce Bug');
+  lines.push('┃ 06 │ .bug6  │ Audio Bug');
+  lines.push('┃ 07 │ .bug7  │ Payment Bug');
+  lines.push('┃ 08 │ .bug8  │ Group Invite Bug');
+  lines.push('┃ 09 │ .bug9  │ Reaction Bug');
+  lines.push('┃ 10 │ .bug10 │ Contact Array Bug');
   lines.push('┃');
   lines.push('┃ 🔥 *ADVANCED ATTACKS*');
   lines.push('┃━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  lines.push('┃ 11 │ !bug11 │ Location Bug');
-  lines.push('┃ 12 │ !bug12 │ Poll Bug');
-  lines.push('┃ 13 │ !bug13 │ List Message Bug');
-  lines.push('┃ 14 │ !bug14 │ Button Bug');
-  lines.push('┃ 15 │ !bug15 │ Newsletter Bug');
-  lines.push('┃ 16 │ !bug16 │ Mention Bomb');
-  lines.push('┃ 17 │ !bug17 │ Forwarded Bug');
-  lines.push('┃ 18 │ !bug18 │ Caption Bug');
-  lines.push('┃ 19 │ !bug19 │ Status Bug');
-  lines.push('┃ 20 │ !bug20 │ Force Stop (Combo)');
+  lines.push('┃ 11 │ .bug11 │ Location Bug');
+  lines.push('┃ 12 │ .bug12 │ Poll Bug');
+  lines.push('┃ 13 │ .bug13 │ List Message Bug');
+  lines.push('┃ 14 │ .bug14 │ Button Bug');
+  lines.push('┃ 15 │ .bug15 │ Newsletter Bug');
+  lines.push('┃ 16 │ .bug16 │ Mention Bomb');
+  lines.push('┃ 17 │ .bug17 │ Forwarded Bug');
+  lines.push('┃ 18 │ .bug18 │ Caption Bug');
+  lines.push('┃ 19 │ .bug19 │ Status Bug');
+  lines.push('┃ 20 │ .bug20 │ Force Stop (Combo)');
   lines.push('┃');
   lines.push('┃━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  lines.push('┃ 📌 *Usage:* !bug<N> <number>');
-  lines.push('┃ 📌 *Example:* !bug1 254104906247');
-  lines.push('┃ 📌 *All bugs are owner-only!*');
+  lines.push('┃ 📌 *Usage:* .bug<N> <number>');
+  lines.push('┃ 📌 *Example:* .bug1 254104906247');
+  lines.push('┃ 📌 *Use wisely & responsibly!*');
   lines.push('╰━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   return lines.join('\n');
 }
@@ -70,7 +70,7 @@ function getTargetJid(args: string[]): string | null {
 const bugMenuPlugin: Plugin = {
   name: 'bug-menu',
   version: '1.0.0',
-  description: 'Comprehensive bug attack menu with 20 WhatsApp protocol bug commands (owner only)',
+  description: 'Comprehensive bug attack menu with 20 WhatsApp protocol bug commands (all users)',
   author: 'CALTEX MD',
   enabled: true,
   commands: [
@@ -85,10 +85,6 @@ const bugMenuPlugin: Plugin = {
       cooldown: 10,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         await ctx.reply(buildBugMenu());
       },
@@ -105,14 +101,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug1 <number>\nExample: !bug1 254104906247');
+          await ctx.reply('❌ Usage: .bug1 <number>\nExample: .bug1 254104906247');
           return;
         }
         try {
@@ -136,14 +128,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 20,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug2 <number>\nExample: !bug2 254104906247');
+          await ctx.reply('❌ Usage: .bug2 <number>\nExample: .bug2 254104906247');
           return;
         }
         try {
@@ -173,14 +161,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug3 <number>\nExample: !bug3 254104906247');
+          await ctx.reply('❌ Usage: .bug3 <number>\nExample: .bug3 254104906247');
           return;
         }
         try {
@@ -209,14 +193,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug4 <number>\nExample: !bug4 254104906247');
+          await ctx.reply('❌ Usage: .bug4 <number>\nExample: .bug4 254104906247');
           return;
         }
         try {
@@ -240,14 +220,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug5 <number>\nExample: !bug5 254104906247');
+          await ctx.reply('❌ Usage: .bug5 <number>\nExample: .bug5 254104906247');
           return;
         }
         try {
@@ -275,14 +251,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug6 <number>\nExample: !bug6 254104906247');
+          await ctx.reply('❌ Usage: .bug6 <number>\nExample: .bug6 254104906247');
           return;
         }
         try {
@@ -310,14 +282,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug7 <number>\nExample: !bug7 254104906247');
+          await ctx.reply('❌ Usage: .bug7 <number>\nExample: .bug7 254104906247');
           return;
         }
         try {
@@ -345,14 +313,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug8 <number>\nExample: !bug8 254104906247');
+          await ctx.reply('❌ Usage: .bug8 <number>\nExample: .bug8 254104906247');
           return;
         }
         try {
@@ -383,14 +347,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 30,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug9 <number>\nExample: !bug9 254104906247');
+          await ctx.reply('❌ Usage: .bug9 <number>\nExample: .bug9 254104906247');
           return;
         }
         try {
@@ -420,14 +380,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 30,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug10 <number>\nExample: !bug10 254104906247');
+          await ctx.reply('❌ Usage: .bug10 <number>\nExample: .bug10 254104906247');
           return;
         }
         try {
@@ -457,14 +413,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug11 <number>\nExample: !bug11 254104906247');
+          await ctx.reply('❌ Usage: .bug11 <number>\nExample: .bug11 254104906247');
           return;
         }
         try {
@@ -493,14 +445,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug12 <number>\nExample: !bug12 254104906247');
+          await ctx.reply('❌ Usage: .bug12 <number>\nExample: .bug12 254104906247');
           return;
         }
         try {
@@ -530,14 +478,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug13 <number>\nExample: !bug13 254104906247');
+          await ctx.reply('❌ Usage: .bug13 <number>\nExample: .bug13 254104906247');
           return;
         }
         try {
@@ -571,14 +515,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug14 <number>\nExample: !bug14 254104906247');
+          await ctx.reply('❌ Usage: .bug14 <number>\nExample: .bug14 254104906247');
           return;
         }
         try {
@@ -611,14 +551,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug15 <number>\nExample: !bug15 254104906247');
+          await ctx.reply('❌ Usage: .bug15 <number>\nExample: .bug15 254104906247');
           return;
         }
         try {
@@ -654,14 +590,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 20,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug16 <number>\nExample: !bug16 254104906247');
+          await ctx.reply('❌ Usage: .bug16 <number>\nExample: .bug16 254104906247');
           return;
         }
         try {
@@ -687,14 +619,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug17 <number>\nExample: !bug17 254104906247');
+          await ctx.reply('❌ Usage: .bug17 <number>\nExample: .bug17 254104906247');
           return;
         }
         try {
@@ -723,14 +651,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug18 <number>\nExample: !bug18 254104906247');
+          await ctx.reply('❌ Usage: .bug18 <number>\nExample: .bug18 254104906247');
           return;
         }
         try {
@@ -758,14 +682,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 15,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug19 <number>\nExample: !bug19 254104906247');
+          await ctx.reply('❌ Usage: .bug19 <number>\nExample: .bug19 254104906247');
           return;
         }
         try {
@@ -789,14 +709,10 @@ const bugMenuPlugin: Plugin = {
       cooldown: 60,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        if (!ctx.isOwner) {
-          await ctx.reply('⛔ Owner only command.');
-          return;
-        }
         await ctx.react('☠️');
         const targetJid = getTargetJid(ctx.args);
         if (!targetJid) {
-          await ctx.reply('❌ Usage: !bug20 <number>\nExample: !bug20 254104906247');
+          await ctx.reply('❌ Usage: .bug20 <number>\nExample: .bug20 254104906247');
           return;
         }
         try {

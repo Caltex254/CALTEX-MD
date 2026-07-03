@@ -55,7 +55,7 @@ const toolsPlugin: Plugin = {
         const text = ctx.args.slice(1).join(' ');
         if (!targetLang || !text) {
           await ctx.reply(
-            '❌ Usage: !translate <language> <text>\n\nExamples:\n!translate spanish Hello world\n!translate ja Good morning\n\n_In production, uses Google Translate or AI translation API._'
+            '❌ Usage: .translate <language> <text>\n\nExamples:\n.translate spanish Hello world\n.translate ja Good morning\n\n_In production, uses Google Translate or AI translation API._'
           );
           return;
         }
@@ -75,7 +75,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const city = ctx.args.join(' ');
         if (!city) {
-          await ctx.reply('❌ Usage: !weather <city>\nExample: !weather Jakarta');
+          await ctx.reply('❌ Usage: .weather <city>\nExample: .weather Jakarta');
           return;
         }
         await ctx.react('🌤️');
@@ -94,7 +94,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const expression = ctx.args.join(' ');
         if (!expression) {
-          await ctx.reply('❌ Usage: !calc <expression>\nExample: !calc (2 + 3) * 4');
+          await ctx.reply('❌ Usage: .calc <expression>\nExample: .calc (2 + 3) * 4');
           return;
         }
         const { result, error } = safeCalc(expression);
@@ -116,7 +116,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url) {
-          await ctx.reply('❌ Usage: !url <long url>\nExample: !url https://example.com/very/long/path');
+          await ctx.reply('❌ Usage: .url <long url>\nExample: .url https://example.com/very/long/path');
           return;
         }
         try {
@@ -141,7 +141,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const text = ctx.args.join(' ');
         if (!text) {
-          await ctx.reply('❌ Usage: !qr <text or url>\nExample: !qr https://example.com');
+          await ctx.reply('❌ Usage: .qr <text or url>\nExample: .qr https://example.com');
           return;
         }
         await ctx.react('📱');
@@ -161,7 +161,7 @@ const toolsPlugin: Plugin = {
         const quoted = ctx.message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         const hasImage = ctx.message?.message?.imageMessage || quoted?.imageMessage;
         if (!hasImage) {
-          await ctx.reply('❌ Please reply to an image containing a QR code.\n\nUsage: Reply to QR image with !readqr');
+          await ctx.reply('❌ Please reply to an image containing a QR code.\n\nUsage: Reply to QR image with .readqr');
           return;
         }
         await ctx.react('🔍');
@@ -180,7 +180,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const text = ctx.args.join(' ');
         if (!text) {
-          await ctx.reply('❌ Usage: !tts <text>\nExample: !tts Hello, this is a test');
+          await ctx.reply('❌ Usage: .tts <text>\nExample: .tts Hello, this is a test');
           return;
         }
         if (text.length > 200) {
@@ -203,7 +203,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const url = ctx.args[0];
         if (!url) {
-          await ctx.reply('❌ Usage: !ss <url>\nExample: !ss https://example.com');
+          await ctx.reply('❌ Usage: .ss <url>\nExample: .ss https://example.com');
           return;
         }
         try {
@@ -228,7 +228,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const word = ctx.args[0];
         if (!word) {
-          await ctx.reply('❌ Usage: !define <word>\nExample: !define serendipity');
+          await ctx.reply('❌ Usage: .define <word>\nExample: .define serendipity');
           return;
         }
         await ctx.react('📖');
@@ -247,7 +247,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const bin = ctx.args[0];
         if (!bin || !/^\d{6,8}$/.test(bin)) {
-          await ctx.reply('❌ Usage: !bin <6-8 digit number>\nExample: !bin 453201');
+          await ctx.reply('❌ Usage: .bin <6-8 digit number>\nExample: .bin 453201');
           return;
         }
         await ctx.react('💳');
@@ -266,7 +266,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const domain = ctx.args[0];
         if (!domain) {
-          await ctx.reply('❌ Usage: !whois <domain>\nExample: !whois example.com');
+          await ctx.reply('❌ Usage: .whois <domain>\nExample: .whois example.com');
           return;
         }
         await ctx.react('🌐');
@@ -285,7 +285,7 @@ const toolsPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const ip = ctx.args[0];
         if (!ip) {
-          await ctx.reply('❌ Usage: !ip <ip address>\nExample: !ip 8.8.8.8');
+          await ctx.reply('❌ Usage: .ip <ip address>\nExample: .ip 8.8.8.8');
           return;
         }
         // Basic IP format validation

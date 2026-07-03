@@ -29,7 +29,7 @@ const backupPlugin: Plugin = {
         }
         const type = (ctx.args[0]?.toLowerCase() || 'full') as typeof BACKUP_TYPES[number];
         if (!BACKUP_TYPES.includes(type)) {
-          await ctx.reply(`❌ Invalid backup type. Choose: ${BACKUP_TYPES.join(', ')}\n\nUsage: !backup [type]\nExample: !backup database`);
+          await ctx.reply(`❌ Invalid backup type. Choose: ${BACKUP_TYPES.join(', ')}\n\nUsage: .backup [type]\nExample: .backup database`);
           return;
         }
         await ctx.react('💾');
@@ -91,14 +91,14 @@ const backupPlugin: Plugin = {
         }
         const backupId = ctx.args[0];
         if (!backupId) {
-          await ctx.reply('❌ Usage: !restore <backup_id>\n\nUse !backuplist to see available backups.');
+          await ctx.reply('❌ Usage: .restore <backup_id>\n\nUse .backuplist to see available backups.');
           return;
         }
         await ctx.react('📥');
         try {
           const backup = await db.backupRecord.findUnique({ where: { id: backupId } });
           if (!backup) {
-            await ctx.reply('❌ Backup not found. Use !backuplist to see available backups.');
+            await ctx.reply('❌ Backup not found. Use .backuplist to see available backups.');
             return;
           }
           await ctx.reply(
@@ -133,7 +133,7 @@ const backupPlugin: Plugin = {
             take: 20,
           });
           if (backups.length === 0) {
-            await ctx.reply('📂 No backups found. Use !backup to create one.');
+            await ctx.reply('📂 No backups found. Use .backup to create one.');
             return;
           }
           let text = `📂 *Available Backups (${backups.length})*\n` + '━'.repeat(22) + '\n\n';
@@ -143,7 +143,7 @@ const backupPlugin: Plugin = {
             text += `🆔 ${b.id}\n`;
             text += `   📂 ${b.type.toUpperCase()} | ${sizeKB > 0 ? sizeKB + 'KB' : 'New'} | ${b.createdAt.toLocaleDateString()}${autoTag}\n\n`;
           }
-          text += '💡 Use *!restore <id>* to restore a backup';
+          text += '💡 Use *.restore <id>* to restore a backup';
           await ctx.reply(text);
         } catch (error) {
           console.error('[BackupList] Error:', error);

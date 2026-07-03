@@ -33,7 +33,7 @@ const schedulerPlugin: Plugin = {
   commands: [
     {
       name: 'schedule',
-      description: 'Schedule a message (e.g., !schedule 30m target Hello!)',
+      description: 'Schedule a message (e.g., .schedule 30m target Hello!)',
       category: 'owner',
       aliases: ['sched', 'schedulemsg'],
       cooldown: 5,
@@ -45,12 +45,12 @@ const schedulerPlugin: Plugin = {
         }
         if (ctx.args.length < 3) {
           await ctx.reply(
-            '❌ Usage: !schedule <time> <target> <message>\n\n' +
+            '❌ Usage: .schedule <time> <target> <message>\n\n' +
             '⏱️ *Time Formats:* Xm, Xh, Xd, HH:MM\n\n' +
             '📝 *Examples:*\n' +
-            '!schedule 30m 123@g.us Meeting in 30 min!\n' +
-            '!schedule 2h 123@s.whatsapp.net Don\'t forget!\n' +
-            '!schedule 14:00 123@g.us Afternoon update'
+            '.schedule 30m 123@g.us Meeting in 30 min!\n' +
+            '.schedule 2h 123@s.whatsapp.net Don\'t forget!\n' +
+            '.schedule 14:00 123@g.us Afternoon update'
           );
           return;
         }
@@ -114,7 +114,7 @@ const schedulerPlugin: Plugin = {
             text += `   🎯 ${m.targetJid.substring(0, 20)}\n`;
             text += `   🕐 ${timeFormatted}\n\n`;
           }
-          text += '💡 !delschedule <id> to cancel';
+          text += '💡 .delschedule <id> to cancel';
           await ctx.reply(text);
         } catch (error) {
           console.error('[ListSchedule] Error:', error);
@@ -136,7 +136,7 @@ const schedulerPlugin: Plugin = {
         }
         const id = ctx.args[0];
         if (!id) {
-          await ctx.reply('❌ Usage: !delschedule <id>\nUse !listschedule to see IDs.');
+          await ctx.reply('❌ Usage: .delschedule <id>\nUse .listschedule to see IDs.');
           return;
         }
         try {

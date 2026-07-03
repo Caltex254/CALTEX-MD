@@ -152,7 +152,7 @@ const funPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const question = ctx.args.join(' ');
         if (!question) {
-          await ctx.reply('❌ Usage: !8ball <question>\nExample: !8ball Will I be rich?');
+          await ctx.reply('❌ Usage: .8ball <question>\nExample: .8ball Will I be rich?');
           return;
         }
         await ctx.react('🔮');
@@ -201,7 +201,7 @@ const funPlugin: Plugin = {
       handler: async (ctx: CommandContext) => {
         const choice = ctx.args[0]?.toLowerCase();
         if (!choice || !['rock', 'paper', 'scissors', 'r', 'p', 's'].includes(choice)) {
-          await ctx.reply('❌ Usage: !rps <rock|paper|scissors>\nExample: !rps rock');
+          await ctx.reply('❌ Usage: .rps <rock|paper|scissors>\nExample: .rps rock');
           return;
         }
         const playerChoice = choice[0] === 'r' ? 0 : choice[0] === 'p' ? 1 : 2;
