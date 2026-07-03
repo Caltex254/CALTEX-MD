@@ -207,6 +207,177 @@ export class ConnectionManager extends EventEmitter {
   }
 
   // ---------------------------------------------------------------------------
+  // Pairing Code Support
+  // ---------------------------------------------------------------------------
+  async requestPairingCode(sessionId: string, phoneNumber: string): Promise<string> {
+    const sock = this.sockets.get(sessionId);
+    if (!sock) {
+      throw new Error(`No active connection for session: ${sessionId}`);
+    }
+    try {
+      // Request pairing code from WhatsApp
+      // The phone number should be in format: country code + number (e.g., "254712345678")
+      const code = await sock.requestPairingCode(phoneNumber);
+      this.globalLogger.info({ sessionId, phoneNumber }, 'Pairing code requested');
+      this.emit('pairing.code', code, sessionId, phoneNumber);
+      return code;
+    } catch (error: any) {
+      this.globalLogger.error({ sessionId, phoneNumber, error: error.message }, 'Failed to request pairing code');
+      throw new Error(`Failed to request pairing code: ${error.message}`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Connection with Pairing Code (alternative to QR)
+  // ---------------------------------------------------------------------------
+  async createConnectionWithPairingCode(
+    config: ConnectionConfig,
+    phoneNumber: string
+  ): Promise<{ sock: WASocket; pairingCode: string }> {
+    const {
+      sessionId,
+      browser = 'CALTEX MD',
+      syncFullHistory = false,
+      markOnlineOnConnect = true,
+      autoReconnect = true,
+      maxReconnectAttempts = 10,
+      reconnectBaseDelay = 2000,
+    } = config;
+
+    this.configs.set(sessionId, config);
+    this.reconnectAttempts.set(sessionId, 0);
+
+    const authFolder = this.getAuthFolder(sessionId);
+    const { state, saveCreds } = await initAuthState(authFolder);
+    const { version } = await fetchLatestBaileysVersion();
+
+    this.globalLogger.info({ sessionId, version, phoneNumber }, 'Creating WhatsApp connection with pairing code');
+
+    const socketConfig: UserFacingSocketConfig = {
+      version,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
+      },
+      printQRInTerminal: false,
+      browser: Browsers.appropriate(browser),
+      syncFullHistory,
+      markOnlineOnConnect,
+      logger: this.globalLogger.child({ sessionId }),
+      generateHighQualityLinkPreview: true,
+      shouldIgnoreJid: (jid: string) => {
+        const isGroup = jid.endsWith('@g.us');
+        const isBroadcast = jid === 'status@broadcast';
+        const isNewsletter = jid.includes('@newsletter');
+        const isUser = jid.endsWith('@s.whatsapp.net');
+        return !isGroup && !isBroadcast && !isUser && !isNewsletter;
+      },
+      getMessage: async (key: proto.IMessageKey) => {
+        if (!key.remoteJid) return undefined;
+        return undefined;
+      },
+    };
+
+    const sock = makeWASocket(socketConfig);
+    this.sockets.set(sessionId, sock);
+
+    // Request pairing code after socket is created
+    let pairingCode = '';
+    try {
+      pairingCode = await sock.requestPairingCode(phoneNumber);
+      this.globalLogger.info({ sessionId, pairingCode }, 'Pairing code generated');
+      this.emit('pairing.code', pairingCode, sessionId, phoneNumber);
+    } catch (error: any) {
+      this.globalLogger.error({ sessionId, error: error.message }, 'Failed to generate pairing code');
+    }
+
+    // --- Connection Update Handler (same as createConnection) ---
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        this.emit('qr.code', qr, sessionId);
+      }
+
+      if (connection === 'close') {
+        const statusCode =
+          lastDisconnect?.error?.output?.statusCode ??
+          lastDisconnect?.error?.output?.payload?.statusCode ??
+          0;
+        const reason = lastDisconnect?.error?.message ?? 'Unknown reason';
+        const shouldReconnect =
+          statusCode !== DisconnectReason.loggedOut &&
+          autoReconnect &&
+          !this.isShuttingDown;
+
+        this.globalLogger.warn({ sessionId, statusCode, reason, shouldReconnect }, 'Connection closed');
+        this.connectionStates.set(sessionId, update);
+        this.emit('connection.close', statusCode, reason, sessionId);
+        this.emit('connection.update', update, sessionId);
+
+        if (shouldReconnect) {
+          const attempts = (this.reconnectAttempts.get(sessionId) ?? 0) + 1;
+          this.reconnectAttempts.set(sessionId, attempts);
+
+          if (attempts <= maxReconnectAttempts) {
+            const delay = reconnectBaseDelay * Math.pow(2, attempts - 1) + Math.random() * 1000;
+            this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay) }, 'Reconnecting');
+            const timer = setTimeout(() => {
+              this.reconnectTimers.delete(sessionId);
+              this.createConnection(config);
+            }, delay);
+            this.reconnectTimers.set(sessionId, timer);
+          }
+        } else if (statusCode === DisconnectReason.loggedOut) {
+          this.globalLogger.info({ sessionId }, 'Logged out, clearing session');
+          await this.sessionManager.deleteSession(sessionId);
+        }
+      } else if (connection === 'open') {
+        this.reconnectAttempts.set(sessionId, 0);
+        this.globalLogger.info({ sessionId }, 'Pairing code connection opened');
+        this.connectionStates.set(sessionId, update);
+        this.emit('connection.open', sessionId);
+        this.emit('connection.update', update, sessionId);
+      } else {
+        this.connectionStates.set(sessionId, update);
+        this.emit('connection.update', update, sessionId);
+      }
+    });
+
+    // --- Credentials Update ---
+    sock.ev.on('creds.update', () => {
+      saveCreds();
+    });
+
+    // --- Forward events ---
+    const eventMap: Record<string, string> = {
+      'messages.upsert': 'messages.upsert',
+      'messages.delete': 'messages.delete',
+      'messages.update': 'messages.update',
+      'messages.reaction': 'messages.reaction',
+      'chats.upsert': 'chats.upsert',
+      'chats.update': 'chats.update',
+      'chats.delete': 'chats.delete',
+      'contacts.upsert': 'contacts.upsert',
+      'contacts.update': 'contacts.update',
+      'group-participants.update': 'group.participants.update',
+      'groups.update': 'group.update',
+      'call': 'call',
+      'presence.update': 'presence.update',
+      'blocklist.set': 'blocklist.set',
+      'blocklist.update': 'blocklist.update',
+    };
+
+    for (const [baileysEvent, botEvent] of Object.entries(eventMap)) {
+      sock.ev.on(baileysEvent as any, (data: any) => {
+        this.emit(botEvent, data, sessionId);
+      });
+    }
+
+    return { sock, pairingCode };
+  }
+
+  // ---------------------------------------------------------------------------
   // Accessors
   // ---------------------------------------------------------------------------
   getSocket(sessionId: string): WASocket | undefined {

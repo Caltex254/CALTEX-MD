@@ -17,6 +17,12 @@ import { AiPanel } from '@/components/dashboard/panels/ai-panel'
 import { BackupPanel } from '@/components/dashboard/panels/backup-panel'
 import { FilesPanel } from '@/components/dashboard/panels/files-panel'
 import { CommandsPanel } from '@/components/dashboard/panels/commands-panel'
+import { ServerMonitoringPanel } from '@/components/dashboard/panels/server-monitoring-panel'
+import { UpdateManagerPanel } from '@/components/dashboard/panels/update-manager-panel'
+import { NotificationCenterPanel } from '@/components/dashboard/panels/notification-center-panel'
+import { PremiumManagerPanel } from '@/components/dashboard/panels/premium-manager-panel'
+import { PairingPanel } from '@/components/dashboard/panels/pairing-panel'
+import { DatabaseManagerPanel } from '@/components/dashboard/panels/database-manager-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,18 +32,24 @@ import { useState } from 'react'
 const panelMap: Record<string, React.ComponentType> = {
   overview: OverviewPanel,
   qr: QrPanel,
+  pairing: PairingPanel,
   sessions: SessionsPanel,
   plugins: PluginsPanel,
   users: UsersPanel,
+  premium: PremiumManagerPanel,
   groups: GroupsPanel,
   stats: StatsPanel,
   broadcast: BroadcastPanel,
   logs: LogsPanel,
+  commands: CommandsPanel,
+  server: ServerMonitoringPanel,
+  updates: UpdateManagerPanel,
+  notifications: NotificationCenterPanel,
+  database: DatabaseManagerPanel,
   settings: SettingsPanel,
   ai: AiPanel,
   backup: BackupPanel,
   files: FilesPanel,
-  commands: CommandsPanel,
 }
 
 function LoginGate() {

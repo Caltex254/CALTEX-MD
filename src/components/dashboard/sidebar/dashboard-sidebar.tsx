@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils'
 import {
   Home, QrCode, KeyRound, Puzzle, Users, Building2,
   BarChart3, Send, ScrollText, Settings, Bot, Database,
-  FolderOpen, Terminal, Moon, Sun, X, ChevronLeft
+  FolderOpen, Terminal, Moon, Sun, X, ChevronLeft,
+  Activity, Package, Bell, Crown, Link2, Server
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -15,14 +16,20 @@ import { Badge } from '@/components/ui/badge'
 const navItems = [
   { id: 'overview', label: 'Dashboard', icon: Home, emoji: '🏠' },
   { id: 'qr', label: 'QR Login', icon: QrCode, emoji: '📱' },
+  { id: 'pairing', label: 'Pairing', icon: Link2, emoji: '🔗' },
   { id: 'sessions', label: 'Sessions', icon: KeyRound, emoji: '🔐' },
   { id: 'plugins', label: 'Plugins', icon: Puzzle, emoji: '🔌' },
   { id: 'users', label: 'Users', icon: Users, emoji: '👥' },
+  { id: 'premium', label: 'Premium', icon: Crown, emoji: '👑' },
   { id: 'groups', label: 'Groups', icon: Building2, emoji: '🏘️' },
   { id: 'stats', label: 'Statistics', icon: BarChart3, emoji: '📊' },
   { id: 'broadcast', label: 'Broadcast', icon: Send, emoji: '📨' },
   { id: 'logs', label: 'Logs', icon: ScrollText, emoji: '📋' },
   { id: 'commands', label: 'Commands', icon: Terminal, emoji: '⌨️' },
+  { id: 'server', label: 'Server', icon: Server, emoji: '🖥️' },
+  { id: 'updates', label: 'Updates', icon: Package, emoji: '📦' },
+  { id: 'notifications', label: 'Notifications', icon: Bell, emoji: '🔔' },
+  { id: 'database', label: 'Database', icon: Database, emoji: '🗄️' },
   { id: 'settings', label: 'Settings', icon: Settings, emoji: '⚙️' },
   { id: 'ai', label: 'AI Config', icon: Bot, emoji: '🤖' },
   { id: 'backup', label: 'Backup', icon: Database, emoji: '💾' },

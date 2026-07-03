@@ -344,6 +344,23 @@ export class APIClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Owner Notifications
+  // ---------------------------------------------------------------------------
+  async notifyOwner(type: string, title: string, message: string, severity: string = 'info'): Promise<void> {
+    try {
+      await this.makeRequest('POST', '/api/notifications', {
+        type,
+        title,
+        message,
+        severity,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      logger.debug({ err }, 'Failed to send owner notification');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Health Check
   // ---------------------------------------------------------------------------
   async healthCheck(): Promise<boolean> {

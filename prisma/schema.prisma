@@ -313,3 +313,237 @@ model AuditLog {
   @@index([targetJid])
   @@index([createdAt])
 }
+
+// ============================================================
+// Premium System
+// ============================================================
+
+model PremiumUser {
+  id             String    @id @default(cuid())
+  userJid        String    @unique
+  plan           String    @default("basic") // basic | pro | enterprise
+  startDate      DateTime  @default(now())
+  expiryDate     DateTime
+  isActive       Boolean   @default(true)
+  grantedBy      String?   // JID of who granted premium
+  autoRenew      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userJid])
+  @@index([isActive])
+  @@index([expiryDate])
+}
+
+// ============================================================
+// Reminder System
+// ============================================================
+
+model Reminder {
+  id          String   @id @default(cuid())
+  userJid     String
+  chatJid     String
+  message     String
+  remindAt    DateTime
+  isRecurring Boolean  @default(false)
+  recurrence  String?  // daily | weekly | monthly
+  isSent      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userJid])
+  @@index([remindAt])
+  @@index([isSent])
+}
+
+// ============================================================
+// Notes System
+// ============================================================
+
+model Note {
+  id        String   @id @default(cuid())
+  userJid   String
+  title     String
+  content   String
+  isPrivate Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userJid])
+}
+
+// ============================================================
+// Auto Reply System
+// ============================================================
+
+model AutoReply {
+  id          String   @id @default(cuid())
+  trigger     String   // Keyword or regex pattern
+  response    String
+  isRegex     Boolean  @default(false)
+  isGlobal    Boolean  @default(true)
+  groupJid    String?  // Null = global, otherwise group-specific
+  isEnabled   Boolean  @default(true)
+  matchCount  Int      @default(0)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([trigger])
+  @@index([groupJid])
+  @@index([isEnabled])
+}
+
+// ============================================================
+// AFK System
+// ============================================================
+
+model AFKStatus {
+  id         String   @id @default(cuid())
+  userJid    String   @unique
+  reason     String   @default("No reason specified")
+  isAFK      Boolean  @default(true)
+  setAt      DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userJid])
+  @@index([isAFK])
+}
+
+// ============================================================
+// Multi-Language System
+// ============================================================
+
+model LanguagePack {
+  id          String @id @default(cuid())
+  code        String @unique // en, sw, fr, ar, etc.
+  name        String // English, Kiswahili, French, etc.
+  translations String // JSON string of key-value translations
+  isDefault   Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+}
+
+// ============================================================
+// Theme System
+// ============================================================
+
+model ThemeConfig {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  style       String  // JSON string with theme styles/colors
+  isDefault   Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+}
+
+// ============================================================
+// Owner Notifications
+// ============================================================
+
+model OwnerNotification {
+  id         String   @id @default(cuid())
+  type       String   // disconnect | session_expire | plugin_crash | db_error | api_failure | update_available
+  title      String
+  message    String
+  severity   String   @default("info") // info | warn | error | critical
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ============================================================
+// Update System
+// ============================================================
+
+model UpdateRecord {
+  id           String   @id @default(cuid())
+  fromVersion  String
+  toVersion    String
+  status       String   @default("pending") // pending | completed | failed | rolled_back
+  backupPath   String?
+  releaseNotes String?
+  performedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+  @@index([performedAt])
+}
+
+// ============================================================
+// Backup System
+// ============================================================
+
+model BackupRecord {
+  id          String   @id @default(cuid())
+  type        String   @default("full") // full | database | sessions | settings | plugins
+  filePath    String
+  size        Int      @default(0)
+  isAuto      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================================
+// API Key Manager
+// ============================================================
+
+model APIKey {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. "openai", "gemini"
+  key         String   // Encrypted API key
+  provider    String?
+  isEnabled   Boolean  @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([provider])
+  @@index([isEnabled])
+}
+
+// ============================================================
+// Group Analytics
+// ============================================================
+
+model GroupAnalytics {
+  id               String   @id @default(cuid())
+  groupJid         String
+  date             DateTime
+  messagesCount    Int      @default(0)
+  commandsCount    Int      @default(0)
+  activeMembers    Int      @default(0)
+  topContributor   String?
+  createdAt        DateTime @default(now())
+
+  @@unique([groupJid, date])
+  @@index([groupJid])
+  @@index([date])
+}
+
+// ============================================================
+// Repo Configuration
+// ============================================================
+
+model RepoConfig {
+  id              String   @id @default(cuid())
+  repoName        String   @default("CALTEX MD")
+  repoUrl         String?
+  developerName   String   @default("CALTEX MD Team")
+  description     String?
+  docsUrl         String?
+  license         String   @default("MIT")
+  latestRelease   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

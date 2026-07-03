@@ -19,14 +19,45 @@
 
 **A powerful, extensible WhatsApp bot with AI integration, plugin system, and web dashboard.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/caltex-md/caltex-md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/caltex-md/caltex-md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.x-3178c6.svg)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/runtime-bun-f9f1e1.svg)](https://bun.sh/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](./Dockerfile)
+[![Commands](https://img.shields.io/badge/commands-102+-purple.svg)](#commands)
 
 </div>
+
+---
+
+## What's New in v1.1.0
+
+> **102+ commands | 10 languages | 5 themes | 6 new dashboard panels | Pairing code auth**
+
+| Feature | Description |
+|---|---|
+| **WhatsApp Pairing Code** | Link your bot via phone number — no QR code scanning needed |
+| **Repository Command** | Professional repo info card (`.repo`) |
+| **Auto Update System** | Check, apply, and rollback updates from WhatsApp |
+| **Premium System** | Tiered plans (basic/pro/enterprise) with duration & auto-expiry |
+| **Backup System** | Full, database, sessions, settings, or plugins backups |
+| **Analytics** | Bot-wide, group-level, and per-user statistics |
+| **Utility Commands** | Runtime, system info, health check, speed test, changelog, and more |
+| **Reminder System** | Timed & recurring reminders with flexible time formats |
+| **Notes System** | Personal notes with add/get/delete/list |
+| **Auto Reply** | Regex-powered auto-reply rules (global or group-specific) |
+| **AFK System** | Set AFK status with auto-notification on mentions |
+| **Scheduler** | Schedule messages for future delivery |
+| **Multi-Language** | 10 languages with per-user/group preferences |
+| **Theme System** | 5 display themes for the bot menu |
+| **Maintenance Mode** | Lock bot to owner-only commands during maintenance |
+| **Import/Export** | Export & import bot configuration as JSON |
+| **API Key Manager** | Securely manage provider API keys with masking |
+| **Plugin Manager** | Full lifecycle: install, remove, enable, disable, reload |
+| **Group Analytics** | Activity tracking, top contributors, member stats |
+| **Owner Notifications** | Auto-notify on disconnect, crash, and errors |
+| **Dashboard Expansion** | 6 new panels: Server Monitoring, Update Manager, Notification Center, Premium Manager, Pairing Code, Database Manager |
 
 ---
 
@@ -38,7 +69,8 @@ CALTEX MD is a full-featured WhatsApp multi-device bot built on the Baileys libr
 
 ### WhatsApp Integration
 - Multi-device support via Baileys MD
-- QR code and pairing code authentication
+- QR code authentication
+- **Pairing code authentication** — link via phone number without scanning
 - Auto-reconnect with configurable retry logic
 - Multi-session management
 - Message send/receive with full media support
@@ -52,12 +84,15 @@ CALTEX MD is a full-featured WhatsApp multi-device bot built on the Baileys libr
 ### Plugin System
 - Dynamic plugin loading and unloading
 - Custom command registration via plugins
-- Plugin enable/disable from the dashboard
+- Plugin enable/disable from the dashboard or WhatsApp commands
 - Hot-reload support for development
+- Install plugins from file paths
+- Full lifecycle management: install, remove, enable, disable, reload
 
 ### Web Dashboard
 - Real-time bot status and health monitoring
 - QR code scanning interface
+- **Pairing code panel** — link via phone number
 - Session management (create, delete, export, import)
 - Group management and moderation controls
 - AI configuration panel
@@ -68,6 +103,11 @@ CALTEX MD is a full-featured WhatsApp multi-device bot built on the Baileys libr
 - Plugin manager
 - User management
 - Backup and restore
+- **Server Monitoring panel** — CPU, memory, uptime, load
+- **Update Manager panel** — check & apply updates, view history
+- **Notification Center panel** — owner alerts for disconnects, crashes, errors
+- **Premium Manager panel** — manage premium users and plans
+- **Database Manager panel** — browse, query, and manage database records
 
 ### REST API
 - Full JWT-authenticated REST API
@@ -76,6 +116,18 @@ CALTEX MD is a full-featured WhatsApp multi-device bot built on the Baileys libr
 - Session and group management
 - Configuration endpoints for bot, anti-features, and AI
 - WebSocket real-time updates
+- 20+ new endpoints for v1.1.0 features (see [API Endpoints](#api-endpoints))
+
+### Multi-Language Support
+- 10 supported languages: English, Kiswahili, Français, العربية, Bahasa Indonesia, Español, Português, हिन्दी, Deutsch, 日本語
+- Per-user language preference
+- Per-group language preference
+- Configurable translation packs
+
+### Theme System
+- 5 built-in themes: Default, Neon, Minimal, Retro, Elegant
+- Affects bot menu display style
+- Configurable via WhatsApp commands or dashboard
 
 ### Security
 - JWT authentication with HS256 signing
@@ -137,6 +189,25 @@ When the bot starts, it will display a QR code in the console. Scan it with What
 
 > **WhatsApp** > **Settings** > **Linked Devices** > **Link a Device**
 
+### Using Pairing Code (New in v1.1.0)
+
+Instead of scanning a QR code, you can link your bot using a phone number:
+
+1. Open the **Dashboard** > **Pairing Code** panel
+2. Enter your WhatsApp phone number (e.g., `6281234567890`)
+3. Click **Request Pairing Code**
+4. Enter the received code on your phone:
+   > **WhatsApp** > **Settings** > **Linked Devices** > **Link with Phone Number**
+
+You can also request a pairing code via the API:
+
+```bash
+curl -X POST http://localhost:3000/api/pairing-code \
+  -H "Authorization: Bearer <your-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"phoneNumber":"6281234567890"}'
+```
+
 ### Docker Quick Start
 
 ```bash
@@ -176,7 +247,7 @@ Bot-specific configuration is also managed via the `bot-config.json` and `ai-con
 
 ## Commands
 
-Commands use a configurable prefix (default: `!`).
+Commands use a configurable prefix (default: `!`). The bot ships with **102+ commands** across 15+ categories.
 
 ### General
 
@@ -184,7 +255,18 @@ Commands use a configurable prefix (default: `!`).
 |---|---|---|
 | `!ping` | `!p` | Check if the bot is alive |
 | `!help` | `!h`, `!menu` | Show available commands |
-| `!info` | `!about` | Show bot information |
+| `!info` | `!about`, `!botabout` | Show bot information |
+| `!menu` | `!allcommands`, `!list` | Styled bot menu with all categories |
+| `!runtime` | `!uptime`, `!alive` | Show bot uptime and runtime information |
+| `!system` | `!sysinfo`, `!sys` | System information (OS, Node, memory, CPU) |
+| `!health` | `!healthcheck`, `!checkhealth` | Health check (database, API, services) |
+| `!speed` | `!speedtest` | Speed test with response time metrics |
+| `!about` | `!botabout`, `!info` | About the bot |
+| `!changelog` | `!changes`, `!whatsnew` | Recent changelog entries |
+| `!donate` | `!support`, `!tip` | Show donation/support links |
+| `!support` | `!helpdesk`, `!contact` | Show support channels |
+| `!owner` | `!ownerinfo`, `!dev` | Display owner information |
+| `!repo` | `!repository`, `!source`, `!github` | Show repository info card |
 
 ### AI
 
@@ -241,6 +323,14 @@ Commands use a configurable prefix (default: `!`).
 | `!mute [minutes]` | - | Mute group (admin-only chat) |
 | `!unmute` | - | Unmute group |
 
+### Group Analytics
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!gstats` | `!groupmembers`, `!activemembers` | Show most active members in the group |
+| `!gactivity [daily/weekly/monthly]` | `!groupactivity`, `!activity` | Show group activity over time |
+| `!gtop` | `!grouptop`, `!topmembers` | Show top contributors in the group |
+
 ### Moderation
 
 | Command | Aliases | Description |
@@ -262,6 +352,139 @@ Commands use a configurable prefix (default: `!`).
 | `!setwelcome <message>` | `!swelcome` | Set welcome message template |
 | `!setgoodbye <message>` | `!sgoodbye` | Set goodbye message template |
 
+### Auto Reply
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!autoreply` | `!replies`, `!listreply` | List all auto-reply rules |
+| `!setreply <trigger>\|<response> [-regex] [-group <jid>]` | `!addreply`, `!createreply` | Create an auto-reply rule |
+| `!delreply <trigger>` | `!deletereply`, `!removereplay` | Delete an auto-reply rule |
+
+### AFK
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!afk [reason]` | `!away`, `!brb` | Set AFK status with auto-notification on mentions |
+| `!back` | `!return`, `!imback` | Return from AFK and show away duration |
+
+### Reminders
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!remind <time> <message>` | `!remindme`, `!setreminder` | Set a timed or recurring reminder |
+| `!reminders` | `!myreminders`, `!listreminders` | List your active reminders |
+
+> **Time formats:** `30m` (minutes), `2h` (hours), `1d` (days), `daily`, `weekly`, `6pm`, `14:30`
+
+### Notes
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!note add <title>\|<content>` | `!notesmanage`, `!mynote` | Add or update a note |
+| `!note get <title>` | — | Retrieve a note by title |
+| `!note delete <title>` | — | Delete a note by title |
+| `!notes` | `!listnotes`, `!mynotes` | List all your saved notes |
+
+### Scheduler
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!schedule <time> <target> <message>` | `!sched`, `!schedulemsg` | Schedule a message for future delivery |
+| `!listschedule` | `!scheduled`, `!schedlist` | List all scheduled messages |
+| `!delschedule <id>` | `!cancelschedule`, `!removeschedule` | Cancel a scheduled message |
+
+### Analytics
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!stats` | `!botinfo`, `!infobot` | General bot statistics overview |
+| `!botstats` | `!performance`, `!perf` | Detailed bot performance stats (uptime, memory, CPU) |
+| `!groupstats` | `!gstats`, `!groupinfo` | Current group analytics |
+| `!userstats [@user]` | `!ustats`, `!userinfo` | User statistics for a specific user |
+
+### Premium
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!premium` | `!mystatus`, `!premiumstatus` | Check your premium status |
+| `!addpremium @user <plan> <duration>` | `!grantpremium`, `!setpremium` | Grant premium to a user (Owner) |
+| `!delpremium @user` | `!removepremium`, `!revokepremium` | Remove premium from a user (Owner) |
+| `!premiumlist` | `!listpremium`, `!premiumusers` | List all premium users (Owner) |
+
+> **Plans:** basic, pro, enterprise | **Durations:** `1d`, `7d`, `30d`, `1y`
+
+### Backup
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!backup [type]` | `!createbackup`, `!backupcreate` | Create a backup (Owner) |
+| `!restore <backup_id>` | `!restorebackup` | Restore from a backup (Owner) |
+| `!backuplist` | `!backups`, `!listbackups` | List all available backups (Owner) |
+
+> **Backup types:** `full`, `database`, `sessions`, `settings`, `plugins`
+
+### Auto Update
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!update` | `!updatebot`, `!autoupdate` | Start the update process (Owner) |
+| `!checkupdate` | `!checkupdates`, `!newversion` | Check GitHub for newer releases (Owner) |
+| `!version` | `!ver`, `!v` | Show current bot version |
+| `!rollback` | `!revert`, `!downgrade` | Rollback to the previous version (Owner) |
+
+### Plugin Manager
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!plugins` | `!listplugins`, `!pluginlist` | List all plugins with status (Owner) |
+| `!plugininfo <name>` | `!plugindetail`, `!pinfo` | Show detailed plugin information (Owner) |
+| `!installplugin <path>` | `!plugininstall`, `!addplugin` | Install a plugin from a file path (Owner) |
+| `!removeplugin <name>` | `!pluginremove`, `!deleteplugin` | Remove a plugin from the registry (Owner) |
+| `!enableplugin <name>` | `!pluginenable` | Enable a plugin (Owner) |
+| `!disableplugin <name>` | `!plugindisable` | Disable a plugin (Owner) |
+| `!reloadplugin <name>` | `!pluginreload` | Hot reload a plugin (Owner) |
+| `!reloadall` | `!reloadplugins` | Reload all plugins (Owner) |
+
+### API Key Manager
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!apikeys` | `!listkeys`, `!keys` | List all configured API keys (masked) (Owner) |
+| `!apikeyadd <name> <key> [provider]` | `!addkey`, `!addapikey` | Add an API key (Owner) |
+| `!apikeydel <name>` | `!delkey`, `!deletekey` | Delete an API key (Owner) |
+| `!apikeytoggle <name>` | `!togglekey`, `!keytoggle` | Enable/disable an API key (Owner) |
+
+### Language
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!language [code]` | `!lang`, `!setlang` | Set or view your language preference |
+| `!languages` | `!langs`, `!listlang` | List all available languages |
+
+> **Supported languages (10):** 🇬🇧 English (`en`), 🇰🇪 Kiswahili (`sw`), 🇫🇷 Français (`fr`), 🇸🇦 العربية (`ar`), 🇮🇩 Bahasa Indonesia (`id`), 🇪🇸 Español (`es`), 🇧🇷 Português (`pt`), 🇮🇳 हिन्दी (`hi`), 🇩🇪 Deutsch (`de`), 🇯🇵 日本語 (`ja`)
+
+### Theme
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!theme [name]` | `!settheme`, `!bottheme` | Set or view the current bot theme |
+| `!themes` | `!listthemes`, `!themelist` | List all available themes |
+
+> **Built-in themes (5):** `default` (clean & minimal), `neon` (dark with vibrant colors), `minimal` (ultra-minimal), `retro` (terminal-style ASCII), `elegant` (professional)
+
+### Maintenance Mode
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!maintenance <on\|off\|status>` | `!maint`, `!mm` | Toggle maintenance mode (Owner) |
+
+### Import/Export
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!exportconfig` | `!export`, `!backupconfig` | Export all settings as JSON (Owner) |
+| `!importconfig <json>` | `!import`, `!restoreconfig` | Import configuration from JSON (Owner) |
+
 ### Owner
 
 | Command | Aliases | Description |
@@ -270,19 +493,19 @@ Commands use a configurable prefix (default: `!`).
 | `!broadcast <message>` | `!bc`, `!announce` | Send a broadcast message |
 | `!ban @user` | `!block` | Ban a user from using the bot |
 | `!unban @user` | `!unblock` | Unban a previously banned user |
-| `!premium @user <on/off>` | `!setpremium` | Set or remove premium status |
 | `!restart` | `!reboot` | Restart the bot service |
-| `!stats` | `!botstats`, `!stat` | Show bot statistics |
 | `!shutdown` | `!die`, `!kill` | Gracefully shut down the bot |
 
 ---
 
 ## Dashboard Features
 
-The web dashboard runs on port **3000** and provides:
+The web dashboard runs on port **3000** and provides 20 panels:
 
+### Core Panels
 - **Overview Panel** - Real-time stats, connection status, uptime, message counts
 - **QR Panel** - QR code display for WhatsApp linking
+- **Pairing Code Panel** - Link WhatsApp via phone number (no QR scanning)
 - **Sessions Panel** - Create, delete, export, and import sessions
 - **Groups Panel** - Manage groups, view members, configure anti-features
 - **Commands Panel** - Browse, enable/disable, and configure commands
@@ -296,9 +519,17 @@ The web dashboard runs on port **3000** and provides:
 - **Backup Panel** - Create and restore session backups
 - **Files Panel** - Browse and manage uploaded media and files
 
+### New in v1.1.0
+- **Server Monitoring Panel** - CPU usage, memory usage, system load, process uptime, network stats
+- **Update Manager Panel** - Check for updates, view release notes, apply updates, rollback versions
+- **Notification Center Panel** - Owner notifications for disconnects, crashes, errors with severity and filtering
+- **Premium Manager Panel** - Manage premium users, plans, durations, and auto-expiry settings
+- **Pairing Code Panel** - Request and display WhatsApp pairing codes for phone-number linking
+- **Database Manager Panel** - Browse tables, run queries, manage records, view schema
+
 ---
 
-## API Documentation
+## API Endpoints
 
 The bot exposes a comprehensive REST API. See [API.md](./API.md) for complete documentation.
 
@@ -317,32 +548,158 @@ curl http://localhost:3000/api/bot/status \
   -H "Authorization: Bearer <your-token>"
 ```
 
+### Dashboard API (Port 3000)
+
+#### Bot Control
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/bot/status` | Get bot status |
+| `GET` | `/api/bot/qr` | Get QR code status |
+| `POST` | `/api/bot/start` | Start the bot |
+| `POST` | `/api/bot/stop` | Stop the bot |
+| `POST` | `/api/bot/restart` | Restart the bot |
+
+#### Pairing Code
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/pairing-code` | Request a WhatsApp pairing code |
+
+#### Sessions
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/bot/status` | Session status overview |
+
+#### Groups
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/groups` | List all groups |
+| `GET` | `/api/groups/[jid]` | Get group details |
+
+#### Users
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/users` | List all users |
+| `GET` | `/api/users/[jid]` | Get user details |
+
+#### Premium
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/premium` | List premium users |
+| `GET` | `/api/premium/[jid]` | Get premium status for user |
+
+#### Commands
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/commands` | List registered commands |
+| `GET` | `/api/commands/[id]` | Get command details |
+
+#### Plugins
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/plugins` | List plugins |
+| `GET` | `/api/plugins/[id]` | Get plugin details |
+
+#### Notes
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/notes` | List notes |
+| `GET` | `/api/notes/[id]` | Get note details |
+
+#### Auto Replies
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/autoreplies` | List auto-reply rules |
+| `GET` | `/api/autoreplies/[id]` | Get auto-reply details |
+
+#### Notifications
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/notifications` | List owner notifications |
+| `GET` | `/api/notifications/[id]` | Get notification details |
+
+#### System & Health
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check with detailed metrics |
+| `GET` | `/api/system` | System information (CPU, memory, OS) |
+| `GET` | `/api/stats` | Bot statistics |
+| `GET` | `/api/maintenance` | Maintenance mode status |
+| `POST` | `/api/maintenance` | Toggle maintenance mode |
+
+#### Configuration
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/settings` | Get bot settings |
+| `PUT` | `/api/settings` | Update bot settings |
+| `GET` | `/api/ai` | Get AI configuration (masked keys) |
+| `PUT` | `/api/ai` | Update AI configuration |
+
+#### Data Management
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/backup` | List backups |
+| `POST` | `/api/backup` | Create a backup |
+| `POST` | `/api/broadcast` | Send a broadcast message |
+| `POST` | `/api/send-message` | Send a message |
+
+#### Feature APIs
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/updates` | Check for bot updates |
+| `GET` | `/api/group-analytics` | Group analytics data |
+| `GET` | `/api/reminders` | List reminders |
+| `GET` | `/api/afk` | List AFK statuses |
+| `GET` | `/api/languages` | List supported languages |
+| `GET` | `/api/themes` | List available themes |
+| `GET` | `/api/apikeys` | List API keys (masked) |
+| `GET` | `/api/apikeys/[id]` | Get API key details |
+| `GET` | `/api/repo` | Get repository configuration |
+
 ### Bot Internal API (Port 3031)
 
 The bot service also exposes an internal API on port 3031:
 
-- `GET /health` - Health check with detailed metrics
-- `GET /api/status` - Session status overview
-- `GET /api/qr` - QR code status
-- `POST /api/connect` - Connect a WhatsApp session
-- `POST /api/disconnect` - Disconnect a session
-- `GET /api/sessions` - List all sessions
-- `POST /api/sessions/create` - Create a new session
-- `POST /api/sessions/delete` - Delete a session
-- `POST /api/sessions/export` - Export session data
-- `POST /api/sessions/import` - Import session data
-- `POST /api/backup` - Backup all sessions
-- `GET /api/commands` - List registered commands
-- `GET /api/config/bot` - Get bot configuration
-- `PUT /api/config/bot` - Update bot configuration
-- `GET /api/config/anti` - Get anti-feature configuration
-- `PUT /api/config/anti` - Update anti-feature configuration
-- `GET /api/config/ai` - Get AI configuration (masked keys)
-- `PUT /api/config/ai` - Update AI configuration
-- `POST /api/send` - Send a message
-- `GET /api/scheduler/messages` - List scheduled messages
-- `POST /api/scheduler/schedule` - Schedule a message
-- `POST /api/scheduler/cancel` - Cancel a scheduled message
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Health check with detailed metrics |
+| `GET` | `/api/status` | Session status overview |
+| `GET` | `/api/qr` | QR code status |
+| `POST` | `/api/connect` | Connect a WhatsApp session |
+| `POST` | `/api/disconnect` | Disconnect a session |
+| `GET` | `/api/sessions` | List all sessions |
+| `POST` | `/api/sessions/create` | Create a new session |
+| `POST` | `/api/sessions/delete` | Delete a session |
+| `POST` | `/api/sessions/export` | Export session data |
+| `POST` | `/api/sessions/import` | Import session data |
+| `POST` | `/api/backup` | Backup all sessions |
+| `GET` | `/api/commands` | List registered commands |
+| `GET` | `/api/config/bot` | Get bot configuration |
+| `PUT` | `/api/config/bot` | Update bot configuration |
+| `GET` | `/api/config/anti` | Get anti-feature configuration |
+| `PUT` | `/api/config/anti` | Update anti-feature configuration |
+| `GET` | `/api/config/ai` | Get AI configuration (masked keys) |
+| `PUT` | `/api/config/ai` | Update AI configuration |
+| `POST` | `/api/send` | Send a message |
+| `POST` | `/api/pairing-code` | Request a pairing code |
+| `GET` | `/api/scheduler/messages` | List scheduled messages |
+| `POST` | `/api/scheduler/schedule` | Schedule a message |
+| `POST` | `/api/scheduler/cancel` | Cancel a scheduled message |
+
+---
+
+## Owner Notifications
+
+CALTEX MD v1.1.0 automatically notifies the bot owner of critical events:
+
+| Event | Severity | Description |
+|---|---|---|
+| **Disconnect** | Warning | WhatsApp connection lost |
+| **Crash** | Critical | Unhandled exception causing bot crash |
+| **Error** | Error | Non-fatal errors requiring attention |
+| **Update Available** | Info | New version detected on GitHub |
+| **Premium Expiry** | Warning | Premium user subscription expiring soon |
+
+Notifications are accessible via the **Notification Center** dashboard panel and the `/api/notifications` API endpoint.
 
 ---
 
@@ -398,10 +755,11 @@ Each command handler receives a `CommandContext` object with:
 
 ### Installing Plugins
 
-1. Create your plugin file in `src/lib/commands/`
-2. Export it as a default `Plugin` object
-3. The plugin loader will automatically discover and register it
-4. Enable/disable from the dashboard Plugins panel
+1. **Via WhatsApp command:** `!installplugin ./custom-plugins/my-plugin.ts`
+2. **Via dashboard:** Plugins panel > Install
+3. **Via file system:** Place your plugin file in `src/lib/commands/` and it will auto-load
+4. Enable/disable from the dashboard Plugins panel or via `!enableplugin`/`!disableplugin`
+5. Hot-reload during development with `!reloadplugin <name>`
 
 ---
 
@@ -422,6 +780,7 @@ CALTEX MD can be deployed on various platforms. See [DEPLOYMENT.md](./DEPLOYMENT
 See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for solutions to common issues including:
 
 - Connection and QR code problems
+- Pairing code issues
 - Session and authentication issues
 - Database errors
 - Docker and deployment issues

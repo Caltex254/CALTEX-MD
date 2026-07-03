@@ -81,11 +81,18 @@ class CaltexBot {
       this.sessionManager.updateSessionStatus(sessionId, 'disconnected');
       this.apiClient.reportConnectionStatus(sessionId, 'disconnected', { statusCode, reason });
       this.apiClient.sendLog('warn', 'connection', 'WhatsApp connection closed', { sessionId, statusCode, reason });
+      // Notify owner about disconnection
+      this.apiClient.notifyOwner('disconnect', 'Bot Disconnected', `Session ${sessionId} disconnected: ${reason} (code: ${statusCode})`, 'error');
     });
 
     this.connectionManager.on('qr.code', (qr: string, sessionId: string) => {
       logger.info({ sessionId }, 'QR code generated - scan with WhatsApp');
       this.apiClient.reportQRCode(sessionId, qr);
+    });
+
+    this.connectionManager.on('pairing.code', (code: string, sessionId: string, phoneNumber: string) => {
+      logger.info({ sessionId, phoneNumber, code }, 'Pairing code generated');
+      this.apiClient.sendLog('info', 'pairing', `Pairing code generated for ${phoneNumber}: ${code}`, { sessionId, phoneNumber });
     });
 
     // Message events
@@ -106,6 +113,7 @@ class CaltexBot {
       } catch (err) {
         logger.error({ err, sessionId }, 'Error handling messages.upsert');
         this.apiClient.sendLog('error', 'message-handler', 'Error processing messages', { error: String(err) });
+        this.apiClient.notifyOwner('plugin_crash', 'Message Handler Error', `Error in message processing: ${String(err)}`, 'error');
       }
     });
 
@@ -262,6 +270,67 @@ class CaltexBot {
             message: 'QR code is displayed in the console. Check bot logs.',
             hint: 'Scan with WhatsApp > Linked Devices > Link a device',
           }));
+          return;
+        }
+
+        // Pairing code - request a pairing code for phone number linking
+        if (url === '/api/pairing-code' && method === 'POST') {
+          const phoneNumber = body?.phoneNumber;
+          const sessionId = body?.sessionId ?? DEFAULT_SESSION_ID;
+          if (!phoneNumber) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'phoneNumber is required' }));
+            return;
+          }
+          try {
+            const pairingCode = await this.connectionManager.requestPairingCode(sessionId, phoneNumber);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              data: { pairingCode, phoneNumber, sessionId },
+              instructions: [
+                '1. Open WhatsApp on your phone',
+                '2. Go to Settings > Linked Devices',
+                '3. Tap "Link a Device"',
+                '4. Enter the pairing code shown above',
+              ],
+            }));
+          } catch (err: any) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+          return;
+        }
+
+        // Connect with pairing code
+        if (url === '/api/connect-pairing' && method === 'POST') {
+          const phoneNumber = body?.phoneNumber;
+          const sessionId = body?.sessionId ?? DEFAULT_SESSION_ID;
+          if (!phoneNumber) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'phoneNumber is required' }));
+            return;
+          }
+          try {
+            const result = await this.connectionManager.createConnectionWithPairingCode(
+              { sessionId, printQR: false },
+              phoneNumber
+            );
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              data: { pairingCode: result.pairingCode, phoneNumber, sessionId },
+              instructions: [
+                '1. Open WhatsApp on your phone',
+                '2. Go to Settings > Linked Devices',
+                '3. Tap "Link a Device"',
+                '4. Enter the pairing code: ' + result.pairingCode,
+              ],
+            }));
+          } catch (err: any) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
           return;
         }
 
