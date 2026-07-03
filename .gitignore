@@ -1,21 +1,81 @@
+# Dependencies
 node_modules/
+bun.lock
+
+# Next.js
 .next/
+out/
+dist/
+build/
+
+# Environment (NEVER push real secrets!)
 .env
 .env.local
 .env.production
-logs/
-sessions/
-media/
-backups/
+.env.staging
+
+# Database
 *.db
 *.db-journal
+prisma/dev.db
+prisma/dev.db-journal
+
+# WhatsApp auth sessions
+auth_info_baileys/
+sessions/
+
+# Bot runtime files
+bot.log
+bot-config.json
+ai-config.json
+scheduled-messages.json
+
+# Logs
+logs/
+*.log
 dev.log
 server.log
-.turbo/
-dist/
-build/
-coverage/
-.nyc_output/
-*.tsbuildinfo
+
+# Media & backups
+media/
+backups/
+caltex-sessions/
+caltex-media/
+caltex-logs/
+
+# Tool results (internal)
+tool-results/
+
+# Agent context (internal)
+agent-ctx/
+
+# Skills (internal Z-AI system)
+skills/
+
+# Scripts temp (internal search results)
+scripts/bug-search*.json
+scripts/mega-md.json
+scripts/global-bug.json
+
+# Download dir (local only)
+download/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Build artifacts
+*.tsbuildinfo
+.turbo/
+coverage/
+.nyc_output/
+
+# Docker volumes
+caltex-db/
