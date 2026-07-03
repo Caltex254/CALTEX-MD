@@ -1,0 +1,61 @@
+# =============================================================================
+# CALTEX MD - Dockerfile for WhatsApp Bot Service
+# =============================================================================
+
+FROM node:20-alpine AS base
+
+LABEL maintainer="Caltex MD Team"
+LABEL description="CALTEX MD WhatsApp Bot Service"
+LABEL version="1.0.0"
+LABEL org.opencontainers.image.title="Caltex MD Bot"
+LABEL org.opencontainers.image.description="WhatsApp Bot Service powered by Baileys"
+
+# Install bun runtime
+RUN npm install -g bun
+
+WORKDIR /app
+
+# ---- Dependencies Stage ----
+FROM base AS deps
+
+COPY mini-services/caltex-bot/package.json mini-services/caltex-bot/bun.lock* ./
+
+RUN if [ -f bun.lock ]; then \
+      bun install --frozen-lockfile; \
+    else \
+      bun install; \
+    fi
+
+# ---- Production Stage ----
+FROM base AS runner
+
+ENV NODE_ENV=production
+ENV BOT_PORT=3031
+ENV HOSTNAME="0.0.0.0"
+
+# Create non-root user
+RUN addgroup --system --gid 1001 botjs && \
+    adduser --system --uid 1001 botuser
+
+# Copy dependencies
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy bot application code
+COPY mini-services/caltex-bot/ .
+
+# Create necessary directories for sessions, media, and logs
+RUN mkdir -p /app/sessions /app/media /app/logs /app/auth_info_baileys && \
+    chown -R botuser:botjs /app
+
+# Switch to non-root user
+USER botuser
+
+# Expose bot API port
+EXPOSE 3031
+
+# Health check for bot service
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3031/health || exit 1
+
+# Start the bot service
+CMD ["bun", "run", "index.ts"]

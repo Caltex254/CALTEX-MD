@@ -1,0 +1,16 @@
+{
+  "messages": [
+    {
+      "id": "sch_1783089996125_vhk5sd5",
+      "sessionId": "caltex-md",
+      "jid": "test@s.whatsapp.net",
+      "content": {
+        "text": "Hello!"
+      },
+      "sendAt": 1783090056000,
+      "status": "cancelled",
+      "createdAt": 1783089996125,
+      "type": "single"
+    }
+  ]
+}

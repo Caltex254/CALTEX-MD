@@ -1,0 +1,622 @@
+// ============================================================================
+// CALTEX MD WhatsApp Bot - Main Entry Point
+// Starts the HTTP server on port 3031 and initializes the WhatsApp connection
+// ============================================================================
+
+import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { SessionManager } from './src/session-manager';
+import { ConnectionManager, logger } from './src/connection';
+import { AntiFeatures } from './src/anti-features';
+import { MediaHandler } from './src/media-handler';
+import { AIHandler } from './src/ai-handler';
+import { GroupManager } from './src/group-manager';
+import { MessageHandler } from './src/message-handler';
+import { Scheduler } from './src/scheduler';
+import { APIClient } from './src/api-client';
+
+const PORT = 3031;
+const DEFAULT_SESSION_ID = 'caltex-md';
+
+class CaltexBot {
+  private sessionManager: SessionManager;
+  private connectionManager: ConnectionManager;
+  private antiFeatures: AntiFeatures;
+  private mediaHandler: MediaHandler;
+  private aiHandler: AIHandler;
+  private groupManager: GroupManager;
+  private messageHandler: MessageHandler;
+  private scheduler: Scheduler;
+  private apiClient: APIClient;
+  private httpServer: ReturnType<typeof createServer>;
+  private startTime: number;
+  private totalMessagesProcessed = 0;
+  private totalCommandsExecuted = 0;
+
+  constructor() {
+    this.startTime = Date.now();
+
+    logger.info('='.repeat(50));
+    logger.info('  CALTEX MD WhatsApp Bot - Starting...');
+    logger.info('='.repeat(50));
+
+    // Initialize all components
+    this.sessionManager = new SessionManager();
+    this.connectionManager = new ConnectionManager(this.sessionManager);
+    this.antiFeatures = new AntiFeatures();
+    this.mediaHandler = new MediaHandler();
+    this.aiHandler = new AIHandler();
+    this.groupManager = new GroupManager();
+    this.scheduler = new Scheduler();
+    this.apiClient = new APIClient();
+
+    // Initialize message handler with all dependencies
+    this.messageHandler = new MessageHandler(
+      this.antiFeatures,
+      this.mediaHandler,
+      this.aiHandler,
+      this.groupManager
+    );
+
+    // Setup event handlers
+    this.setupEventHandlers();
+
+    // Setup HTTP server for health checks and API
+    this.httpServer = this.createHTTPServer();
+
+    // Setup graceful shutdown
+    this.setupShutdownHandlers();
+  }
+
+  private setupEventHandlers(): void {
+    // Connection events
+    this.connectionManager.on('connection.open', (sessionId: string) => {
+      logger.info({ sessionId }, 'WhatsApp connection opened');
+      this.sessionManager.updateSessionStatus(sessionId, 'active');
+      this.apiClient.reportConnectionStatus(sessionId, 'connected');
+      this.apiClient.sendLog('info', 'connection', 'WhatsApp connection opened', { sessionId });
+    });
+
+    this.connectionManager.on('connection.close', (statusCode: number, reason: string, sessionId: string) => {
+      logger.warn({ sessionId, statusCode, reason }, 'WhatsApp connection closed');
+      this.sessionManager.updateSessionStatus(sessionId, 'disconnected');
+      this.apiClient.reportConnectionStatus(sessionId, 'disconnected', { statusCode, reason });
+      this.apiClient.sendLog('warn', 'connection', 'WhatsApp connection closed', { sessionId, statusCode, reason });
+    });
+
+    this.connectionManager.on('qr.code', (qr: string, sessionId: string) => {
+      logger.info({ sessionId }, 'QR code generated - scan with WhatsApp');
+      this.apiClient.reportQRCode(sessionId, qr);
+    });
+
+    // Message events
+    this.connectionManager.on('messages.upsert', async (data: any, sessionId: string) => {
+      try {
+        await this.messageHandler.handleMessage(
+          this.connectionManager.getSocket(sessionId)!,
+          data,
+          sessionId
+        );
+        this.totalMessagesProcessed++;
+
+        if (this.totalMessagesProcessed % 100 === 0) {
+          this.apiClient.updateStats({
+            totalMessages: this.totalMessagesProcessed,
+          });
+        }
+      } catch (err) {
+        logger.error({ err, sessionId }, 'Error handling messages.upsert');
+        this.apiClient.sendLog('error', 'message-handler', 'Error processing messages', { error: String(err) });
+      }
+    });
+
+    this.connectionManager.on('messages.delete', async (data: any, sessionId: string) => {
+      try {
+        if (this.antiFeatures.getConfig().antiDelete.enabled) {
+          const sock = this.connectionManager.getSocket(sessionId);
+          if (sock && data.keys) {
+            for (const key of data.keys) {
+              await this.antiFeatures.handleAntiDelete(sock, key.id, key.remoteJid);
+            }
+          }
+        }
+      } catch (err) {
+        logger.error({ err }, 'Error handling messages.delete');
+      }
+    });
+
+    // Group participant events
+    this.connectionManager.on('group.participants.update', async (data: any, sessionId: string) => {
+      try {
+        const sock = this.connectionManager.getSocket(sessionId);
+        if (sock) {
+          await this.messageHandler.handleGroupParticipantsUpdate(sock, data, sessionId);
+        }
+      } catch (err) {
+        logger.error({ err }, 'Error handling group.participants.update');
+      }
+    });
+
+    // Call events
+    this.connectionManager.on('call', async (data: any, sessionId: string) => {
+      try {
+        const sock = this.connectionManager.getSocket(sessionId);
+        if (sock) {
+          await this.messageHandler.handleCall(sock, data, sessionId);
+        }
+      } catch (err) {
+        logger.error({ err }, 'Error handling call event');
+      }
+    });
+
+    // Connection update events
+    this.connectionManager.on('connection.update', (update: any, sessionId: string) => {
+      if (update.connection === 'connecting') {
+        this.apiClient.reportConnectionStatus(sessionId, 'connecting');
+      }
+    });
+
+    // Message handler events
+    this.messageHandler.on('command:executed', (data: any) => {
+      this.totalCommandsExecuted++;
+      this.apiClient.reportCommand(data.command, data.sender, data.jid, data.success);
+    });
+
+    this.messageHandler.on('message:processed', (data: any) => {
+      this.emit('stats:update', data);
+    });
+
+    // Scheduler events
+    this.scheduler.on('message:sent', (msg: any) => {
+      this.apiClient.sendLog('info', 'scheduler', 'Scheduled message sent', { messageId: msg.id, jid: msg.jid });
+    });
+
+    this.scheduler.on('message:failed', (msg: any) => {
+      this.apiClient.sendLog('error', 'scheduler', 'Scheduled message failed', { messageId: msg.id, error: msg.error });
+    });
+  }
+
+  private createHTTPServer(): ReturnType<typeof createServer> {
+    const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+      const url = req.url ?? '/';
+      const method = req.method ?? 'GET';
+
+      // CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      if (method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      try {
+        // Parse request body for POST/PUT
+        let body: any = null;
+        if (method === 'POST' || method === 'PUT') {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(Buffer.from(chunk));
+          }
+          const rawBody = Buffer.concat(chunks).toString();
+          if (rawBody) {
+            try {
+              body = JSON.parse(rawBody);
+            } catch {
+              body = rawBody;
+            }
+          }
+        }
+
+        // --- Route Handling ---
+
+        // Health check
+        if (url === '/health' && method === 'GET') {
+          const uptime = Date.now() - this.startTime;
+          const connections = this.connectionManager.listConnections();
+          const connectedSessions = connections.filter((id) => this.connectionManager.isConnected(id));
+          const schedulerStats = this.scheduler.getStats();
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'ok',
+            service: 'caltex-bot',
+            version: '1.0.0',
+            uptime,
+            uptimeFormatted: this.formatUptime(uptime),
+            connections: {
+              total: connections.length,
+              connected: connectedSessions.length,
+              sessions: connections,
+            },
+            messages: {
+              processed: this.totalMessagesProcessed,
+              commandsExecuted: this.totalCommandsExecuted,
+            },
+            scheduler: schedulerStats,
+            antiFeatures: {
+              deletedMessages: this.antiFeatures.getDeletedMessageCount(),
+              viewOnceMessages: this.antiFeatures.getViewOnceMessageCount(),
+            },
+            ai: {
+              activeConversations: this.aiHandler.listActiveConversations().length,
+            },
+            timestamp: Date.now(),
+          }));
+          return;
+        }
+
+        // Status
+        if (url === '/api/status' && method === 'GET') {
+          const sessions = this.sessionManager.getAllSessionInfo();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ sessions, timestamp: Date.now() }));
+          return;
+        }
+
+        // QR status
+        if (url === '/api/qr' && method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            message: 'QR code is displayed in the console. Check bot logs.',
+            hint: 'Scan with WhatsApp > Linked Devices > Link a device',
+          }));
+          return;
+        }
+
+        // Connect session
+        if (url === '/api/connect' && method === 'POST') {
+          const sessionId = body?.sessionId ?? DEFAULT_SESSION_ID;
+          await this.connect(sessionId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: `Connecting session: ${sessionId}` }));
+          return;
+        }
+
+        // Disconnect session
+        if (url === '/api/disconnect' && method === 'POST') {
+          const sessionId = body?.sessionId ?? DEFAULT_SESSION_ID;
+          await this.connectionManager.disconnect(sessionId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: `Disconnected session: ${sessionId}` }));
+          return;
+        }
+
+        // List sessions
+        if (url === '/api/sessions' && method === 'GET') {
+          const sessions = this.sessionManager.listSessions();
+          const sessionDetails = sessions.map((id) => ({
+            id,
+            info: this.sessionManager.getSessionStatus(id),
+            connected: this.connectionManager.isConnected(id),
+            reconnectAttempts: this.connectionManager.getReconnectAttempts(id),
+          }));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ sessions: sessionDetails }));
+          return;
+        }
+
+        // Create session
+        if (url === '/api/sessions/create' && method === 'POST') {
+          const sessionId = body?.sessionId;
+          if (!sessionId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'sessionId is required' }));
+            return;
+          }
+          const info = await this.sessionManager.createSession(sessionId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, session: info }));
+          return;
+        }
+
+        // Delete session
+        if (url === '/api/sessions/delete' && method === 'POST') {
+          const sessionId = body?.sessionId;
+          if (!sessionId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'sessionId is required' }));
+            return;
+          }
+          await this.connectionManager.disconnect(sessionId);
+          const deleted = await this.sessionManager.deleteSession(sessionId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: deleted }));
+          return;
+        }
+
+        // Export session
+        if (url === '/api/sessions/export' && method === 'POST') {
+          const sessionId = body?.sessionId;
+          if (!sessionId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'sessionId is required' }));
+            return;
+          }
+          const data = await this.sessionManager.exportSession(sessionId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: !!data, data }));
+          return;
+        }
+
+        // Import session
+        if (url === '/api/sessions/import' && method === 'POST') {
+          const { sessionId, data } = body ?? {};
+          if (!sessionId || !data) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'sessionId and data are required' }));
+            return;
+          }
+          const success = await this.sessionManager.importSession(sessionId, data);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success }));
+          return;
+        }
+
+        // Backup all sessions
+        if (url === '/api/backup' && method === 'POST') {
+          const backups = await this.sessionManager.backupAllSessions();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, backups: backups.length }));
+          return;
+        }
+
+        // List commands
+        if (url === '/api/commands' && method === 'GET') {
+          const commands = this.messageHandler.listCommands();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ commands }));
+          return;
+        }
+
+        // Bot config
+        if (url === '/api/config/bot' && method === 'GET') {
+          const config = this.messageHandler.getConfig();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ config }));
+          return;
+        }
+
+        if (url === '/api/config/bot' && method === 'PUT') {
+          if (!body) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request body is required' }));
+            return;
+          }
+          this.messageHandler.updateConfig(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+          return;
+        }
+
+        // Anti-feature config
+        if (url === '/api/config/anti' && method === 'GET') {
+          const config = this.antiFeatures.getConfig();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ config }));
+          return;
+        }
+
+        if (url === '/api/config/anti' && method === 'PUT') {
+          if (!body) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request body is required' }));
+            return;
+          }
+          this.antiFeatures.updateConfig(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+          return;
+        }
+
+        // AI config
+        if (url === '/api/config/ai' && method === 'GET') {
+          const config = this.aiHandler.getConfig();
+          const masked = { ...config } as any;
+          if (masked.openai?.apiKey) masked.openai.apiKey = masked.openai.apiKey.slice(0, 8) + '...';
+          if (masked.gemini?.apiKey) masked.gemini.apiKey = masked.gemini.apiKey.slice(0, 8) + '...';
+          if (masked.claude?.apiKey) masked.claude.apiKey = masked.claude.apiKey.slice(0, 8) + '...';
+          if (masked.custom?.apiKey) masked.custom.apiKey = masked.custom.apiKey.slice(0, 8) + '...';
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ config: masked }));
+          return;
+        }
+
+        if (url === '/api/config/ai' && method === 'PUT') {
+          if (!body) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request body is required' }));
+            return;
+          }
+          this.aiHandler.updateConfig(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+          return;
+        }
+
+        // Scheduled messages
+        if (url === '/api/scheduler/messages' && method === 'GET') {
+          const sessionId = new URL(url, 'http://localhost').searchParams.get('sessionId');
+          const messages = this.scheduler.listPendingMessages(sessionId ?? undefined);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ messages }));
+          return;
+        }
+
+        if (url === '/api/scheduler/schedule' && method === 'POST') {
+          const { sessionId, jid, content, sendAt, recurring, type, broadcastJids } = body ?? {};
+          if (!sessionId || !jid || !content || !sendAt) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'sessionId, jid, content, and sendAt are required' }));
+            return;
+          }
+          const msg = this.scheduler.scheduleMessage(sessionId, jid, content, sendAt, { recurring, type, broadcastJids });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: msg }));
+          return;
+        }
+
+        if (url === '/api/scheduler/cancel' && method === 'POST') {
+          const { messageId } = body ?? {};
+          if (!messageId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'messageId is required' }));
+            return;
+          }
+          const cancelled = this.scheduler.cancelScheduledMessage(messageId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: cancelled }));
+          return;
+        }
+
+        // Send message
+        if (url === '/api/send' && method === 'POST') {
+          const { sessionId, jid, content } = body ?? {};
+          if (!sessionId || !jid || !content) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'sessionId, jid, and content are required' }));
+            return;
+          }
+          try {
+            const result = await this.connectionManager.sendMessage(sessionId, jid, content);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, result }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 404
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found', path: url }));
+      } catch (err) {
+        logger.error({ err, url, method }, 'HTTP request handler error');
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Internal server error' }));
+      }
+    });
+
+    return server;
+  }
+
+  private async connect(sessionId: string): Promise<void> {
+    try {
+      await this.sessionManager.createSession(sessionId);
+
+      const sock = await this.connectionManager.createConnection({
+        sessionId,
+        printQR: true,
+        browser: 'CALTEX MD',
+        autoReconnect: true,
+        maxReconnectAttempts: 10,
+        reconnectBaseDelay: 2000,
+      });
+
+      this.scheduler.registerSocket(sessionId, sock);
+
+      logger.info({ sessionId }, 'Bot session connecting...');
+    } catch (err) {
+      logger.error({ err, sessionId }, 'Failed to create connection');
+      throw err;
+    }
+  }
+
+  private setupShutdownHandlers(): void {
+    const shutdown = async (signal: string) => {
+      logger.info({ signal }, 'Shutdown signal received, cleaning up...');
+
+      try {
+        await this.connectionManager.disconnectAll();
+        this.scheduler.destroy();
+        this.apiClient.destroy();
+        this.aiHandler.destroy();
+
+        this.httpServer.close(() => {
+          logger.info('HTTP server closed');
+          process.exit(0);
+        });
+
+        setTimeout(() => {
+          logger.warn('Forced shutdown after timeout');
+          process.exit(1);
+        }, 10000);
+      } catch (err) {
+        logger.error({ err }, 'Error during shutdown');
+        process.exit(1);
+      }
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGQUIT', () => shutdown('SIGQUIT'));
+  }
+
+  private formatUptime(ms: number): string {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  }
+
+  async start(): Promise<void> {
+    // Start HTTP server
+    await new Promise<void>((resolve) => {
+      this.httpServer.listen(PORT, () => {
+        logger.info(`HTTP server listening on port ${PORT}`);
+        logger.info(`Health check: http://localhost:${PORT}/health`);
+        resolve();
+      });
+    });
+
+    logger.info('CALTEX MD Bot HTTP server started!');
+    logger.info(`API available at http://localhost:${PORT}`);
+    logger.info(`Commands: http://localhost:${PORT}/api/commands`);
+    logger.info(`Connect WhatsApp: POST http://localhost:${PORT}/api/connect`);
+
+    // Report status
+    this.apiClient.reportStatus('starting');
+
+    // Auto-connect default session
+    const safeConnect = async () => {
+      try {
+        await this.connect(DEFAULT_SESSION_ID);
+        logger.info('CALTEX MD Bot WhatsApp connection initiated!');
+        logger.info('Scan the QR code above with WhatsApp to connect');
+        logger.info('   WhatsApp > Settings > Linked Devices > Link a device');
+        this.apiClient.reportStatus('running');
+      } catch (err: any) {
+        logger.error({ err: err?.message ?? String(err) }, 'WhatsApp connection failed - HTTP API still available');
+        logger.info('You can retry connecting via: POST http://localhost:3031/api/connect');
+        this.apiClient.reportStatus('running');
+      }
+    };
+
+    setTimeout(safeConnect, 3000);
+  }
+}
+
+// Start the bot
+const bot = new CaltexBot();
+bot.start().catch((err) => {
+  logger.fatal({ err }, 'Failed to start CALTEX MD Bot');
+  process.exit(1);
+});
+
+// Global error handlers
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'Uncaught exception');
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled rejection');
+});
+
+export default bot;

@@ -1,0 +1,315 @@
+// ============================================================
+// CALTEX MD WhatsApp Bot - Prisma Database Schema
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Core Models
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  jid           String    @unique
+  name          String?
+  pushName      String?
+  profilePicUrl String?
+  isPremium     Boolean   @default(false)
+  premiumExpiry DateTime?
+  isBanned      Boolean   @default(false)
+  banReason     String?
+  warnings      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  groupMembers  GroupMember[]
+  warningsIssued Warning[]  @relation("WarnedByUser")
+  auditLogs     AuditLog[]  @relation("AuditActor")
+
+  @@index([jid])
+  @@index([isBanned])
+  @@index([isPremium])
+}
+
+model Group {
+  id              String    @id @default(cuid())
+  jid             String    @unique
+  name            String?
+  description     String?
+  profilePicUrl   String?
+  ownerJid        String?
+  isBanned        Boolean   @default(false)
+  welcomeEnabled  Boolean   @default(false)
+  goodbyeEnabled  Boolean   @default(false)
+  welcomeMessage  String?
+  goodbyeMessage  String?
+  antiLink        Boolean   @default(false)
+  antiBadword     Boolean   @default(false)
+  antiSpam        Boolean   @default(false)
+  antiDelete      Boolean   @default(false)
+  antiViewOnce    Boolean   @default(false)
+  antiTag         Boolean   @default(false)
+  antiCall        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  members         GroupMember[]
+  warnings        Warning[]
+
+  @@index([jid])
+  @@index([isBanned])
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupJid  String
+  userJid   String
+  role      String   @default("member") // admin | member | owner | superadmin
+  joinedAt  DateTime @default(now())
+
+  // Relations
+  group     Group    @relation(fields: [groupJid], references: [jid], onDelete: Cascade)
+  user      User     @relation(fields: [userJid], references: [jid], onDelete: Cascade)
+
+  @@unique([groupJid, userJid])
+  @@index([groupJid])
+  @@index([userJid])
+  @@index([role])
+}
+
+// ============================================================
+// Bot Session & Configuration
+// ============================================================
+
+model BotSession {
+  id            String   @id @default(cuid())
+  sessionId     String   @unique
+  sessionData   String   // Auth state JSON
+  status        String   @default("disconnected") // connected | disconnected | qr | banned
+  phoneNumber   String?
+  deviceName    String?
+  lastActiveAt  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([status])
+}
+
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  category    String?
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([category])
+}
+
+model Command {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  description    String?
+  category       String?
+  isEnabled      Boolean  @default(true)
+  usageCount     Int      @default(0)
+  cooldown       Int      @default(0) // Cooldown in seconds
+  isPremiumOnly  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
+  @@index([isEnabled])
+}
+
+model Plugin {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  version     String   @default("1.0.0")
+  description String?
+  author      String?
+  isEnabled   Boolean  @default(true)
+  filePath    String?
+  config      String?  // JSON string for plugin configuration
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([isEnabled])
+}
+
+// ============================================================
+// Logging & Statistics
+// ============================================================
+
+model Log {
+  id        String   @id @default(cuid())
+  level     String   @default("info") // info | warn | error | debug
+  source    String?
+  message   String
+  data      String?  // Optional JSON payload
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([source])
+  @@index([createdAt])
+}
+
+model Stat {
+  id                String   @id @default(cuid())
+  date              DateTime @unique
+  messagesSent      Int      @default(0)
+  messagesReceived  Int      @default(0)
+  commandsExecuted  Int      @default(0)
+  groupsActive      Int      @default(0)
+  usersActive       Int      @default(0)
+  apiCalls          Int      @default(0)
+  errors            Int      @default(0)
+
+  @@index([date])
+}
+
+// ============================================================
+// Moderation
+// ============================================================
+
+model Warning {
+  id        String   @id @default(cuid())
+  userJid   String
+  groupJid  String
+  reason    String?
+  warnedBy  String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  group     Group    @relation(fields: [groupJid], references: [jid], onDelete: Cascade)
+  warner    User?    @relation("WarnedByUser", fields: [warnedBy], references: [jid], onDelete: SetNull)
+
+  @@index([userJid])
+  @@index([groupJid])
+  @@index([createdAt])
+}
+
+model BlockedContact {
+  id         String   @id @default(cuid())
+  jid        String   @unique
+  reason     String?
+  blockedAt  DateTime @default(now())
+
+  @@index([jid])
+}
+
+// ============================================================
+// Messaging
+// ============================================================
+
+model Broadcast {
+  id          String    @id @default(cuid())
+  message     String
+  targetType  String    @default("all") // all | groups | users
+  status      String    @default("pending") // pending | sent | failed
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status])
+  @@index([targetType])
+  @@index([scheduledAt])
+}
+
+model ScheduledMessage {
+  id          String    @id @default(cuid())
+  targetJid   String
+  message     String
+  mediaUrl    String?
+  mediaType   String?   // image | video | audio | document | sticker
+  scheduledAt DateTime
+  isSent      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([targetJid])
+  @@index([scheduledAt])
+  @@index([isSent])
+}
+
+// ============================================================
+// Custom Commands & AI
+// ============================================================
+
+model CustomCommand {
+  id             String   @id @default(cuid())
+  name           String
+  trigger        String   // Regex or exact match pattern
+  response       String
+  category       String?
+  isEnabled      Boolean  @default(true)
+  isPremiumOnly  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@unique([name])
+  @@index([trigger])
+  @@index([category])
+  @@index([isEnabled])
+}
+
+model AISettings {
+  id           String   @id @default(cuid())
+  provider     String   @default("openai") // openai | gemini | claude | ollama | custom
+  apiKey       String?
+  model        String?
+  systemPrompt String?
+  temperature  Float    @default(0.7)
+  maxTokens    Int      @default(4096)
+  isEnabled    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([provider])
+  @@index([isEnabled])
+}
+
+// ============================================================
+// Media & Audit
+// ============================================================
+
+model MediaCache {
+  id         String   @id @default(cuid())
+  url        String   @unique
+  filePath   String
+  mediaType  String   // image | video | audio | document | sticker
+  size       Int      @default(0) // Size in bytes
+  accessedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([url])
+  @@index([mediaType])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  actorJid  String?
+  targetJid String?
+  details   String?  // JSON payload with action-specific data
+  createdAt DateTime @default(now())
+
+  // Relations
+  actor     User?    @relation("AuditActor", fields: [actorJid], references: [jid], onDelete: SetNull)
+
+  @@index([action])
+  @@index([actorJid])
+  @@index([targetJid])
+  @@index([createdAt])
+}

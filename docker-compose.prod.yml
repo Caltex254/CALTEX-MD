@@ -1,0 +1,229 @@
+# =============================================================================
+# CALTEX MD - Docker Compose (Production)
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: caltex-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - caltex-logs:/var/log/nginx
+    depends_on:
+      app:
+        condition: service_healthy
+      bot:
+        condition: service_healthy
+      ws:
+        condition: service_healthy
+    networks:
+      - caltex-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Next.js Dashboard Application
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: caltex-app
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./data/caltex.db
+      - BOT_API_URL=http://bot:3031
+      - WS_URL=http://ws:3003
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+    env_file:
+      - .env
+    volumes:
+      - caltex-db:/app/data
+      - caltex-logs:/app/logs
+    depends_on:
+      bot:
+        condition: service_healthy
+      ws:
+        condition: service_healthy
+    networks:
+      - caltex-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.50"
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # WhatsApp Bot Service
+  # ---------------------------------------------------------------------------
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: caltex-bot
+    restart: unless-stopped
+    expose:
+      - "3031"
+    environment:
+      - NODE_ENV=production
+      - BOT_PORT=3031
+      - DASHBOARD_API_URL=http://app:3000
+      - WS_URL=http://ws:3003
+    env_file:
+      - .env
+    volumes:
+      - caltex-sessions:/app/sessions
+      - caltex-media:/app/media
+      - caltex-logs:/app/logs
+      - caltex-db:/app/data
+    depends_on:
+      ws:
+        condition: service_healthy
+    networks:
+      - caltex-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3031/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # WebSocket Service
+  # ---------------------------------------------------------------------------
+  ws:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: caltex-ws
+    restart: unless-stopped
+    expose:
+      - "3003"
+    environment:
+      - NODE_ENV=production
+      - WS_PORT=3003
+      - BOT_API_URL=http://bot:3031
+    env_file:
+      - .env
+    volumes:
+      - caltex-logs:/app/logs
+    networks:
+      - caltex-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    command: ["node", "mini-services/websocket-service/index.ts"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  caltex-db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+
+  caltex-sessions:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./sessions
+
+  caltex-media:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./media
+
+  caltex-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./logs
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  caltex-network:
+    driver: bridge
+    name: caltex-network
