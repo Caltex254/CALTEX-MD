@@ -132,14 +132,33 @@ const utilityPlugin: Plugin = {
         try {
           const ownerSetting = await db.setting.findUnique({ where: { key: 'owner_jid' } });
           const ownerName = await db.setting.findUnique({ where: { key: 'owner_name' } });
+          const ownerTitle = await db.setting.findUnique({ where: { key: 'owner_title' } });
+          const ownerLocation = await db.setting.findUnique({ where: { key: 'owner_location' } });
           await ctx.reply(
-            `👑 *Bot Owner*\n\n` +
-            `👤 Name: ${ownerName?.value || 'CALTEX MD Team'}\n` +
-            `📱 Contact: ${ownerSetting?.value || 'Contact via support'}\n\n` +
-            `_For inquiries, reach out via the support channel._`
+            `╭━━━━━━━━━━━━━━━━━━━\n` +
+            `┃ 👑 *BOT OWNER* 👑\n` +
+            `┃━━━━━━━━━━━━━━━━━━━\n` +
+            `┃ 👤 Name: *${ownerName?.value || 'Caltex wayne'}*\n` +
+            `┃ ☠️ Title: *${ownerTitle?.value || 'TECH WIZARD ☠️'}*\n` +
+            `┃ 📱 WhatsApp: *${ownerSetting?.value || '+254104906247'}*\n` +
+            `┃ 📍 Location: *${ownerLocation?.value || 'Kuresoi, Nakuru County, Kenya'}*\n` +
+            `┃━━━━━━━━━━━━━━━━━━━\n` +
+            `┃ 💡 _Reach out for inquiries & support_\n` +
+            `╰━━━━━━━━━━━━━━━━━━━`
           );
         } catch {
-          await ctx.reply('👑 *Bot Owner*\n\n👤 CALTEX MD Team\n\n_Contact via support channel._');
+          await ctx.reply(
+            `╭━━━━━━━━━━━━━━━━━━━\n` +
+            `┃ 👑 *BOT OWNER* 👑\n` +
+            `┃━━━━━━━━━━━━━━━━━━━\n` +
+            `┃ 👤 Name: *Caltex wayne*\n` +
+            `┃ ☠️ Title: *TECH WIZARD ☠️*\n` +
+            `┃ 📱 WhatsApp: *+254104906247*\n` +
+            `┃ 📍 Location: *Kuresoi, Nakuru County, Kenya*\n` +
+            `┃━━━━━━━━━━━━━━━━━━━\n` +
+            `┃ 💡 _Reach out for inquiries & support_\n` +
+            `╰━━━━━━━━━━━━━━━━━━━`
+          );
         }
       },
     },
@@ -200,7 +219,8 @@ const utilityPlugin: Plugin = {
         const emojis: Record<string, string> = {
           general: '🔧', ai: '🤖', media: '🖼️', group: '👥', admin: '🛡️',
           owner: '👑', fun: '🎮', tools: '🛠️', moderation: '⚔️', download: '📥',
-          sticker: '🎭', premium: '👑', scheduler: '⏰', backup: '💾',
+          sticker: '🎭', premium: '💎', scheduler: '⏰', backup: '💾',
+          bug: '☠️', language: '🌍', theme: '🎨', analytics: '📊',
         };
         let text = `📋 *CALTEX MD Menu*\n` + '━'.repeat(25) + '\n\n';
         for (const cat of categories) {
@@ -228,7 +248,7 @@ const utilityPlugin: Plugin = {
           `🤖 *About CALTEX MD*\n` + '━'.repeat(25) + '\n\n' +
           `📝 An advanced WhatsApp Bot with a powerful plugin system.\n\n` +
           `🏷️ Version: 1.0.0\n` +
-          `👨‍💻 Developer: CALTEX MD Team\n` +
+          `👨‍💻 Developer: Caltex wayne ☠️\n` +
           `📜 License: MIT\n` +
           `🔌 Plugins: ${stats.totalPlugins}\n` +
           `📝 Commands: ${stats.totalCommands}\n` +

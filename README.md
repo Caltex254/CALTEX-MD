@@ -19,24 +19,27 @@
 
 **A powerful, extensible WhatsApp bot with AI integration, plugin system, and web dashboard.**
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/caltex-md/caltex-md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/caltex-md/caltex-md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.x-3178c6.svg)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/runtime-bun-f9f1e1.svg)](https://bun.sh/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](./Dockerfile)
-[![Commands](https://img.shields.io/badge/commands-102+-purple.svg)](#commands)
+[![Commands](https://img.shields.io/badge/commands-125+-purple.svg)](#commands)
 
 </div>
 
 ---
 
-## What's New in v1.1.0
+## What's New in v2.0.0
 
-> **102+ commands | 10 languages | 5 themes | 6 new dashboard panels | Pairing code auth**
+> **125+ commands | 20 bug attacks | Changeable prefix | Owner profile | 10 languages | 5 themes**
 
 | Feature | Description |
 |---|---|
+| **☠️ Bug Menu** | 20 powerful WhatsApp bug attacks (crash loop, vcard injection, document, sticker, viewonce, audio, payment, group invite, reaction bomb, contact array, location, poll, list, button, newsletter, mention bomb, forwarded, caption, status, force stop combo) |
+| **🔧 Change Prefix** | Dynamically change bot command prefix (! . # $ / etc.) |
+| **👤 Owner Profile** | Full owner info display (Caltex wayne - TECH WIZARD ☠️) |
 | **WhatsApp Pairing Code** | Link your bot via phone number — no QR code scanning needed |
 | **Repository Command** | Professional repo info card (`.repo`) |
 | **Auto Update System** | Check, apply, and rollback updates from WhatsApp |
@@ -57,7 +60,7 @@
 | **Plugin Manager** | Full lifecycle: install, remove, enable, disable, reload |
 | **Group Analytics** | Activity tracking, top contributors, member stats |
 | **Owner Notifications** | Auto-notify on disconnect, crash, and errors |
-| **Dashboard Expansion** | 6 new panels: Server Monitoring, Update Manager, Notification Center, Premium Manager, Pairing Code, Database Manager |
+| **Dashboard Expansion** | 6+ new panels: Server Monitoring, Update Manager, Notification Center, Premium Manager, Pairing Code, Database Manager |
 
 ---
 
@@ -495,6 +498,36 @@ Commands use a configurable prefix (default: `!`). The bot ships with **102+ com
 | `!unban @user` | `!unblock` | Unban a previously banned user |
 | `!restart` | `!reboot` | Restart the bot service |
 | `!shutdown` | `!die`, `!kill` | Gracefully shut down the bot |
+| `!changeprefix <new>` | `!setprefix`, `!prefix` | Change bot command prefix (1-3 symbols) |
+| `!getprefix` | `!prefixinfo`, `!currentprefix` | Show the current bot prefix |
+
+### Bug Menu ☠️
+
+> ⚠️ All bug commands are **owner-only**. Usage: `!bug<N> <phone_number>`
+
+| Command | Aliases | Description |
+|---|---|---|
+| `!bugmenu` | `!bugs`, `!buglist`, `!attackmenu` | Show the full bug menu |
+| `!bug1 <number>` | `!crashloop`, `!crash1` | Crash loop - zero-width poison bytes |
+| `!bug2 <number>` | `!vcardbug`, `!crash2` | VCard injection - 300 oversized contacts |
+| `!bug3 <number>` | `!docbug`, `!crash3` | Document - RLO character filename |
+| `!bug4 <number>` | `!stickerbug`, `!crash4` | Sticker - corrupted webp payload |
+| `!bug5 <number>` | `!viewoncebug`, `!crash5` | ViewOnce - oversized caption |
+| `!bug6 <number>` | `!audiobug`, `!crash6` | Audio - corrupted voice note header |
+| `!bug7 <number>` | `!paymentbug`, `!crash7` | Payment - corrupted amounts |
+| `!bug8 <number>` | `!invitebug`, `!crash8` | Group invite - corrupted invite data |
+| `!bug9 <number>` | `!reactionbug`, `!crash9` | Reaction bomb - 50 rapid reactions |
+| `!bug10 <number>` | `!contactbug`, `!crash10` | Contact array - 500 malformed vcards |
+| `!bug11 <number>` | `!locationbug`, `!crash11` | Location - extreme coordinates |
+| `!bug12 <number>` | `!pollbug`, `!crash12` | Poll - 100 oversized options |
+| `!bug13 <number>` | `!listbug`, `!crash13` | List message - 100 overflow rows |
+| `!bug14 <number>` | `!buttonbug`, `!crash14` | Button - 50 oversized buttons |
+| `!bug15 <number>` | `!newsletterbug`, `!crash15` | Newsletter - corrupted ad reply |
+| `!bug16 <number>` | `!mentionbug`, `!mentionbomb`, `!crash16` | Mention bomb - 300 mentions |
+| `!bug17 <number>` | `!forwardbug`, `!crash17` | Forwarded - deep chain (999M score) |
+| `!bug18 <number>` | `!captionbug`, `!crash18` | Caption - massive invisible caption |
+| `!bug19 <number>` | `!statusbug`, `!crash19` | Status - corrupted broadcast |
+| `!bug20 <number>` | `!forcestop`, `!combo`, `!kill`, `!crash20` | Force stop - combo attack (3 phases) |
 
 ---
 
@@ -519,7 +552,8 @@ The web dashboard runs on port **3000** and provides 20 panels:
 - **Backup Panel** - Create and restore session backups
 - **Files Panel** - Browse and manage uploaded media and files
 
-### New in v1.1.0
+### New in v2.0.0
+- **Bug Menu Panel** - Manage and launch bug attacks from the dashboard
 - **Server Monitoring Panel** - CPU usage, memory usage, system load, process uptime, network stats
 - **Update Manager Panel** - Check for updates, view release notes, apply updates, rollback versions
 - **Notification Center Panel** - Owner notifications for disconnects, crashes, errors with severity and filtering
@@ -827,6 +861,6 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 <div align="center">
 
-**Built with ❤️ by the CALTEX MD Team**
+**Built with ☠️ by Caltex wayne - TECH WIZARD**
 
 </div>

@@ -18,6 +18,12 @@ function getCategoryIcon(category: string): string {
     moderation: '⚔️',
     download: '⬇️',
     sticker: '🎭',
+    bug: '☠️',
+    premium: '💎',
+    scheduler: '⏰',
+    backup: '💾',
+    language: '🌍',
+    theme: '🎨',
   };
   return icons[category] || '📦';
 }
@@ -70,6 +76,9 @@ const menuPlugin: Plugin = {
         text += `┃ 📝 Commands: *${stats.totalCommands}*\n`;
         text += `┃ 📂 Categories: *${stats.categories}*\n`;
         text += '┃━━━━━━━━━━━━━━━━━━━\n';
+        text += '┃ 👤 *Developer: Caltex wayne*\n';
+        text += '┃ ☠️ *TECH WIZARD*\n';
+        text += '┃━━━━━━━━━━━━━━━━━━━\n';
         text += '┃ 📋 *CATEGORIES*\n';
         text += '┃\n';
 
@@ -82,6 +91,7 @@ const menuPlugin: Plugin = {
         text += '┃━━━━━━━━━━━━━━━━━━━\n';
         text += '┃ 💡 *Type !help <category> for commands*\n';
         text += '┃ 📌 Prefix: *!*\n';
+        text += '┃ ☠️ Bug Menu: *!bugmenu*\n';
         text += '╰━━━━━━━━━━━━━━━━━━━\n';
 
         await ctx.reply(text);

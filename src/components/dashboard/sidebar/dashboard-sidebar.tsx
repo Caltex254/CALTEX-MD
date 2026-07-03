@@ -6,7 +6,7 @@ import {
   Home, QrCode, KeyRound, Puzzle, Users, Building2,
   BarChart3, Send, ScrollText, Settings, Bot, Database,
   FolderOpen, Terminal, Moon, Sun, X, ChevronLeft,
-  Activity, Package, Bell, Crown, Link2, Server
+  Activity, Package, Bell, Crown, Link2, Server, Skull
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -26,6 +26,7 @@ const navItems = [
   { id: 'broadcast', label: 'Broadcast', icon: Send, emoji: '📨' },
   { id: 'logs', label: 'Logs', icon: ScrollText, emoji: '📋' },
   { id: 'commands', label: 'Commands', icon: Terminal, emoji: '⌨️' },
+  { id: 'bugmenu', label: 'Bug Menu', icon: Skull, emoji: '☠️' },
   { id: 'server', label: 'Server', icon: Server, emoji: '🖥️' },
   { id: 'updates', label: 'Updates', icon: Package, emoji: '📦' },
   { id: 'notifications', label: 'Notifications', icon: Bell, emoji: '🔔' },

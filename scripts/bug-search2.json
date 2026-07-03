@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/WhiskeySockets/Baileys/issues/1739",
+    "name": "[BUG] waiting for message. This action may take a few moments",
+    "snippet": "For some contacts, this message happens. I think it might be related to the version that Baileys connects.",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=DHEIO9YdRV8",
+    "name": "How To Make A Whatsapp Bot Using Baileys And Node Js - YouTube",
+    "snippet": "JOIN MY DISCORD SERVER: https://discord.gg/9v43X2tt89 Join the Super Programmers Community! Unlock exclusive access to our comprehensive ...",
+    "host_name": "www.youtube.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/node/comments/1rb1oqj/build_an_antiban_toolkit_for_whatsapp",
+    "name": "Build an anti-ban toolkit for Whatsapp automation(Baileys) - Reddit",
+    "snippet": "Built an open-source middleware to fix it: baileys-antiban. The core idea is making your bot's messaging patterns look human: • Rate limiter ...",
+    "host_name": "www.reddit.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://naveengaur.com/blog/baileys-whatsapp-bot-developer-guide",
+    "name": "Baileys WhatsApp Bot Tutorial (2026): Production Setup & Code",
+    "snippet": "Learn to build a production-grade WhatsApp bot with Baileys, Node.js, and PM2. Step-by-step tutorial with rate-limiting, custom queues, ...",
+    "host_name": "naveengaur.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://pokoke-01.github.io/owh/index.html",
+    "name": "@adiwajshing/baileys-md",
+    "snippet": "Baileys MD - Typescript/Javascript WhatsApp Web API Early Multi-Device Edition. Breaks completely from master. Baileys does not require Selenium or any other ...",
+    "host_name": "pokoke-01.github.io",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/NousResearch/hermes-agent/issues/11951",
+    "name": "WhatsApp bridge silently drops all messages — syncFullHistory",
+    "snippet": "[Bug]: WhatsApp bridge silently drops all messages — syncFullHistory:false disables essential history sync in Baileys 7.x #11951. New issue.",
+    "host_name": "github.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.npmjs.com/package/@bot-wa/bot-wa-baileys",
+    "name": "@bot-wa/bot-wa-baileys - npm",
+    "snippet": "This file is a JavaScript module that exports the BaileysClass , which extends EventEmitter . This class has several methods for sending ...",
+    "host_name": "www.npmjs.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.tiktok.com/@android_infosecurity/video/7238957785298259226",
+    "name": "Crash WhatsApp using one message In the demo, I sent a  - TikTok",
+    "snippet": "To temporarily fix the issue, you have to remove the message using WhatsApp web. It was discovered by BruteBee (https://twitter.com/BruteBee/ ...",
+    "host_name": "www.tiktok.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "http://codesandbox.io/p/github/ayeshchamodye/Baileys",
+    "name": "Baileys - Codesandbox",
+    "snippet": "Baileys does not require Selenium or any other browser to be interface with WhatsApp Web, it does so directly using a WebSocket. Not running Selenium or ...",
+    "host_name": "codesandbox.io",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/@elvisbrazil/automating-whatsapp-with-node-js-and-baileys-send-receive-and-broadcast-messages-with-code-0656c40bd928",
+    "name": "Automating WhatsApp with Node.js and Baileys: Send, Receive, and",
+    "snippet": "In this article, I'll walk you through using the powerful Baileys library to automate WhatsApp messaging with Node.js — including sending ...",
+    "host_name": "medium.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

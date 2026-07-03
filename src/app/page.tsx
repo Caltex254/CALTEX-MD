@@ -23,6 +23,7 @@ import { NotificationCenterPanel } from '@/components/dashboard/panels/notificat
 import { PremiumManagerPanel } from '@/components/dashboard/panels/premium-manager-panel'
 import { PairingPanel } from '@/components/dashboard/panels/pairing-panel'
 import { DatabaseManagerPanel } from '@/components/dashboard/panels/database-manager-panel'
+import { BugMenuPanel } from '@/components/dashboard/panels/bug-menu-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +43,7 @@ const panelMap: Record<string, React.ComponentType> = {
   broadcast: BroadcastPanel,
   logs: LogsPanel,
   commands: CommandsPanel,
+  bugmenu: BugMenuPanel,
   server: ServerMonitoringPanel,
   updates: UpdateManagerPanel,
   notifications: NotificationCenterPanel,

@@ -1,0 +1,336 @@
+     1→     1→import { PrismaClient } from '@prisma/client';
+     2→     2→
+     3→     3→const prisma = new PrismaClient();
+     4→     4→
+     5→     5→async function main() {
+     6→     6→  console.log('🌱 Seeding database...');
+     7→     7→
+     8→     8→  // Create default settings
+     9→     9→  const settings = [
+    10→    10→    { key: 'bot_prefix', value: '!', category: 'bot', description: 'Command prefix' },
+    11→    11→    { key: 'bot_name', value: 'CALTEX MD', category: 'bot', description: 'Bot display name' },
+    12→    12→    { key: 'bot_owner', value: '', category: 'bot', description: 'Owner WhatsApp number' },
+    13→    13→    { key: 'auto_read', value: 'false', category: 'auto', description: 'Auto read messages' },
+    14→    14→    { key: 'auto_typing', value: 'false', category: 'auto', description: 'Auto typing indicator' },
+    15→    15→    { key: 'auto_recording', value: 'false', category: 'auto', description: 'Auto recording indicator' },
+    16→    16→    { key: 'auto_react', value: 'false', category: 'auto', description: 'Auto react to messages' },
+    17→    17→    { key: 'auto_status_viewer', value: 'false', category: 'auto', description: 'Auto view statuses' },
+    18→    18→    { key: 'anti_link', value: 'false', category: 'anti', description: 'Block links in groups' },
+    19→    19→    { key: 'anti_badword', value: 'false', category: 'anti', description: 'Block bad words' },
+    20→    20→    { key: 'anti_spam', value: 'false', category: 'anti', description: 'Anti spam protection' },
+    21→    21→    { key: 'anti_delete', value: 'false', category: 'anti', description: 'Recover deleted messages' },
+    22→    22→    { key: 'anti_view_once', value: 'false', category: 'anti', description: 'Capture view-once media' },
+    23→    23→    { key: 'anti_tag', value: 'false', category: 'anti', description: 'Block mass tags' },
+    24→    24→    { key: 'anti_call', value: 'false', category: 'anti', description: 'Auto reject calls' },
+    25→    25→    { key: 'welcome_enabled', value: 'false', category: 'messages', description: 'Welcome new members' },
+    26→    26→    { key: 'goodbye_enabled', value: 'false', category: 'messages', description: 'Goodbye leaving members' },
+    27→    27→    { key: 'welcome_message', value: 'Welcome {user} to {group}!', category: 'messages', description: 'Welcome message template' },
+    28→    28→    { key: 'goodbye_message', value: 'Goodbye {user}!', category: 'messages', description: 'Goodbye message template' },
+    29→    29→    { key: 'ai_provider', value: 'openai', category: 'ai', description: 'AI provider to use' },
+    30→    30→    { key: 'ai_model', value: 'gpt-4o', category: 'ai', description: 'AI model name' },
+    31→    31→    { key: 'ai_enabled', value: 'true', category: 'ai', description: 'Enable AI features' },
+    32→    32→    { key: 'ai_temperature', value: '0.7', category: 'ai', description: 'AI temperature' },
+    33→    33→    { key: 'ai_max_tokens', value: '2048', category: 'ai', description: 'AI max tokens' },
+    34→    34→    { key: 'rate_limit_window', value: '15', category: 'security', description: 'Rate limit window (minutes)' },
+    35→    35→    { key: 'rate_limit_max', value: '100', category: 'security', description: 'Max requests per window' },
+    36→    36→    { key: 'auto_backup', value: 'true', category: 'backup', description: 'Auto backup enabled' },
+    37→    37→    { key: 'backup_interval', value: '86400000', category: 'backup', description: 'Backup interval (ms)' },
+    38→    38→    { key: 'maintenance_mode', value: 'false', category: 'bot', description: 'Maintenance mode - only owner commands work' },
+    39→    39→    { key: 'default_language', value: 'en', category: 'language', description: 'Default language code' },
+    40→    40→    { key: 'default_theme', value: 'default', category: 'theme', description: 'Default theme name' },
+    41→    41→    { key: 'repo_name', value: 'CALTEX MD', category: 'repo', description: 'Repository name' },
+    42→    42→    { key: 'repo_url', value: 'https://github.com/caltex-md/caltex-md', category: 'repo', description: 'Repository URL' },
+    43→    43→    { key: 'repo_developer', value: 'CALTEX MD Team', category: 'repo', description: 'Developer name' },
+    44→    44→    { key: 'repo_description', value: 'Powerful WhatsApp Multi-Device Bot with AI, Plugin System & Dashboard', category: 'repo', description: 'Project description' },
+    45→    45→    { key: 'repo_license', value: 'MIT', category: 'repo', description: 'License type' },
+    46→    46→    { key: 'owner_notifications', value: 'true', category: 'notifications', description: 'Owner notifications enabled' },
+    47→    47→    { key: 'notify_disconnect', value: 'true', category: 'notifications', description: 'Notify on disconnect' },
+    48→    48→    { key: 'notify_plugin_crash', value: 'true', category: 'notifications', description: 'Notify on plugin crash' },
+    49→    49→    { key: 'notify_db_error', value: 'true', category: 'notifications', description: 'Notify on database error' },
+    50→    50→    { key: 'notify_api_failure', value: 'true', category: 'notifications', description: 'Notify on API failure' },
+    51→    51→    { key: 'notify_update', value: 'true', category: 'notifications', description: 'Notify on available updates' },
+    52→    52→  ];
+    53→    53→
+    54→    54→  for (const setting of settings) {
+    55→    55→    await prisma.setting.upsert({
+    56→    56→      where: { key: setting.key },
+    57→    57→      update: { value: setting.value, category: setting.category, description: setting.description },
+    58→    58→      create: setting,
+    59→    59→    });
+    60→    60→  }
+    61→    61→
+    62→    62→  console.log(`✅ Created ${settings.length} settings`);
+    63→    63→
+    64→    64→  // Create default commands
+    65→    65→  const commands = [
+    66→    66→    { name: 'ping', description: 'Check bot response time', category: 'general', cooldown: 5, isPremiumOnly: false },
+    67→    67→    { name: 'help', description: 'Show available commands', category: 'general', cooldown: 3, isPremiumOnly: false },
+    68→    68→    { name: 'menu', description: 'Show bot menu', category: 'general', cooldown: 5, isPremiumOnly: false },
+    69→    69→    { name: 'ai', description: 'Chat with AI', category: 'ai', cooldown: 3, isPremiumOnly: false },
+    70→    70→    { name: 'aiimage', description: 'Generate AI image', category: 'ai', cooldown: 10, isPremiumOnly: true },
+    71→    71→    { name: 'aicode', description: 'Generate code with AI', category: 'ai', cooldown: 5, isPremiumOnly: true },
+    72→    72→    { name: 'aitranslate', description: 'Translate text with AI', category: 'ai', cooldown: 5, isPremiumOnly: false },
+    73→    73→    { name: 'aisummarize', description: 'Summarize text with AI', category: 'ai', cooldown: 5, isPremiumOnly: false },
+    74→    74→    { name: 'airewrite', description: 'Rewrite text with AI', category: 'ai', cooldown: 5, isPremiumOnly: false },
+    75→    75→    { name: 'aiexplain', description: 'Explain with AI', category: 'ai', cooldown: 5, isPremiumOnly: false },
+    76→    76→    { name: 'sticker', description: 'Create sticker from image/video', category: 'media', cooldown: 5, isPremiumOnly: false },
+    77→    77→    { name: 'takestick', description: 'Steal a sticker', category: 'media', cooldown: 3, isPremiumOnly: false },
+    78→    78→    { name: 'groupinfo', description: 'Show group information', category: 'group', cooldown: 5, isPremiumOnly: false },
+    79→    79→    { name: 'promote', description: 'Promote user to admin', category: 'group', cooldown: 3, isPremiumOnly: false },
+    80→    80→    { name: 'demote', description: 'Demote admin to member', category: 'group', cooldown: 3, isPremiumOnly: false },
+    81→    81→    { name: 'mute', description: 'Mute the group', category: 'group', cooldown: 3, isPremiumOnly: false },
+    82→    82→    { name: 'unmute', description: 'Unmute the group', category: 'group', cooldown: 3, isPremiumOnly: false },
+    83→    83→    { name: 'setprefix', description: 'Change bot prefix', category: 'owner', cooldown: 0, isPremiumOnly: false },
+    84→    84→    { name: 'broadcast', description: 'Send broadcast message', category: 'owner', cooldown: 0, isPremiumOnly: false },
+    85→    85→    { name: 'ban', description: 'Ban a user', category: 'owner', cooldown: 0, isPremiumOnly: false },
+    86→    86→    { name: 'unban', description: 'Unban a user', category: 'owner', cooldown: 0, isPremiumOnly: false },
+    87→    87→    { name: 'premium', description: 'Set premium status', category: 'owner', cooldown: 0, isPremiumOnly: false },
+    88→    88→    { name: 'restart', description: 'Restart the bot', category: 'owner', cooldown: 0, isPremiumOnly: false },
+    89→    89→    { name: 'shutdown', description: 'Stop the bot', category: 'owner', cooldown: 0, isPremiumOnly: false },
+    90→    90→    { name: 'antilink', description: 'Toggle anti-link', category: 'moderation', cooldown: 3, isPremiumOnly: false },
+    91→    91→    { name: 'antibadword', description: 'Toggle anti-badword', category: 'moderation', cooldown: 3, isPremiumOnly: false },
+    92→    92→    { name: 'antispam', description: 'Toggle anti-spam', category: 'moderation', cooldown: 3, isPremiumOnly: false },
+    93→    93→    { name: 'antidelete', description: 'Toggle anti-delete', category: 'moderation', cooldown: 3, isPremiumOnly: false },
+    94→    94→    { name: 'warn', description: 'Warn a user', category: 'moderation', cooldown: 3, isPremiumOnly: false },
+    95→    95→    { name: 'tagall', description: 'Tag all group members', category: 'moderation', cooldown: 10, isPremiumOnly: false },
+    96→    96→    { name: 'hidetag', description: 'Hidden tag all members', category: 'moderation', cooldown: 10, isPremiumOnly: false },
+    97→    97→    { name: 'joke', description: 'Get a random joke', category: 'fun', cooldown: 5, isPremiumOnly: false },
+    98→    98→    { name: 'quote', description: 'Get a random quote', category: 'fun', cooldown: 5, isPremiumOnly: false },
+    99→    99→    { name: '8ball', description: 'Magic 8 ball', category: 'fun', cooldown: 3, isPremiumOnly: false },
+   100→   100→    { name: 'roll', description: 'Roll a dice', category: 'fun', cooldown: 3, isPremiumOnly: false },
+   101→   101→    { name: 'flip', description: 'Flip a coin', category: 'fun', cooldown: 3, isPremiumOnly: false },
+   102→   102→    { name: 'rps', description: 'Rock paper scissors', category: 'fun', cooldown: 3, isPremiumOnly: false },
+   103→   103→    { name: 'translate', description: 'Translate text', category: 'tools', cooldown: 5, isPremiumOnly: false },
+   104→   104→    { name: 'calc', description: 'Calculate expression', category: 'tools', cooldown: 3, isPremiumOnly: false },
+   105→   105→    { name: 'qr', description: 'Generate QR code', category: 'tools', cooldown: 5, isPremiumOnly: false },
+   106→   106→    { name: 'tts', description: 'Text to speech', category: 'tools', cooldown: 5, isPremiumOnly: false },
+   107→   107→    { name: 'define', description: 'Dictionary lookup', category: 'tools', cooldown: 5, isPremiumOnly: false },
+   108→   108→    { name: 'yta', description: 'Download YouTube audio', category: 'download', cooldown: 10, isPremiumOnly: true },
+   109→   109→    { name: 'ytv', description: 'Download YouTube video', category: 'download', cooldown: 10, isPremiumOnly: true },
+   110→   110→    // New commands - v1.1.0
+   111→   111→    { name: 'repo', description: 'Show repository information', category: 'general', cooldown: 5, isPremiumOnly: false },
+   112→   112→    { name: 'update', description: 'Update the bot', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   113→   113→    { name: 'checkupdate', description: 'Check for updates', category: 'owner', cooldown: 10, isPremiumOnly: false },
+   114→   114→    { name: 'version', description: 'Show bot version', category: 'general', cooldown: 5, isPremiumOnly: false },
+   115→   115→    { name: 'rollback', description: 'Rollback to previous version', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   116→   116→    { name: 'premium', description: 'Check premium status', category: 'premium', cooldown: 3, isPremiumOnly: false },
+   117→   117→    { name: 'addpremium', description: 'Grant premium to user', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   118→   118→    { name: 'delpremium', description: 'Remove premium from user', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   119→   119→    { name: 'premiumlist', description: 'List premium users', category: 'owner', cooldown: 5, isPremiumOnly: false },
+   120→   120→    { name: 'backup', description: 'Create backup', category: 'owner', cooldown: 30, isPremiumOnly: false },
+   121→   121→    { name: 'restore', description: 'Restore from backup', category: 'owner', cooldown: 30, isPremiumOnly: false },
+   122→   122→    { name: 'backuplist', description: 'List backups', category: 'owner', cooldown: 5, isPremiumOnly: false },
+   123→   123→    { name: 'stats', description: 'Bot statistics', category: 'analytics', cooldown: 5, isPremiumOnly: false },
+   124→   124→    { name: 'botstats', description: 'Detailed bot stats', category: 'analytics', cooldown: 5, isPremiumOnly: false },
+   125→   125→    { name: 'groupstats', description: 'Group analytics', category: 'analytics', cooldown: 5, isPremiumOnly: false },
+   126→   126→    { name: 'userstats', description: 'User statistics', category: 'analytics', cooldown: 5, isPremiumOnly: false },
+   127→   127→    { name: 'runtime', description: 'Bot uptime info', category: 'general', cooldown: 5, isPremiumOnly: false },
+   128→   128→    { name: 'system', description: 'System information', category: 'general', cooldown: 5, isPremiumOnly: false },
+   129→   129→    { name: 'health', description: 'Health check', category: 'general', cooldown: 5, isPremiumOnly: false },
+   130→   130→    { name: 'speed', description: 'Speed test', category: 'general', cooldown: 5, isPremiumOnly: false },
+   131→   131→    { name: 'about', description: 'About the bot', category: 'general', cooldown: 5, isPremiumOnly: false },
+   132→   132→    { name: 'changelog', description: 'Recent changelog', category: 'general', cooldown: 10, isPremiumOnly: false },
+   133→   133→    { name: 'remind', description: 'Set a reminder', category: 'tools', cooldown: 3, isPremiumOnly: false },
+   134→   134→    { name: 'reminders', description: 'List reminders', category: 'tools', cooldown: 3, isPremiumOnly: false },
+   135→   135→    { name: 'note', description: 'Manage notes', category: 'tools', cooldown: 3, isPremiumOnly: false },
+   136→   136→    { name: 'notes', description: 'List notes', category: 'tools', cooldown: 3, isPremiumOnly: false },
+   137→   137→    { name: 'autoreply', description: 'List auto-replies', category: 'admin', cooldown: 3, isPremiumOnly: false },
+   138→   138→    { name: 'setreply', description: 'Create auto-reply', category: 'admin', cooldown: 3, isPremiumOnly: false },
+   139→   139→    { name: 'delreply', description: 'Delete auto-reply', category: 'admin', cooldown: 3, isPremiumOnly: false },
+   140→   140→    { name: 'afk', description: 'Set AFK status', category: 'general', cooldown: 3, isPremiumOnly: false },
+   141→   141→    { name: 'back', description: 'Return from AFK', category: 'general', cooldown: 3, isPremiumOnly: false },
+   142→   142→    { name: 'schedule', description: 'Schedule message', category: 'owner', cooldown: 5, isPremiumOnly: false },
+   143→   143→    { name: 'listschedule', description: 'List scheduled messages', category: 'owner', cooldown: 5, isPremiumOnly: false },
+   144→   144→    { name: 'delschedule', description: 'Delete scheduled message', category: 'owner', cooldown: 3, isPremiumOnly: false },
+   145→   145→    { name: 'language', description: 'Set language', category: 'general', cooldown: 3, isPremiumOnly: false },
+   146→   146→    { name: 'languages', description: 'List languages', category: 'general', cooldown: 3, isPremiumOnly: false },
+   147→   147→    { name: 'theme', description: 'Set theme', category: 'general', cooldown: 3, isPremiumOnly: false },
+   148→   148→    { name: 'themes', description: 'List themes', category: 'general', cooldown: 3, isPremiumOnly: false },
+   149→   149→    { name: 'maintenance', description: 'Toggle maintenance mode', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   150→   150→    { name: 'exportconfig', description: 'Export configuration', category: 'owner', cooldown: 10, isPremiumOnly: false },
+   151→   151→    { name: 'importconfig', description: 'Import configuration', category: 'owner', cooldown: 10, isPremiumOnly: false },
+   152→   152→    { name: 'apikeys', description: 'List API keys', category: 'owner', cooldown: 5, isPremiumOnly: false },
+   153→   153→    { name: 'apikeyadd', description: 'Add API key', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   154→   154→    { name: 'apikeydel', description: 'Delete API key', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   155→   155→    { name: 'apikeytoggle', description: 'Toggle API key', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   156→   156→    { name: 'plugins', description: 'List plugins', category: 'owner', cooldown: 5, isPremiumOnly: false },
+   157→   157→    { name: 'plugininfo', description: 'Plugin details', category: 'owner', cooldown: 3, isPremiumOnly: false },
+   158→   158→    { name: 'installplugin', description: 'Install plugin', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   159→   159→    { name: 'removeplugin', description: 'Remove plugin', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   160→   160→    { name: 'enableplugin', description: 'Enable plugin', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   161→   161→    { name: 'disableplugin', description: 'Disable plugin', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   162→   162→    { name: 'reloadplugin', description: 'Reload plugin', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   163→   163→    { name: 'reloadall', description: 'Reload all plugins', category: 'owner', cooldown: 0, isPremiumOnly: false },
+   164→   164→    { name: 'gstats', description: 'Group statistics', category: 'group', cooldown: 5, isPremiumOnly: false },
+   165→   165→    { name: 'gactivity', description: 'Group activity', category: 'group', cooldown: 5, isPremiumOnly: false },
+   166→   166→    { name: 'gtop', description: 'Top contributors', category: 'group', cooldown: 5, isPremiumOnly: false },
+   167→   167→    { name: 'donate', description: 'Support the project', category: 'general', cooldown: 10, isPremiumOnly: false },
+   168→   168→    { name: 'support', description: 'Get support', category: 'general', cooldown: 10, isPremiumOnly: false },
+   169→   169→  ];
+   170→   170→
+   171→   171→  for (const cmd of commands) {
+   172→   172→    await prisma.command.upsert({
+   173→   173→      where: { name: cmd.name },
+   174→   174→      update: { description: cmd.description, category: cmd.category, cooldown: cmd.cooldown, isPremiumOnly: cmd.isPremiumOnly },
+   175→   175→      create: cmd,
+   176→   176→    });
+   177→   177→  }
+   178→   178→
+   179→   179→  console.log(`✅ Created ${commands.length} commands`);
+   180→   180→
+   181→   181→  // Create default plugins
+   182→   182→  const plugins = [
+   183→   183→    { name: 'ping', version: '1.0.0', description: 'Ping/Pong command', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/ping.ts' },
+   184→   184→    { name: 'help', version: '1.0.0', description: 'Help command', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/help.ts' },
+   185→   185→    { name: 'menu', version: '1.0.0', description: 'Bot menu command', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/menu.ts' },
+   186→   186→    { name: 'owner', version: '1.0.0', description: 'Owner commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/owner.ts' },
+   187→   187→    { name: 'sticker', version: '1.0.0', description: 'Sticker commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/sticker.ts' },
+   188→   188→    { name: 'ai', version: '1.0.0', description: 'AI integration commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/ai.ts' },
+   189→   189→    { name: 'group', version: '1.0.0', description: 'Group management commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/group.ts' },
+   190→   190→    { name: 'download', version: '1.0.0', description: 'Media download commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/download.ts' },
+   191→   191→    { name: 'fun', version: '1.0.0', description: 'Fun & games commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/fun.ts' },
+   192→   192→    { name: 'tools', version: '1.0.0', description: 'Utility commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/tools.ts' },
+   193→   193→    { name: 'moderation', version: '1.0.0', description: 'Moderation commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/moderation.ts' },
+   194→   194→    // New plugins - v1.1.0
+   195→   195→    { name: 'repo', version: '1.0.0', description: 'Repository info command', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/repo.ts' },
+   196→   196→    { name: 'update', version: '1.0.0', description: 'Auto update system', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/update.ts' },
+   197→   197→    { name: 'premium', version: '1.0.0', description: 'Premium management', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/premium.ts' },
+   198→   198→    { name: 'backup', version: '1.0.0', description: 'Backup system', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/backup.ts' },
+   199→   199→    { name: 'analytics', version: '1.0.0', description: 'Analytics commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/analytics.ts' },
+   200→   200→    { name: 'utility', version: '1.0.0', description: 'Utility commands', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/utility.ts' },
+   201→   201→    { name: 'reminder', version: '1.0.0', description: 'Reminder system', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/reminder.ts' },
+   202→   202→    { name: 'notes', version: '1.0.0', description: 'Notes system', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/notes.ts' },
+   203→   203→    { name: 'autoreply', version: '1.0.0', description: 'Auto reply system', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/autoreply.ts' },
+   204→   204→    { name: 'afk', version: '1.0.0', description: 'AFK system', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/afk.ts' },
+   205→   205→    { name: 'scheduler', version: '1.0.0', description: 'Message scheduler', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/scheduler.ts' },
+   206→   206→    { name: 'language', version: '1.0.0', description: 'Multi-language support', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/language.ts' },
+   207→   207→    { name: 'theme', version: '1.0.0', description: 'Theme system', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/theme.ts' },
+   208→   208→    { name: 'maintenance', version: '1.0.0', description: 'Maintenance mode', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/maintenance.ts' },
+   209→   209→    { name: 'import-export', version: '1.0.0', description: 'Import/Export config', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/import-export.ts' },
+   210→   210→    { name: 'apikeys', version: '1.0.0', description: 'API key manager', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/apikeys.ts' },
+   211→   211→    { name: 'plugin-manager', version: '1.0.0', description: 'Plugin manager', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/plugin-manager.ts' },
+   212→   212→    { name: 'group-analytics', version: '1.0.0', description: 'Group analytics', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/group-analytics.ts' },
+   213→   213→  ];
+   214→   214→
+   215→   215→  for (const plugin of plugins) {
+   216→   216→    await prisma.plugin.upsert({
+   217→   217→      where: { name: plugin.name },
+   218→   218→      update: { version: plugin.version, description: plugin.description, isEnabled: plugin.isEnabled },
+   219→   219→      create: plugin,
+   220→   220→    });
+   221→   221→  }
+   222→   222→
+   223→   223→  console.log(`✅ Created ${plugins.length} plugins`);
+   224→   224→
+   225→   225→  // Create default AI settings
+   226→   226→  const aiProviders = ['openai', 'gemini', 'claude', 'ollama', 'custom'];
+   227→   227→  for (const provider of aiProviders) {
+   228→   228→    await prisma.aISettings.upsert({
+   229→   229→      where: { id: provider },
+   230→   230→      update: {},
+   231→   231→      create: {
+   232→   232→        id: provider,
+   233→   233→        provider: provider as any,
+   234→   234→        model: provider === 'openai' ? 'gpt-4o' : provider === 'gemini' ? 'gemini-pro' : provider === 'claude' ? 'claude-3-sonnet-20240229' : provider === 'ollama' ? 'llama3' : 'custom',
+   235→   235→        systemPrompt: 'You are CALTEX MD, a powerful and helpful WhatsApp assistant. Be concise, friendly, and helpful.',
+   236→   236→        temperature: 0.7,
+   237→   237→        maxTokens: 2048,
+   238→   238→        isEnabled: provider === 'openai',
+   239→   239→      },
+   240→   240→    });
+   241→   241→  }
+   242→   242→
+   243→   243→  console.log(`✅ Created ${aiProviders.length} AI provider configs`);
+   244→   244→
+   245→   245→  // Create default language packs
+   246→   246→  const languagePacks = [
+   247→   247→    { code: 'en', name: 'English', translations: JSON.stringify({ hello: 'Hello', help: 'Help', menu: 'Menu', ping: 'Pong', error: 'An error occurred', noPermission: 'No permission', ownerOnly: 'Owner only', premiumOnly: 'Premium only', welcome: 'Welcome', goodbye: 'Goodbye' }), isDefault: true },
+   248→   248→    { code: 'sw', name: 'Kiswahili', translations: JSON.stringify({ hello: 'Hujambo', help: 'Msaada', menu: 'Menyu', ping: 'Pong', error: 'Kulikuwa na hitilafu', noPermission: 'Huna ruhusa', ownerOnly: 'Mmiliki tu', premiumOnly: 'Premium tu', welcome: 'Karibu', goodbye: 'Kwaheri' }), isDefault: false },
+   249→   249→    { code: 'fr', name: 'Français', translations: JSON.stringify({ hello: 'Bonjour', help: 'Aide', menu: 'Menu', ping: 'Pong', error: 'Une erreur est survenue', noPermission: 'Pas de permission', ownerOnly: 'Propriétaire uniquement', premiumOnly: 'Premium uniquement', welcome: 'Bienvenue', goodbye: 'Au revoir' }), isDefault: false },
+   250→   250→    { code: 'ar', name: 'العربية', translations: JSON.stringify({ hello: 'مرحبا', help: 'مساعدة', menu: 'القائمة', ping: 'بونغ', error: 'حدث خطأ', noPermission: 'ليس لديك إذن', ownerOnly: 'المالك فقط', premiumOnly: 'بريميوم فقط', welcome: 'أهلا وسهلا', goodbye: 'وداعا' }), isDefault: false },
+   251→   251→    { code: 'pt', name: 'Português', translations: JSON.stringify({ hello: 'Olá', help: 'Ajuda', menu: 'Menu', ping: 'Pong', error: 'Ocorreu um erro', noPermission: 'Sem permissão', ownerOnly: 'Apenas proprietário', premiumOnly: 'Apenas premium', welcome: 'Bem-vindo', goodbye: 'Adeus' }), isDefault: false },
+   252→   252→    { code: 'id', name: 'Bahasa Indonesia', translations: JSON.stringify({ hello: 'Halo', help: 'Bantuan', menu: 'Menu', ping: 'Pong', error: 'Terjadi kesalahan', noPermission: 'Tidak ada izin', ownerOnly: 'Hanya pemilik', premiumOnly: 'Hanya premium', welcome: 'Selamat datang', goodbye: 'Selamat tinggal' }), isDefault: false },
+   253→   253→    { code: 'hi', name: 'हिन्दी', translations: JSON.stringify({ hello: 'नमस्ते', help: 'मदद', menu: 'मेनू', ping: 'पोंग', error: 'त्रुटि हुई', noPermission: 'अनुमति नहीं', ownerOnly: 'केवल मालिक', premiumOnly: 'केवल प्रीमियम', welcome: 'स्वागत है', goodbye: 'अलविदा' }), isDefault: false },
+   254→   254→    { code: 'es', name: 'Español', translations: JSON.stringify({ hello: 'Hola', help: 'Ayuda', menu: 'Menú', ping: 'Pong', error: 'Ocurrió un error', noPermission: 'Sin permiso', ownerOnly: 'Solo propietario', premiumOnly: 'Solo premium', welcome: 'Bienvenido', goodbye: 'Adiós' }), isDefault: false },
+   255→   255→    { code: 'de', name: 'Deutsch', translations: JSON.stringify({ hello: 'Hallo', help: 'Hilfe', menu: 'Menü', ping: 'Pong', error: 'Ein Fehler ist aufgetreten', noPermission: 'Keine Berechtigung', ownerOnly: 'Nur Besitzer', premiumOnly: 'Nur Premium', welcome: 'Willkommen', goodbye: 'Auf Wiedersehen' }), isDefault: false },
+   256→   256→    { code: 'zu', name: 'isiZulu', translations: JSON.stringify({ hello: 'Sawubona', help: 'Usizo', menu: 'Imenu', ping: 'Pong', error: 'Kwenzeke iphutha', noPermission: 'Awunayo imvume', ownerOnly: 'Umnikazi kuphela', premiumOnly: 'Premium kuphela', welcome: 'Wamukelekile', goodbye: 'Hamba kahle' }), isDefault: false },
+   257→   257→  ];
+   258→   258→
+   259→   259→  for (const pack of languagePacks) {
+   260→   260→    await prisma.languagePack.upsert({
+   261→   261→      where: { code: pack.code },
+   262→   262→      update: { name: pack.name, translations: pack.translations, isDefault: pack.isDefault },
+   263→   263→      create: pack,
+   264→   264→    });
+   265→   265→  }
+   266→   266→
+   267→   267→  console.log(`✅ Created ${languagePacks.length} language packs`);
+   268→   268→
+   269→   269→  // Create default themes
+   270→   270→  const themes = [
+   271→   271→    { name: 'default', description: 'CALTEX MD default theme - Red and orange gradient', style: JSON.stringify({ primary: '#dc2626', secondary: '#ea580c', accent: '#f97316', background: '#0f172a', text: '#f8fafc', headerBg: '#1e293b', cardBg: '#1e293b', sidebarBg: '#0f172a' }), isDefault: true },
+   272→   272→    { name: 'ocean', description: 'Ocean blue theme - Cool and professional', style: JSON.stringify({ primary: '#0ea5e9', secondary: '#06b6d4', accent: '#14b8a6', background: '#0c4a6e', text: '#f0f9ff', headerBg: '#075985', cardBg: '#075985', sidebarBg: '#0c4a6e' }), isDefault: false },
+   273→   273→    { name: 'forest', description: 'Forest green theme - Natural and calming', style: JSON.stringify({ primary: '#16a34a', secondary: '#15803d', accent: '#22c55e', background: '#052e16', text: '#f0fdf4', headerBg: '#14532d', cardBg: '#14532d', sidebarBg: '#052e16' }), isDefault: false },
+   274→   274→    { name: 'purple', description: 'Royal purple theme - Elegant and bold', style: JSON.stringify({ primary: '#9333ea', secondary: '#7c3aed', accent: '#a855f7', background: '#2e1065', text: '#faf5ff', headerBg: '#3b0764', cardBg: '#3b0764', sidebarBg: '#2e1065' }), isDefault: false },
+   275→   275→    { name: 'midnight', description: 'Midnight dark theme - Sleek and modern', style: JSON.stringify({ primary: '#6366f1', secondary: '#4f46e5', accent: '#818cf8', background: '#020617', text: '#e2e8f0', headerBg: '#0f172a', cardBg: '#0f172a', sidebarBg: '#020617' }), isDefault: false },
+   276→   276→  ];
+   277→   277→
+   278→   278→  for (const theme of themes) {
+   279→   279→    await prisma.themeConfig.upsert({
+   280→   280→      where: { name: theme.name },
+   281→   281→      update: { description: theme.description, style: theme.style },
+   282→   282→      create: theme,
+   283→   283→    });
+   284→   284→  }
+   285→   285→
+   286→   286→  console.log(`✅ Created ${themes.length} themes`);
+   287→   287→
+   288→   288→  // Create default repo config
+   289→   289→  await prisma.repoConfig.upsert({
+   290→   290→    where: { id: 'default' },
+   291→   291→    update: {},
+   292→   292→    create: {
+   293→   293→      id: 'default',
+   294→   294→      repoName: 'CALTEX MD',
+   295→   295→      repoUrl: 'https://github.com/caltex-md/caltex-md',
+   296→   296→      developerName: 'CALTEX MD Team',
+   297→   297→      description: 'Powerful WhatsApp Multi-Device Bot with AI, Plugin System, Web Dashboard & REST API',
+   298→   298→      docsUrl: 'https://github.com/caltex-md/caltex-md/wiki',
+   299→   299→      license: 'MIT',
+   300→   300→      latestRelease: '1.1.0',
+   301→   301→    },
+   302→   302→  });
+   303→   303→
+   304→   304→  console.log('✅ Created default repo config');
+   305→   305→
+   306→   306→  // Create initial stats entry
+   307→   307→  const today = new Date();
+   308→   308→  today.setHours(0, 0, 0, 0);
+   309→   309→  await prisma.stat.upsert({
+   310→   310→    where: { date: today },
+   311→   311→    update: {},
+   312→   312→    create: {
+   313→   313→      date: today,
+   314→   314→      messagesSent: 0,
+   315→   315→      messagesReceived: 0,
+   316→   316→      commandsExecuted: 0,
+   317→   317→      groupsActive: 0,
+   318→   318→      usersActive: 0,
+   319→   319→      apiCalls: 0,
+   320→   320→      errors: 0,
+   321→   321→    },
+   322→   322→  });
+   323→   323→
+   324→   324→  console.log('✅ Created initial stats');
+   325→   325→  console.log('🎉 Seeding complete!');
+   326→   326→}
+   327→   327→
+   328→   328→main()
+   329→   329→  .catch((e) => {
+   330→   330→    console.error('❌ Seed error:', e);
+   331→   331→    process.exit(1);
+   332→   332→  })
+   333→   333→  .finally(async () => {
+   334→   334→    await prisma.$disconnect();
+   335→   335→  });
+   336→   336→

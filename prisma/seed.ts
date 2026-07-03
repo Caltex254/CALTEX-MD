@@ -9,7 +9,7 @@ async function main() {
   const settings = [
     { key: 'bot_prefix', value: '!', category: 'bot', description: 'Command prefix' },
     { key: 'bot_name', value: 'CALTEX MD', category: 'bot', description: 'Bot display name' },
-    { key: 'bot_owner', value: '', category: 'bot', description: 'Owner WhatsApp number' },
+    { key: 'bot_owner', value: '+254104906247', category: 'bot', description: 'Owner WhatsApp number' },
     { key: 'auto_read', value: 'false', category: 'auto', description: 'Auto read messages' },
     { key: 'auto_typing', value: 'false', category: 'auto', description: 'Auto typing indicator' },
     { key: 'auto_recording', value: 'false', category: 'auto', description: 'Auto recording indicator' },
@@ -40,9 +40,14 @@ async function main() {
     { key: 'default_theme', value: 'default', category: 'theme', description: 'Default theme name' },
     { key: 'repo_name', value: 'CALTEX MD', category: 'repo', description: 'Repository name' },
     { key: 'repo_url', value: 'https://github.com/caltex-md/caltex-md', category: 'repo', description: 'Repository URL' },
-    { key: 'repo_developer', value: 'CALTEX MD Team', category: 'repo', description: 'Developer name' },
+    { key: 'repo_developer', value: 'Caltex wayne', category: 'repo', description: 'Developer name' },
     { key: 'repo_description', value: 'Powerful WhatsApp Multi-Device Bot with AI, Plugin System & Dashboard', category: 'repo', description: 'Project description' },
     { key: 'repo_license', value: 'MIT', category: 'repo', description: 'License type' },
+    { key: 'owner_jid', value: '254104906247@s.whatsapp.net', category: 'bot', description: 'Owner JID' },
+    { key: 'owner_name', value: 'Caltex wayne', category: 'bot', description: 'Owner display name' },
+    { key: 'owner_title', value: 'TECH WIZARD ☠️', category: 'bot', description: 'Owner professional title' },
+    { key: 'owner_location', value: 'Kuresoi, Nakuru County, Kenya', category: 'bot', description: 'Owner home address' },
+    { key: 'owner_whatsapp', value: '+254104906247', category: 'bot', description: 'Owner WhatsApp number' },
     { key: 'owner_notifications', value: 'true', category: 'notifications', description: 'Owner notifications enabled' },
     { key: 'notify_disconnect', value: 'true', category: 'notifications', description: 'Notify on disconnect' },
     { key: 'notify_plugin_crash', value: 'true', category: 'notifications', description: 'Notify on plugin crash' },
@@ -166,6 +171,31 @@ async function main() {
     { name: 'gtop', description: 'Top contributors', category: 'group', cooldown: 5, isPremiumOnly: false },
     { name: 'donate', description: 'Support the project', category: 'general', cooldown: 10, isPremiumOnly: false },
     { name: 'support', description: 'Get support', category: 'general', cooldown: 10, isPremiumOnly: false },
+    // Bug Menu Commands - v2.0.0
+    { name: 'bugmenu', description: 'Show bug attack menu', category: 'bug', cooldown: 10, isPremiumOnly: false },
+    { name: 'bug1', description: 'Crash loop attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug2', description: 'VCard injection attack', category: 'bug', cooldown: 20, isPremiumOnly: false },
+    { name: 'bug3', description: 'Document filename attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug4', description: 'Sticker payload attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug5', description: 'ViewOnce caption attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug6', description: 'Audio corrupted attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug7', description: 'Payment amount attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug8', description: 'Group invite attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug9', description: 'Reaction bomb attack', category: 'bug', cooldown: 30, isPremiumOnly: false },
+    { name: 'bug10', description: 'Contact array attack', category: 'bug', cooldown: 30, isPremiumOnly: false },
+    { name: 'bug11', description: 'Location coordinate attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug12', description: 'Poll overflow attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug13', description: 'List message attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug14', description: 'Button overflow attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug15', description: 'Newsletter metadata attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug16', description: 'Mention bomb attack', category: 'bug', cooldown: 20, isPremiumOnly: false },
+    { name: 'bug17', description: 'Forwarded chain attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug18', description: 'Caption poison attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug19', description: 'Status broadcast attack', category: 'bug', cooldown: 15, isPremiumOnly: false },
+    { name: 'bug20', description: 'Force stop combo attack', category: 'bug', cooldown: 60, isPremiumOnly: false },
+    // Prefix Commands - v2.0.0
+    { name: 'changeprefix', description: 'Change bot command prefix', category: 'owner', cooldown: 5, isPremiumOnly: false },
+    { name: 'getprefix', description: 'Show current bot prefix', category: 'general', cooldown: 5, isPremiumOnly: false },
   ];
 
   for (const cmd of commands) {
@@ -210,6 +240,9 @@ async function main() {
     { name: 'apikeys', version: '1.0.0', description: 'API key manager', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/apikeys.ts' },
     { name: 'plugin-manager', version: '1.0.0', description: 'Plugin manager', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/plugin-manager.ts' },
     { name: 'group-analytics', version: '1.0.0', description: 'Group analytics', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/group-analytics.ts' },
+    // New plugins - v2.0.0
+    { name: 'bug-menu', version: '1.0.0', description: 'Bug attack menu (20+ attacks)', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/bug-menu.ts' },
+    { name: 'prefix', version: '1.0.0', description: 'Change prefix command', author: 'CALTEX MD', isEnabled: true, filePath: 'src/lib/commands/prefix.ts' },
   ];
 
   for (const plugin of plugins) {

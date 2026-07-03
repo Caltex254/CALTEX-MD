@@ -35,6 +35,13 @@ function getCategoryEmoji(category: string): string {
     moderation: '⚔️',
     download: '📥',
     sticker: '🎭',
+    bug: '☠️',
+    premium: '💎',
+    scheduler: '⏰',
+    backup: '💾',
+    language: '🌍',
+    theme: '🎨',
+    analytics: '📊',
   };
   return emojis[category] || '📦';
 }

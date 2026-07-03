@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/itc-ou-shigou/winclaw/blob/main/CHANGELOG.md",
+    "name": "winclaw/CHANGELOG.md at main - GitHub",
+    "snippet": "WhatsApp: default MIME type for voice messages when Baileys omits it. ... WhatsApp: vCard/contact cards (prefer FN, include numbers, show all ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.facebook.com/behindzerosum/posts/whatsapp-messages-with-crash-codes-are-affecting-users-across-the-globewhatsapp-/969953110149228",
+    "name": "WhatsApp messages with crash codes are affecting users across the",
+    "snippet": "Sometimes the vcard is also altered, editing/injecting something called Payload that makes the situation worse,\" the report stated.",
+    "host_name": "www.facebook.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.tiktok.com/@android_infosecurity/video/7238957785298259226",
+    "name": "Crash WhatsApp using one message In the demo, I sent a  - TikTok",
+    "snippet": "If you open the chat, WhatsApp app will crash. To temporarily fix the issue, you have to remove the message using WhatsApp web.",
+    "host_name": "www.tiktok.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://thehackernews.com/2019/12/whatsapp-group-crash.html",
+    "name": "This Bug Could Have Let Anyone Crash WhatsApp Of All Group",
+    "snippet": "Just by sending a maliciously crafted message to a targeted group, an attacker can trigger a fully-destructive WhatsApp crash-loop, forcing all ...",
+    "host_name": "thehackernews.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://blog.checkpoint.com/research/whatsapp-maliciouscard-vulnerabilities-allowed-attackers-to-compromise-hundreds-of-millions-of-whatsapp-users",
+    "name": "WhatsApp “MaliciousCard” Vulnerabilities Allowed Attackers to",
+    "snippet": "The vulnerability lies in improper filtering of contact cards, sent utilizing the popular 'vCard' format. a contact with an injected payload on ...",
+    "host_name": "blog.checkpoint.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/NousResearch/hermes-agent/issues/14486",
+    "name": "[Bug]: WhatsApp bridge fails to resolve contacts from allowlist when",
+    "snippet": "When attempting to send a WhatsApp message to a contact from the allowlist using their phone number, the send_message tool fails to resolve the ...",
+    "host_name": "github.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://securityaffairs.com/95257/hacking/whatsapp-bug-group-crash.html",
+    "name": "A WhatsApp bug could have allowed crashing of all group members",
+    "snippet": "WhatsApp addressed a severe vulnerability that could have allowed a malicious group member to crash the messaging app for all members of the same group.",
+    "host_name": "securityaffairs.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/whatsapp/comments/1exnn79/bug_with_whatsapp_android_that_crashed_the_system",
+    "name": "Bug with Whatsapp Android that crashed the system - Reddit",
+    "snippet": "In fact, the solution is to link the device to the PC and from there block and report the criminal and delete the files.",
+    "host_name": "www.reddit.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=rR-fwCAEvwo",
+    "name": "How to solve whatsapp crash problem? - YouTube",
+    "snippet": "Whatsapp BUG | This bug can crash your whatsapp | How to solve whatsapp crash problem? hey guys in this video I am going to tell you about a ...",
+    "host_name": "www.youtube.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.facebook.com/MrTaherAmine/videos/importanteveryone-watches-out-for-a-crash-bug-on-whatsapp-messaging-the-crash-bu/6635113543175753",
+    "name": "IMPORTANT: Everyone, watches out for a Crash Bug on WhatsApp",
+    "snippet": "The crash bug works when someone sends a link (I can't write it since it will block the chat but I will share a video of the person who ...",
+    "host_name": "www.facebook.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

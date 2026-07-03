@@ -166,10 +166,14 @@ export class MessageHandler extends EventEmitter {
         handler: async (ctx) => {
           const text =
             '🤖 *CALTEX MD Bot*\n\n' +
-            'Version: 1.0.0\n' +
+            'Version: 2.0.0\n' +
             'Framework: Baileys MD\n' +
             'Runtime: Bun\n' +
-            'TypeScript: ✅\n\n' +
+            'TypeScript: ✅\n' +
+            'Developer: Caltex wayne ☠️\n' +
+            'Title: TECH WIZARD ☠️\n' +
+            'WhatsApp: +254104906247\n' +
+            'Location: Kuresoi, Nakuru County, Kenya\n\n' +
             'A powerful WhatsApp multi-device bot.';
           await ctx.sock.sendMessage(ctx.jid, { text }, { quoted: ctx.message });
         },
