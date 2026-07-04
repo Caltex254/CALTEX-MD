@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { botPost, isBotOnline } from '@/lib/bot-client';
+
+// Session API URL — deployed on Render
+const SESSION_API_URL = process.env.SESSION_API_URL || 'https://caltex-session-api.onrender.com';
 
 // Public endpoint — NO AUTH REQUIRED
-// Used by the /scan page for pairing code generation
+// Proxies pairing code request to the CALTEX Session API on Render
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { phoneNumber, sessionId } = body;
+    const { phoneNumber } = body;
 
     if (!phoneNumber) {
       return NextResponse.json(
@@ -16,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate phone format
-    const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+    const cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
     if (cleanPhone.length < 10) {
       return NextResponse.json(
         { success: false, error: 'Invalid phone number — must be at least 10 digits' },
@@ -24,35 +26,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if bot service is reachable
-    const online = await isBotOnline();
+    // Call the Session API
+    const res = await fetch(`${SESSION_API_URL}/pairing-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phoneNumber: cleanPhone }),
+      signal: AbortSignal.timeout(15000),
+    });
 
-    if (!online) {
+    const data = await res.json();
+
+    if (data.success) {
       return NextResponse.json({
-        success: false,
-        error: 'Bot service is offline. Deploy the bot service first to generate pairing codes.',
-        hint: 'The WhatsApp bot service needs to be running. Deploy it on Render, Railway, or a VPS, then set BOT_API_URL environment variable.',
+        success: true,
+        data: {
+          sessionId: data.data.sessionId,
+          pairingCode: data.data.pairingCode,
+          phoneNumber: cleanPhone,
+          expiresIn: data.data.expiresIn,
+        },
       });
     }
 
-    // Bot is online — request real pairing code
-    const result = await botPost('/pairing-code', { phoneNumber: cleanPhone, sessionId });
-
-    if (!result.success) {
+    return NextResponse.json(
+      { success: false, error: data.error || 'Failed to generate pairing code' },
+      { status: res.status }
+    );
+  } catch (error: any) {
+    if (error.name === 'TimeoutError') {
       return NextResponse.json(
-        { success: false, error: result.error || 'Failed to request pairing code' },
-        { status: 502 }
+        { success: false, error: 'Session API is responding slowly. Please try again.' },
+        { status: 504 }
       );
     }
-
-    return NextResponse.json({
-      success: true,
-      data: { pairingCode: result.data?.pairingCode, phoneNumber: cleanPhone },
-    });
-  } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to request pairing code' },
-      { status: 500 }
+      { success: false, error: 'Failed to connect to Session API' },
+      { status: 502 }
     );
   }
 }

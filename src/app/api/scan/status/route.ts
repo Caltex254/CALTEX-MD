@@ -1,53 +1,39 @@
-import { NextResponse } from 'next/server';
-import { botGet, isBotOnline } from '@/lib/bot-client';
+import { NextRequest, NextResponse } from 'next/server';
+
+// Session API URL — deployed on Render
+const SESSION_API_URL = process.env.SESSION_API_URL || 'https://caltex-session-api.onrender.com';
 
 // Public endpoint — NO AUTH REQUIRED
-// Used by the /scan page for session linking
+// Proxies to the CALTEX Session API on Render
 export async function GET() {
   try {
-    // Check if bot service is reachable
-    const online = await isBotOnline();
+    const res = await fetch(`${SESSION_API_URL}/health`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await res.json();
 
-    if (!online) {
+    if (data.success) {
       return NextResponse.json({
         success: true,
         data: {
-          status: 'offline',
-          phoneNumber: null,
-          deviceName: null,
-          qrCode: null,
-          message: 'Bot service is offline. Deploy the bot service first, then connect.',
-        },
-      });
-    }
-
-    // Bot is online — get real status
-    const result = await botGet('/status');
-    if (result.success && result.data) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          status: result.data.status || 'disconnected',
-          phoneNumber: result.data.phoneNumber || null,
-          deviceName: result.data.deviceName || null,
-          qrCode: result.data.qr || null,
+          status: data.data?.sessions?.connected > 0 ? 'connected' : 'disconnected',
+          sessionApiOnline: true,
         },
       });
     }
 
     return NextResponse.json({
       success: true,
+      data: { status: 'disconnected', sessionApiOnline: true },
+    });
+  } catch {
+    return NextResponse.json({
+      success: true,
       data: {
-        status: 'disconnected',
-        phoneNumber: null,
-        deviceName: null,
-        qrCode: null,
+        status: 'offline',
+        sessionApiOnline: false,
+        message: 'Session API is offline. Please try again in a moment.',
       },
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to get bot status' },
-      { status: 500 }
-    );
   }
 }

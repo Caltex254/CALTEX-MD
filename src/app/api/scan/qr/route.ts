@@ -1,73 +1,73 @@
-import { NextResponse } from 'next/server';
-import { botGet, botPost, isBotOnline } from '@/lib/bot-client';
+import { NextRequest, NextResponse } from 'next/server';
+
+// Session API URL — deployed on Render
+const SESSION_API_URL = process.env.SESSION_API_URL || 'https://caltex-session-api.onrender.com';
 
 // Public endpoint — NO AUTH REQUIRED
-// GET: Fetch current QR code
-export async function GET() {
+// GET: Check session status (polling for connection)
+export async function GET(request: NextRequest) {
   try {
-    const online = await isBotOnline();
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
 
-    if (!online) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          qr: null,
-          status: 'offline',
-          message: 'Bot service is offline. Deploy the bot service first to generate QR codes.',
-        },
-      });
+    if (!sessionId) {
+      return NextResponse.json(
+        { success: false, error: 'sessionId query parameter is required' },
+        { status: 400 }
+      );
     }
 
-    const result = await botGet('/qr');
-
-    if (result.success && result.data?.qr) {
-      return NextResponse.json({
-        success: true,
-        data: { qr: result.data.qr, status: 'qr' },
-      });
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: { qr: null, status: 'no_qr', message: 'No QR code available. Start the bot first.' },
+    const res = await fetch(`${SESSION_API_URL}/session/${sessionId}`, {
+      signal: AbortSignal.timeout(5000),
     });
+    const data = await res.json();
+
+    return NextResponse.json(data);
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to get QR code' },
-      { status: 500 }
+      { success: false, error: 'Failed to check session status' },
+      { status: 502 }
     );
   }
 }
 
-// POST: Request a fresh QR code
+// POST: Generate QR code
 export async function POST() {
   try {
-    const online = await isBotOnline();
+    const res = await fetch(`${SESSION_API_URL}/qr-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20000),
+    });
 
-    if (!online) {
-      return NextResponse.json({
-        success: false,
-        error: 'Bot service is offline. Deploy the bot service first to generate QR codes.',
-      });
-    }
+    const data = await res.json();
 
-    const result = await botPost('/qr');
-
-    if (result.success) {
+    if (data.success) {
       return NextResponse.json({
         success: true,
-        data: { qr: result.data?.qr, status: 'qr' },
+        data: {
+          sessionId: data.data.sessionId,
+          qrCode: data.data.qrCode,
+          status: data.data.status,
+          expiresIn: data.data.expiresIn,
+        },
       });
     }
 
     return NextResponse.json(
-      { success: false, error: result.error || 'Failed to generate QR code' },
-      { status: 502 }
+      { success: false, error: data.error || 'Failed to generate QR code' },
+      { status: res.status }
     );
   } catch (error: any) {
+    if (error.name === 'TimeoutError') {
+      return NextResponse.json(
+        { success: false, error: 'Session API is responding slowly. Please try again.' },
+        { status: 504 }
+      );
+    }
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to generate QR code' },
-      { status: 500 }
+      { success: false, error: 'Failed to connect to Session API' },
+      { status: 502 }
     );
   }
 }

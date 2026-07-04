@@ -1,3 +1,6 @@
+// Bot client for dashboard communication with the bot service
+// The Session API (Render) handles QR/pairing independently
+
 const BOT_API_URL = process.env.BOT_API_URL || `http://localhost:3031`;
 
 interface BotResponse {

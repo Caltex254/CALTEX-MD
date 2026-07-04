@@ -4,6 +4,6 @@
   "installCommand": "npm install",
   "outputDirectory": ".next",
   "env": {
-    "BOT_API_URL": "http://localhost:3031"
+    "SESSION_API_URL": "https://caltex-session-api.onrender.com"
   }
 }
