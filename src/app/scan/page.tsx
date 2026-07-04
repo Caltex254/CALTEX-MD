@@ -416,7 +416,7 @@ export default function ScanPage() {
 
           <div className="flex flex-wrap justify-center gap-3">
             <a
-              href="/"
+              href="/dashboard"
               className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/5 text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
             >
               <ExternalLink className="h-4 w-4" /> Dashboard

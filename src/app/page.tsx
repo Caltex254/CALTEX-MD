@@ -1,149 +1,444 @@
 'use client'
 
-import { useDashboardStore } from '@/store/dashboard-store'
-import { DashboardSidebar } from '@/components/dashboard/sidebar'
-import { DashboardHeader } from '@/components/dashboard/header'
-import { OverviewPanel } from '@/components/dashboard/panels/overview-panel'
-import { QrPanel } from '@/components/dashboard/panels/qr-panel'
-import { SessionsPanel } from '@/components/dashboard/panels/sessions-panel'
-import { PluginsPanel } from '@/components/dashboard/panels/plugins-panel'
-import { UsersPanel } from '@/components/dashboard/panels/users-panel'
-import { GroupsPanel } from '@/components/dashboard/panels/groups-panel'
-import { StatsPanel } from '@/components/dashboard/panels/stats-panel'
-import { BroadcastPanel } from '@/components/dashboard/panels/broadcast-panel'
-import { LogsPanel } from '@/components/dashboard/panels/logs-panel'
-import { SettingsPanel } from '@/components/dashboard/panels/settings-panel'
-import { AiPanel } from '@/components/dashboard/panels/ai-panel'
-import { BackupPanel } from '@/components/dashboard/panels/backup-panel'
-import { FilesPanel } from '@/components/dashboard/panels/files-panel'
-import { CommandsPanel } from '@/components/dashboard/panels/commands-panel'
-import { ServerMonitoringPanel } from '@/components/dashboard/panels/server-monitoring-panel'
-import { UpdateManagerPanel } from '@/components/dashboard/panels/update-manager-panel'
-import { NotificationCenterPanel } from '@/components/dashboard/panels/notification-center-panel'
-import { PremiumManagerPanel } from '@/components/dashboard/panels/premium-manager-panel'
-import { PairingPanel } from '@/components/dashboard/panels/pairing-panel'
-import { DatabaseManagerPanel } from '@/components/dashboard/panels/database-manager-panel'
-import { BugMenuPanel } from '@/components/dashboard/panels/bug-menu-panel'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Shield, Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  Smartphone,
+  QrCode,
+  Key,
+  RefreshCw,
+  Copy,
+  CheckCircle2,
+  Loader2,
+  Shield,
+  Zap,
+  Wifi,
+  WifiOff,
+  Phone,
+  ArrowRight,
+  ExternalLink,
+  Skull,
+} from 'lucide-react'
 
-const panelMap: Record<string, React.ComponentType> = {
-  overview: OverviewPanel,
-  qr: QrPanel,
-  pairing: PairingPanel,
-  sessions: SessionsPanel,
-  plugins: PluginsPanel,
-  users: UsersPanel,
-  premium: PremiumManagerPanel,
-  groups: GroupsPanel,
-  stats: StatsPanel,
-  broadcast: BroadcastPanel,
-  logs: LogsPanel,
-  commands: CommandsPanel,
-  bugmenu: BugMenuPanel,
-  server: ServerMonitoringPanel,
-  updates: UpdateManagerPanel,
-  notifications: NotificationCenterPanel,
-  database: DatabaseManagerPanel,
-  settings: SettingsPanel,
-  ai: AiPanel,
-  backup: BackupPanel,
-  files: FilesPanel,
-}
-
-function LoginGate() {
-  const { login } = useDashboardStore()
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('')
+export default function ScanPage() {
+  const [method, setMethod] = useState<'pairing' | 'qr' | null>(null)
+  const [phone, setPhone] = useState('')
+  const [pairingCode, setPairingCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [botStatus, setBotStatus] = useState<string>('unknown')
+  const [qrCode, setQrCode] = useState<string>('')
+  const [qrRefreshing, setQrRefreshing] = useState(false)
+  const [step, setStep] = useState<'input' | 'generating' | 'code' | 'waiting' | 'connected'>('input')
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Fetch bot status
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/bot/status')
+      const data = await res.json()
+      if (data.success) {
+        setBotStatus(data.data?.status || 'disconnected')
+        if (data.data?.qrCode) setQrCode(data.data.qrCode)
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 10000)
+    return () => clearInterval(interval)
+  }, [fetchStatus])
+
+  // Auto-check connection during pairing wait
+  useEffect(() => {
+    if (step !== 'waiting') return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/bot/status')
+        const data = await res.json()
+        if (data.success && data.data?.status === 'connected') {
+          setBotStatus('connected')
+          setStep('connected')
+        }
+      } catch {}
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [step])
+
+  const generatePairingCode = async () => {
+    if (!phone || phone.length < 10) return
     setLoading(true)
     setError('')
-    const ok = await login(username, password)
-    if (!ok) setError('Invalid credentials')
+    setPairingCode('')
+    setStep('generating')
+
+    try {
+      // Try without auth first (public endpoint), then with stored token
+      const token = typeof window !== 'undefined' ? localStorage.getItem('caltex_token') : null
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch('/api/pairing-code', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ phoneNumber: phone }),
+      })
+      const data = await res.json()
+      if (data.success && data.data?.pairingCode) {
+        setPairingCode(data.data.pairingCode)
+        setStep('code')
+      } else {
+        setError(data.message || data.error || 'Failed to generate pairing code')
+        setStep('input')
+      }
+    } catch {
+      setError('Network error — make sure the bot service is running')
+      setStep('input')
+    }
     setLoading(false)
   }
 
+  const refreshQr = async () => {
+    setQrRefreshing(true)
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('caltex_token') : null
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      await fetch('/api/bot/qr', { method: 'POST', headers })
+      await fetchStatus()
+    } catch {} finally {
+      setQrRefreshing(false)
+    }
+  }
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(pairingCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const resetPairing = () => {
+    setStep('input')
+    setPairingCode('')
+    setError('')
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center pb-2">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">
-            CT
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
+      {/* Header */}
+      <header className="border-b border-white/10 backdrop-blur-sm bg-black/30">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
+              CT
+            </div>
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                CALTEX MD SCANNER
+              </h1>
+              <p className="text-xs text-gray-400">WhatsApp Bot Session Manager</p>
+            </div>
           </div>
-          <CardTitle className="text-xl">CALTEX MD</CardTitle>
-          <p className="text-sm text-muted-foreground">WhatsApp Bot Dashboard</p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <div className="flex items-center gap-2">
+            {botStatus === 'connected' ? (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-green-400 bg-green-400/10 px-3 py-1.5 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                Connected
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-400 bg-yellow-400/10 px-3 py-1.5 rounded-full">
+                <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                Disconnected
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+        {/* Scanner Section */}
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-bold flex items-center justify-center gap-2">
+            <span className="text-cyan-400">◆</span>
+            <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">SCANNER</span>
+            <span className="text-cyan-400">◆</span>
+          </h2>
+          <p className="text-gray-400 text-sm">Choose a method to link your WhatsApp</p>
+        </div>
+
+        {/* Method Cards */}
+        {!method && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto">
+            {/* Pairing Code Card */}
+            <button
+              onClick={() => setMethod('pairing')}
+              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-teal-900/60 to-teal-950/80 p-6 text-left transition-all hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/10 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 flex items-center justify-center mb-4">
+                <Key className="h-7 w-7 text-cyan-400" />
+              </div>
+              <h3 className="font-bold text-lg text-white">PAIRING CODE</h3>
+              <p className="text-sm text-gray-400 mt-1">Connect with 8-digit code</p>
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+
+            {/* QR Code Card */}
+            <button
+              onClick={() => { setMethod('qr'); refreshQr() }}
+              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-purple-900/60 to-purple-950/80 p-6 text-left transition-all hover:border-purple-500/50 hover:shadow-lg hover:shadow-purple-500/10 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-600/20 flex items-center justify-center mb-4">
+                <QrCode className="h-7 w-7 text-purple-400" />
+              </div>
+              <h3 className="font-bold text-lg text-white">QR CODE</h3>
+              <p className="text-sm text-gray-400 mt-1">Scan QR with your device</p>
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          </div>
+        )}
+
+        {/* Pairing Code Panel */}
+        {method === 'pairing' && (
+          <div className="max-w-md mx-auto space-y-4">
+            <button
+              onClick={() => { setMethod(null); resetPairing() }}
+              className="text-sm text-gray-400 hover:text-white flex items-center gap-1 transition-colors"
+            >
+              ← Back to Scanner
+            </button>
+
+            {step === 'input' && (
+              <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-teal-900/40 to-teal-950/60 p-6 space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                    <Phone className="h-5 w-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white">Pairing Code</h3>
+                    <p className="text-xs text-gray-400">Enter your WhatsApp phone number</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">+</span>
+                    <input
+                      type="text"
+                      placeholder="Phone with country code (e.g. 254712345678)"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="w-full pl-7 pr-3 py-3 rounded-xl bg-black/40 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
+                    />
+                  </div>
+                  <button
+                    onClick={generatePairingCode}
+                    disabled={loading || !phone || phone.length < 10}
+                    className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium text-sm hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shrink-0"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                    Get Code
+                  </button>
+                </div>
+                {error && (
+                  <p className="text-sm text-red-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                    {error}
+                  </p>
+                )}
+
+                {/* Steps preview */}
+                <div className="grid grid-cols-3 gap-3 pt-2">
+                  {['Enter Phone', 'Get Code', 'Enter in WhatsApp'].map((label, i) => (
+                    <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-white/5">
+                      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs font-bold">
+                        {i + 1}
+                      </div>
+                      <span className="text-xs font-medium text-gray-300">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {step === 'generating' && (
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-8 flex flex-col items-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-cyan-400" />
+                <p className="text-sm text-gray-400">Requesting pairing code for +{phone}...</p>
+              </div>
+            )}
+
+            {step === 'code' && (
+              <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-teal-900/40 to-teal-950/60 p-6 space-y-5">
+                <div className="flex items-center gap-3">
+                  <Shield className="h-6 w-6 text-green-400" />
+                  <h3 className="font-bold text-white">Your Pairing Code</h3>
+                </div>
+
+                {/* Code Display */}
+                <div className="bg-black/50 rounded-xl p-6 text-center space-y-2">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500 font-medium">Pairing Code</p>
+                  <p className="text-4xl font-mono font-bold tracking-[0.3em] text-cyan-400">{pairingCode}</p>
+                </div>
+
+                <button
+                  onClick={copyCode}
+                  className="w-full py-2.5 rounded-xl border border-white/10 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-colors"
+                >
+                  {copied ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  {copied ? 'Copied!' : 'Copy Code'}
+                </button>
+
+                {/* Instructions */}
+                <div className="bg-white/5 rounded-xl p-4 space-y-3">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-cyan-400" /> Follow these steps:
+                  </p>
+                  <ol className="space-y-2 text-sm text-gray-300">
+                    {[
+                      'Open WhatsApp on your phone',
+                      'Go to Settings > Linked Devices',
+                      'Tap "Link a Device"',
+                      'Tap "Link with phone number"',
+                      `Enter this code: ${pairingCode}`,
+                    ].map((text, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="flex items-center justify-center h-5 w-5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] font-bold shrink-0 mt-0.5">
+                          {i + 1}
+                        </span>
+                        <span dangerouslySetInnerHTML={{ __html: text.replace(pairingCode, `<b class="text-cyan-400">${pairingCode}</b>`) }} />
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                <button
+                  onClick={() => setStep('waiting')}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium text-sm flex items-center justify-center gap-2 hover:from-green-400 hover:to-emerald-500 transition-all"
+                >
+                  I've entered the code <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {step === 'waiting' && (
+              <div className="rounded-2xl border border-blue-500/30 bg-black/40 p-8 flex flex-col items-center gap-4">
+                <div className="relative">
+                  <Loader2 className="h-12 w-12 animate-spin text-blue-400" />
+                  <Wifi className="h-5 w-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-600" />
+                </div>
+                <p className="text-sm text-gray-400 text-center">
+                  Waiting for WhatsApp to confirm...<br />
+                  Enter code <b className="text-cyan-400">{pairingCode}</b> on your phone.
+                </p>
+              </div>
+            )}
+
+            {step === 'connected' && (
+              <div className="rounded-2xl border border-green-500/30 bg-gradient-to-br from-green-900/40 to-green-950/60 p-8 flex flex-col items-center gap-4">
+                <CheckCircle2 className="h-16 w-16 text-green-400" />
+                <div className="text-center">
+                  <p className="font-bold text-lg text-white">Device Paired!</p>
+                  <p className="text-sm text-gray-400 mt-1">Your WhatsApp is now linked to CALTEX MD.</p>
+                </div>
+                <button
+                  onClick={() => { setMethod(null); resetPairing() }}
+                  className="px-6 py-2.5 rounded-xl bg-green-500 text-white font-medium text-sm hover:bg-green-400 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* QR Code Panel */}
+        {method === 'qr' && (
+          <div className="max-w-md mx-auto space-y-4">
+            <button
+              onClick={() => setMethod(null)}
+              className="text-sm text-gray-400 hover:text-white flex items-center gap-1 transition-colors"
+            >
+              ← Back to Scanner
+            </button>
+
+            <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-900/40 to-purple-950/60 p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <QrCode className="h-5 w-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white">QR Code</h3>
+                    <p className="text-xs text-gray-400">Scan with WhatsApp</p>
+                  </div>
+                </div>
+                <button
+                  onClick={refreshQr}
+                  disabled={qrRefreshing}
+                  className="p-2 rounded-lg border border-white/10 hover:bg-white/5 transition-colors"
+                >
+                  {qrRefreshing ? <Loader2 className="h-4 w-4 animate-spin text-purple-400" /> : <RefreshCw className="h-4 w-4 text-gray-400" />}
+                </button>
+              </div>
+
+              <div className="w-64 h-64 mx-auto rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center bg-black/30">
+                {qrCode ? (
+                  <img src={qrCode} alt="QR Code" className="w-full h-full p-4 rounded-lg" />
+                ) : botStatus === 'connected' ? (
+                  <div className="text-center text-green-400">
+                    <CheckCircle2 className="h-12 w-12 mx-auto mb-2" />
+                    <p className="text-sm">Already Connected</p>
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500">
+                    <QrCode className="h-12 w-12 mx-auto mb-2" />
+                    <p className="text-sm">Click refresh to generate</p>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-400 text-center">
+                WhatsApp → Settings → Linked Devices → Link a Device → Scan this QR
+              </p>
             </div>
-            <div>
-              <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </div>
-            {error && <p className="text-sm text-destructive text-center">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
-              Sign In
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          </div>
+        )}
+
+        {/* Tools Section */}
+        <div className="text-center space-y-4 pt-4">
+          <h2 className="text-2xl font-bold flex items-center justify-center gap-2">
+            <span className="text-cyan-400">◆</span>
+            <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">TOOLS</span>
+            <span className="text-cyan-400">◆</span>
+          </h2>
+
+          <div className="flex flex-wrap justify-center gap-3">
+            <a
+              href="/dashboard"
+              className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/5 text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
+            >
+              <ExternalLink className="h-4 w-4" /> Dashboard
+            </a>
+            <a
+              href="https://github.com/Caltex254/CALTEX-MD"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/5 text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
+            >
+              <Skull className="h-4 w-4" /> GitHub
+            </a>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer className="text-center pt-6 border-t border-white/5">
+          <p className="text-xs text-gray-500">
+            Built with <span className="text-gray-400">☠️</span> by Caltex Wayne — TECH WIZARD
+          </p>
+        </footer>
+      </main>
     </div>
   )
-}
-
-function DashboardLayout() {
-  const { activePanel } = useDashboardStore()
-  const ActivePanel = panelMap[activePanel] || OverviewPanel
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <DashboardSidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <DashboardHeader />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <ActivePanel />
-        </main>
-      </div>
-    </div>
-  )
-}
-
-function getStoredToken(): string | null {
-  if (typeof window === 'undefined') return null
-  try { return localStorage.getItem('caltex_token') } catch { return null }
-}
-
-export default function Home() {
-  const { token, setToken } = useDashboardStore()
-  const [storedToken] = useState(getStoredToken)
-
-  // Hydrate token from localStorage on first client render
-  if (storedToken && !token) {
-    // Schedule token set for after render
-    queueMicrotask(() => setToken(storedToken))
-  }
-
-  // Show loading until we have a token decision
-  if (typeof window === 'undefined' || (storedToken && !token)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (!token && !storedToken) {
-    return <LoginGate />
-  }
-
-  return <DashboardLayout />
 }

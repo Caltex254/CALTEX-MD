@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="https://raw.githubusercontent.com/Caltex254/CALTEX-MD/main/public/caltex-profile.png" width="150" height="150" alt="CALTEX MD" style="border-radius: 50%; border: 3px solid #00e6c8;" />
+
 # ☠️ CALTEX MD
 
 **Powerful WhatsApp Multi-Device Bot** — AI integration, plugin system, and web dashboard.
@@ -22,7 +24,7 @@ Click the button below to generate your WhatsApp session (Pairing Code or QR Cod
 
 <div align="center">
 
-[![GET SESSION](https://img.shields.io/badge/🔑_GET_SESSION-Click_Here-red?style=for-the-badge&logo=whatsapp&logoColor=white)](https://caltex-md.space-z.ai/scan)
+[![GET SESSION](https://img.shields.io/badge/🔑_GET_SESSION-Click_Here-red?style=for-the-badge&logo=whatsapp&logoColor=white)](https://caltex-md.vercel.app)
 
 </div>
 
@@ -87,7 +89,7 @@ docker compose up -d
 
 ### Method 1: Pairing Code (Recommended)
 
-1. Go to the [**Scanner Page**](https://caltex-md.space-z.ai/scan) or Dashboard > **Pairing Code**
+1. Go to the [**Scanner Page**](https://caltex-md.vercel.app) or Dashboard > **Pairing Code**
 2. Enter your phone number **with country code, no +** (e.g., `254712345678`)
 3. Click **Get Code** — you'll receive an 8-digit pairing code
 4. On your phone: **WhatsApp** → **Settings** → **Linked Devices** → **Link with Phone Number**
@@ -95,7 +97,7 @@ docker compose up -d
 
 ### Method 2: QR Code
 
-1. Go to the [**Scanner Page**](https://caltex-md.space-z.ai/scan) or Dashboard > **QR Code**
+1. Go to the [**Scanner Page**](https://caltex-md.vercel.app) or Dashboard > **QR Code**
 2. Scan the QR code with WhatsApp: **Settings** → **Linked Devices** → **Link a Device**
 
 After linking, the status shows **Connected** and the bot is ready!
