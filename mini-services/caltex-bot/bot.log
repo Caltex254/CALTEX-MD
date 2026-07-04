@@ -6209,3 +6209,5 @@
 {"level":30,"time":1783167356948,"pid":924,"hostname":"c-6a48e6b4-14c2a3ca-1494138e532d","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
 {"level":30,"time":1783167376954,"pid":924,"hostname":"c-6a48e6b4-14c2a3ca-1494138e532d","module":"connection-manager","sessionId":"caltex-md","msg":"QR code received"}
 {"level":30,"time":1783167376958,"pid":924,"hostname":"c-6a48e6b4-14c2a3ca-1494138e532d","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
+{"level":30,"time":1783167396958,"pid":924,"hostname":"c-6a48e6b4-14c2a3ca-1494138e532d","module":"connection-manager","sessionId":"caltex-md","msg":"QR code received"}
+{"level":30,"time":1783167396962,"pid":924,"hostname":"c-6a48e6b4-14c2a3ca-1494138e532d","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
