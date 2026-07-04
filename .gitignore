@@ -87,3 +87,5 @@ push.sh
 
 # Uploads (local only)
 upload/
+.vercel
+.env*
