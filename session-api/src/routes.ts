@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { sessionStore } from './session-store';
-import { createQRSession, createPairingSession, refreshQR } from './whatsapp-connection';
+import { createQRSession, createPairingSession } from './whatsapp-connection';
 import { createLogger } from './logger';
 import { config } from './config';
 

@@ -85,31 +85,19 @@ docker compose up -d
 
 ### Method 1: Pairing Code (Recommended)
 
-1. Go to the [**Scanner Page**](https://caltex-md.vercel.app/scan) or Dashboard > **Pairing Code**
-2. Enter your phone number **with country code, no +** (e.g., `254712345678`)
+1. Go to the [**Scanner Page**](https://caltex-md.vercel.app/scan)
+2. Enter your phone number **with country code, no +** (e.g., `254712345678` for Kenya, `917123456789` for India)
 3. Click **Get Code** — you'll receive an 8-digit pairing code
 4. On your phone: **WhatsApp** → **Settings** → **Linked Devices** → **Link with Phone Number**
-5. Enter the pairing code
+5. Enter the pairing code — your WhatsApp will link automatically
 
 ### Method 2: QR Code
 
-1. Go to the [**Scanner Page**](https://caltex-md.vercel.app/scan) or Dashboard > **QR Code**
-2. Scan the QR code with WhatsApp: **Settings** → **Linked Devices** → **Link a Device**
+1. Go to the [**Scanner Page**](https://caltex-md.vercel.app/scan)
+2. Click **QR Code**
+3. Scan the QR code with WhatsApp: **Settings** → **Linked Devices** → **Link a Device**
 
 After linking, the scanner shows **Session Connected!** — download or copy your session data, then paste it in your bot's `SESSION_DATA` env var.
-
----
-
-## ⚙️ Configuration
-
-| Variable | Description | Default |
-|---|---|---|
-| `PORT` | Dashboard port | `3000` |
-| `DATABASE_URL` | SQLite database path | `file:./data/caltex.db` |
-| `BOT_API_URL` | Bot service URL (for Vercel) | `http://localhost:3031` |
-| `JWT_SECRET` | JWT signing secret | `caltex-md-bot-secret-key-2024` |
-| `ADMIN_USER` | Dashboard username | `admin` |
-| `ADMIN_PASS` | Dashboard password | `waynekipkoech1` |
 
 ---
 
@@ -129,44 +117,6 @@ Prefix: **`.`** (dot) — configurable via `.changeprefix`. **125+ commands** ac
 | **Plugins** | `.plugins` `.installplugin` `.enableplugin` `.disableplugin` `.reloadplugin` |
 | **Owner** | `.setprefix` `.broadcast` `.ban` `.restart` `.maintenance` `.update` `.rollback` |
 | **Other** | `.sticker` `.afk` `.remind` `.note` `.schedule` `.language` `.theme` `.apikeys` |
-
----
-
-## 📊 Dashboard
-
-Web dashboard at `http://localhost:3000` — login: `admin` / `waynekipkoech1`
-
-**Panels:** Overview · QR Code · Pairing Code · Sessions · Groups · AI Config · Plugins · Broadcast · Logs · Stats · Server Monitoring · Update Manager · Backup · Commands · Premium Manager · Database Manager · Notifications · Bug Menu
-
----
-
-## 🌐 Architecture
-
-```
-┌──────────────────────┐     ┌────────────────────────┐     ┌─────────────┐
-│  Vercel (Frontend)   │     │  Render (Session API)  │     │  WhatsApp   │
-│  caltex-md.vercel.app│     │  caltex-session-api    │     │  Multi-Dev  │
-├──────────────────────┤     ├────────────────────────┤     └─────────────┘
-│  /scan (Scanner)     │────▶│  POST /pairing-code    │────▶│             │
-│  /dashboard          │     │  POST /qr-code         │     │             │
-│  /api/scan/*         │     │  GET  /session/:id     │     │             │
-│                      │◀────│  GET  /session/:id/data│◀────│             │
-└──────────────────────┘     └────────────────────────┘
-                                      │
-                             Session Data (JSON)
-                                      │
-                                      ▼
-                          ┌────────────────────────┐
-                          │  User Deploys Bot      │
-                          │  (Render/Railway/VPS)  │
-                          │  SESSION_DATA=<json>   │
-                          │  Bot starts instantly!  │
-                          └────────────────────────┘
-```
-
-- **Vercel** hosts the scan page and dashboard (frontend + API routes)
-- **Render Session API** generates WhatsApp sessions (QR + Pairing Code)
-- Users download session JSON and deploy their own bot with `SESSION_DATA` env var
 
 ---
 
