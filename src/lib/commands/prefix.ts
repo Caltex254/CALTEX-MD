@@ -30,7 +30,7 @@ const prefixPlugin: Plugin = {
 
         // No argument — show current prefix and usage
         if (!newPrefix) {
-          let currentPrefix = '!';
+          let currentPrefix = '.';
           try {
             const setting = await db.setting.findUnique({ where: { key: 'bot_prefix' } });
             if (setting) currentPrefix = setting.value;
@@ -70,7 +70,7 @@ const prefixPlugin: Plugin = {
         }
 
         // Fetch the old prefix
-        let oldPrefix = '!';
+        let oldPrefix = '.';
         try {
           const existing = await db.setting.findUnique({ where: { key: 'bot_prefix' } });
           if (existing) oldPrefix = existing.value;
@@ -127,7 +127,7 @@ const prefixPlugin: Plugin = {
       cooldown: 5,
       isPremiumOnly: false,
       handler: async (ctx: CommandContext) => {
-        let currentPrefix = '!';
+        let currentPrefix = '.';
 
         try {
           const setting = await db.setting.findUnique({ where: { key: 'bot_prefix' } });

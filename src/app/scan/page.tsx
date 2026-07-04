@@ -34,7 +34,7 @@ export default function ScanPage() {
   // Fetch bot status
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/bot/status')
+      const res = await fetch('/api/scan/status')
       const data = await res.json()
       if (data.success) {
         setBotStatus(data.data?.status || 'disconnected')
@@ -54,7 +54,7 @@ export default function ScanPage() {
     if (step !== 'waiting') return
     const interval = setInterval(async () => {
       try {
-        const res = await fetch('/api/bot/status')
+        const res = await fetch('/api/scan/status')
         const data = await res.json()
         if (data.success && data.data?.status === 'connected') {
           setBotStatus('connected')
@@ -73,14 +73,9 @@ export default function ScanPage() {
     setStep('generating')
 
     try {
-      // Try without auth first (public endpoint), then with stored token
-      const token = typeof window !== 'undefined' ? localStorage.getItem('caltex_token') : null
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch('/api/pairing-code', {
+      const res = await fetch('/api/scan/pairing-code', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber: phone }),
       })
       const data = await res.json()
@@ -101,10 +96,7 @@ export default function ScanPage() {
   const refreshQr = async () => {
     setQrRefreshing(true)
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('caltex_token') : null
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      await fetch('/api/bot/qr', { method: 'POST', headers })
+      await fetch('/api/scan/qr', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       await fetchStatus()
     } catch {} finally {
       setQrRefreshing(false)
