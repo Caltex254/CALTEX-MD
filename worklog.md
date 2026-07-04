@@ -88,3 +88,20 @@ Stage Summary:
 - The pairing code flow now works end-to-end: Scan page → Vercel API → Render Session API → Baileys → WhatsApp sends popup to phone
 - Key URL: https://caltex-session-api.onrender.com (live, healthy)
 - Key URL: https://caltex-md.vercel.app/scan (scan page, API online)
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix pairing code flow - complete audit and fix
+
+Work Log:
+- Deep audit of Baileys 6.7.23 source code for requestPairingCode()
+- Found critical race condition: 500ms delay was insufficient
+- Rewrote whatsapp-connection.ts with proper socket ready detection
+- Added ConnectionStateTracker and exhaustive logging
+- Deployed to Render and verified pairing code generation works
+
+Stage Summary:
+- Critical fix: Wait for QR event (handshake complete) before requestPairingCode()
+- Pairing codes now generated correctly: e.g., "84Q2ST4E"
+- QR code fallback also confirmed working
+- Both flows verified working on Render + Vercel
