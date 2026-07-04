@@ -3,15 +3,15 @@ services:
     name: caltex-session-api
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm run start:prod
+    buildCommand: npm install
+    startCommand: npx tsx src/index.ts
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3031
       - key: CORS_ORIGINS
-        value: https://caltex-md.vercel.app
+        value: https://caltex-md.vercel.app,https://caltex-md-git-main-caltex254s-projects.vercel.app
       - key: SESSION_EXPIRY_MS
         value: 1800000
       - key: CLEANUP_INTERVAL_MS

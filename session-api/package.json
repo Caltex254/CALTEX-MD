@@ -5,26 +5,29 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "npx tsx src/index.ts",
-    "build": "npx tsc",
-    "start": "node dist/index.js",
-    "start:prod": "node dist/index.js",
-    "render-build": "npm install && npx tsc"
+    "build": "echo 'Build not needed — using tsx runtime'",
+    "start": "npx tsx src/index.ts",
+    "start:prod": "npx tsx src/index.ts",
+    "render-build": "npm install"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.8",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
-    "@types/qrcode": "^1.5.5",
-    "@types/uuid": "^10.0.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "pino": "^9.5.0",
     "qrcode": "^1.5.4",
-    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
     "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.7.0"
   },
   "engines": {
     "node": ">=20"
