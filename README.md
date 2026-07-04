@@ -188,28 +188,59 @@ cd mini-services/caltex-bot
 bun run dev
 ```
 
-When the bot starts, it will display a QR code in the console. Scan it with WhatsApp:
+### 🔗 Linking WhatsApp to Your Bot
 
-> **WhatsApp** > **Settings** > **Linked Devices** > **Link a Device**
+After starting the bot, you need to link it to your WhatsApp account. There are **two methods**:
 
-### Using Pairing Code (New in v1.1.0)
+---
 
-Instead of scanning a QR code, you can link your bot using a phone number:
+#### Method 1: QR Code (Recommended for First-Time Setup)
 
-1. Open the **Dashboard** > **Pairing Code** panel
-2. Enter your WhatsApp phone number (e.g., `6281234567890`)
-3. Click **Request Pairing Code**
-4. Enter the received code on your phone:
-   > **WhatsApp** > **Settings** > **Linked Devices** > **Link with Phone Number**
+When the bot starts, it will display a **QR code** in the terminal/console. Link it by scanning on your phone:
 
-You can also request a pairing code via the API:
+1. Open **WhatsApp** on your phone
+2. Go to **Settings** ⚙️
+3. Tap **Linked Devices**
+4. Tap **Link a Device**
+5. Point your phone camera at the QR code displayed in the bot terminal
+
+> 💡 **Tip:** The QR code is also displayed on the **Dashboard** at `http://localhost:3000` under the **QR Code** panel, which may be easier to scan from a desktop screen.
+
+---
+
+#### Method 2: Pairing Code (No QR Scanning Needed)
+
+If you can't scan a QR code (e.g., running on a remote server), use the **pairing code** method:
+
+**Via Dashboard:**
+
+1. Open the Dashboard at `http://localhost:3000`
+2. Navigate to the **Pairing Code** panel
+3. Enter your WhatsApp phone number **with country code** (e.g., `254712345678` for Kenya, `6281234567890` for Indonesia)
+4. Click **Request Pairing Code** — you'll receive an 8-digit code
+5. On your phone, go to: **WhatsApp** > **Settings** > **Linked Devices** > **Link with Phone Number**
+6. Enter the pairing code you received
+
+**Via API:**
 
 ```bash
 curl -X POST http://localhost:3000/api/pairing-code \
   -H "Authorization: Bearer <your-token>" \
   -H "Content-Type: application/json" \
-  -d '{"phoneNumber":"6281234567890"}'
+  -d '{"phoneNumber":"254712345678"}'
 ```
+
+**Via Bot Command (if already connected):**
+
+```
+!pair <phone-number>
+```
+
+> ⚠️ **Important:** Make sure to include the country code without the `+` symbol. For example, use `254712345678` not `+254712345678`.
+
+---
+
+> 🎯 **After linking:** You should see "Connected" in the terminal and the Dashboard status will show **Online**. The bot is now ready to receive and respond to messages!
 
 ### Docker Quick Start
 
