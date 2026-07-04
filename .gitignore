@@ -79,3 +79,8 @@ coverage/
 
 # Docker volumes
 caltex-db/
+
+# GitHub credentials (NEVER push!)
+.git-credentials
+.config/github/
+push.sh
