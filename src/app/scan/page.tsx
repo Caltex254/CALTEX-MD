@@ -349,7 +349,7 @@ export default function ScanPage() {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">+</span>
                     <input
                       type="text"
-                      placeholder="e.g. 254712345678"
+                      placeholder="254712345678 (country code + number)"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
                       onKeyDown={(e) => e.key === 'Enter' && generatePairingCode()}
@@ -371,6 +371,7 @@ export default function ScanPage() {
                     {error}
                   </p>
                 )}
+                <p className="text-xs text-gray-500">Enter your number with country code, no + sign. Kenya: 2547..., US: 1..., India: 91...</p>
                 <div className="grid grid-cols-3 gap-3 pt-2">
                   {['Enter Phone', 'Get Code', 'Enter in WhatsApp'].map((label, i) => (
                     <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-white/5">
@@ -387,6 +388,7 @@ export default function ScanPage() {
                 <Loader2 className="h-12 w-12 animate-spin text-cyan-400" />
                 <p className="text-sm text-gray-400">Requesting pairing code for +{phone}...</p>
                 <p className="text-xs text-gray-500">Connecting to WhatsApp servers...</p>
+                <p className="text-xs text-yellow-500/80">This may take up to 60 seconds if the server is waking up from sleep.</p>
               </div>
             )}
 
@@ -433,7 +435,7 @@ export default function ScanPage() {
                 <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
                   <p className="text-xs text-yellow-300 flex items-start gap-2">
                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                    After entering the code, WhatsApp will automatically link. No need to click anything — this page is listening for the connection.
+                    After requesting the code, you should see a notification on your WhatsApp. Open it, then enter this pairing code. If you don't see a notification, go to WhatsApp &gt; Settings &gt; Linked Devices &gt; Link a Device &gt; Link with phone number.
                   </p>
                 </div>
               </div>

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     const res = await fetch(`${SESSION_API_URL}/session/${sessionId}`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10000),
     });
     const data = await res.json();
 
@@ -37,7 +37,7 @@ export async function POST() {
     const res = await fetch(`${SESSION_API_URL}/qr-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(60000),
     });
 
     const data = await res.json();

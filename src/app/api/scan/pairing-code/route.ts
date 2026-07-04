@@ -27,11 +27,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Call the Session API
+    // Render free tier may be sleeping — allow up to 60s for wake-up + pairing code generation
     const res = await fetch(`${SESSION_API_URL}/pairing-code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phoneNumber: cleanPhone }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(60000),
     });
 
     const data = await res.json();
