@@ -2,29 +2,70 @@
 
 # ☠️ CALTEX MD
 
-**WhatsApp Multi-Device Bot** — AI integration, plugin system, and web dashboard.
+**Powerful WhatsApp Multi-Device Bot** — AI integration, plugin system, and web dashboard.
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/caltex-md/caltex-md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/Caltex254/CALTEX-MD)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](./Dockerfile)
+[![Commands](https://img.shields.io/badge/commands-125+-purple.svg)](#commands)
 
 </div>
 
 ---
 
-## Quick Start
+## 📌 How to Connect CALTEX MD Bot
 
-### Prerequisites
+### Step 1: Get Session ID
 
-- **Node.js** >= 20 or **Bun** >= 1.0
-- A WhatsApp account with an active phone number
-- (Optional) AI provider API keys for AI features
+Click the button below to generate your WhatsApp session (Pairing Code or QR Code):
+
+<div align="center">
+
+[![GET SESSION](https://img.shields.io/badge/🔑_GET_SESSION-Click_Here-red?style=for-the-badge&logo=whatsapp&logoColor=white)](https://caltex-md.space-z.ai/scan)
+
+</div>
+
+> Opens the CALTEX MD Scanner — choose **Pairing Code** (enter phone number) or **QR Code** (scan with WhatsApp)
+
+### Step 2: Configure Settings
+
+Before deployment, configure your bot:
+
+- **Option A:** Edit `config.env` file with your settings
+- **Option B:** Use environment variables on your hosting platform
+
+```env
+# Required
+DATABASE_URL=file:./data/caltex.db
+NEXTAUTH_SECRET=your-secret-key
+JWT_SECRET=your-jwt-secret
+
+# Optional (for AI features)
+OPENAI_API_KEY=sk-...
+```
+
+### Step 3: Choose Hosting Platform
+
+Deploy the bot on your preferred platform:
+
+<div align="center">
+
+[![Render](https://img.shields.io/badge/🚀_RENDER-Deploy-46E3B7?style=for-the-badge)](https://render.com/deploy?repo=https://github.com/Caltex254/CALTEX-MD)
+[![Railway](https://img.shields.io/badge/🚀_RAILWAY-Deploy-8B5CF6?style=for-the-badge)](https://railway.app/template/caltex-md)
+[![Heroku](https://img.shields.io/badge/🚀_HEROKU-Deploy-EC4899?style=for-the-badge)](https://heroku.com/deploy?template=https://github.com/Caltex254/CALTEX-MD)
+[![Docker](https://img.shields.io/badge/🚀_DOCKER-Deploy-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#docker-quick-start)
+
+</div>
+
+---
+
+## 🚀 Quick Start
 
 ### Install & Run
 
 ```bash
-git clone https://github.com/caltex-md/caltex-md.git
+git clone https://github.com/Caltex254/CALTEX-MD.git
 cd caltex-md
 npm install
 cp .env.example .env        # Edit with your config
@@ -34,7 +75,7 @@ npm run build
 npm start
 ```
 
-### Docker
+### Docker Quick Start
 
 ```bash
 docker compose up -d
@@ -44,36 +85,24 @@ docker compose up -d
 
 ## 🔗 Link WhatsApp
 
-After starting the bot, link it to WhatsApp using one of two methods:
+### Method 1: Pairing Code (Recommended)
 
-### Method 1: QR Code
-
-1. Open **WhatsApp** > **Settings** > **Linked Devices** > **Link a Device**
-2. Scan the QR code displayed in the terminal or at `http://localhost:3000`
-
-### Method 2: Pairing Code (No QR Scanning)
-
-1. Open the Dashboard at `http://localhost:3000` > **Pairing Code** panel
+1. Go to the [**Scanner Page**](https://caltex-md.space-z.ai/scan) or Dashboard > **Pairing Code**
 2. Enter your phone number **with country code, no +** (e.g., `254712345678`)
-3. Click **Request Pairing Code**
-4. On your phone: **WhatsApp** > **Settings** > **Linked Devices** > **Link with Phone Number**
-5. Enter the code
+3. Click **Get Code** — you'll receive an 8-digit pairing code
+4. On your phone: **WhatsApp** → **Settings** → **Linked Devices** → **Link with Phone Number**
+5. Enter the pairing code
 
-**Via API:**
-```bash
-curl -X POST http://localhost:3000/api/pairing-code \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"phoneNumber":"254712345678"}'
-```
+### Method 2: QR Code
 
-After linking, the terminal shows **Connected** and the Dashboard shows **Online**.
+1. Go to the [**Scanner Page**](https://caltex-md.space-z.ai/scan) or Dashboard > **QR Code**
+2. Scan the QR code with WhatsApp: **Settings** → **Linked Devices** → **Link a Device**
+
+After linking, the status shows **Connected** and the bot is ready!
 
 ---
 
-## Configuration
-
-Environment variables in `.env`:
+## ⚙️ Configuration
 
 | Variable | Description | Default |
 |---|---|---|
@@ -81,89 +110,53 @@ Environment variables in `.env`:
 | `DATABASE_URL` | SQLite database path | `file:./data/caltex.db` |
 | `BOT_API_URL` | Bot service URL | `http://localhost:3031` |
 | `WS_URL` | WebSocket service URL | `http://localhost:3003` |
-| `NEXTAUTH_SECRET` | NextAuth secret key | `change-me-in-production` |
+| `NEXTAUTH_SECRET` | NextAuth secret | `change-me-in-production` |
 | `JWT_SECRET` | JWT signing secret | `caltex-md-bot-secret-key-2024` |
-| `ADMIN_USER` | Dashboard admin username | `admin` |
-| `ADMIN_PASS` | Dashboard admin password | `admin123` |
-
-Bot and AI config can also be managed from the dashboard at `http://localhost:3000`.
+| `ADMIN_USER` | Dashboard username | `admin` |
+| `ADMIN_PASS` | Dashboard password | `admin123` |
 
 ---
 
-## Commands
+## 📋 Commands
 
 Prefix is configurable (default `!`). **125+ commands** across 15 categories:
 
-| Category | Key Commands | Count |
-|---|---|---|
-| **General** | `!ping`, `!help`, `!menu`, `!runtime`, `!system`, `!health`, `!speed`, `!owner`, `!repo` | 14 |
-| **AI** | `!ai`, `!aiimage`, `!aicode`, `!aitranslate`, `!aisummarize`, `!airewrite`, `!aiexplain` | 8 |
-| **Bug Menu ☠️** | `!bug1`–`!bug20` (owner-only attacks: crash loop, vcard, sticker, audio, reaction bomb, mention bomb, force stop combo, etc.) | 20 |
-| **Download** | `!yta`, `!ytv`, `!ig`, `!tiktok`, `!fb`, `!twitter` | 7 |
-| **Group Admin** | `!groupinfo`, `!promote`, `!demote`, `!mute`, `!unmute` | 5 |
-| **Moderation** | `!antilink`, `!antibadword`, `!antispam`, `!antidelete`, `!antiviewonce`, `!anticall`, `!warn`, `!tagall`, `!hidetag`, `!welcome`, `!goodbye` | 16 |
-| **Fun** | `!joke`, `!quote`, `!fact`, `!8ball`, `!roll`, `!flip`, `!rps`, `!trivia`, `!meme` | 9 |
-| **Analytics** | `!stats`, `!botstats`, `!groupstats`, `!userstats`, `!gstats`, `!gactivity`, `!gtop` | 7 |
-| **Premium** | `!premium`, `!addpremium`, `!delpremium`, `!premiumlist` | 4 |
-| **Backup** | `!backup`, `!restore`, `!backuplist` | 3 |
-| **Scheduler** | `!schedule`, `!listschedule`, `!delschedule` | 3 |
-| **Reminders** | `!remind`, `!reminders` | 2 |
-| **Plugins** | `!plugins`, `!installplugin`, `!removeplugin`, `!enableplugin`, `!disableplugin`, `!reloadplugin` | 8 |
-| **Owner** | `!setprefix`, `!broadcast`, `!ban`, `!unban`, `!restart`, `!shutdown`, `!maintenance`, `!exportconfig`, `!importconfig`, `!update`, `!rollback` | 14 |
-| **Other** | `!sticker`, `!afk`, `!back`, `!note`, `!language`, `!theme`, `!apikeys`, `!autoreply` | 10+ |
+| Category | Key Commands |
+|---|---|
+| **General** | `!ping` `!help` `!menu` `!runtime` `!system` `!health` `!owner` `!repo` |
+| **AI** | `!ai` `!aiimage` `!aicode` `!aitranslate` `!aisummarize` `!airewrite` |
+| **Bug ☠️** | `!bug1`–`!bug20` (owner-only: crash loop, vcard, sticker, audio, reaction bomb, mention bomb, force stop...) |
+| **Download** | `!yta` `!ytv` `!ig` `!tiktok` `!fb` `!twitter` |
+| **Group** | `!groupinfo` `!promote` `!demote` `!mute` `!tagall` `!hidetag` `!welcome` |
+| **Moderation** | `!antilink` `!antibadword` `!antispam` `!antidelete` `!anticall` `!warn` `!purge` |
+| **Premium** | `!premium` `!addpremium` `!delpremium` `!premiumlist` |
+| **Plugins** | `!plugins` `!installplugin` `!enableplugin` `!disableplugin` `!reloadplugin` |
+| **Owner** | `!setprefix` `!broadcast` `!ban` `!restart` `!maintenance` `!update` `!rollback` |
+| **Other** | `!sticker` `!afk` `!remind` `!note` `!schedule` `!language` `!theme` `!apikeys` |
 
 ---
 
-## Dashboard
+## 📊 Dashboard
 
-Web dashboard at `http://localhost:3000` with login (`admin` / `admin123`):
+Web dashboard at `http://localhost:3000` (login: `admin` / `admin123`):
 
-- **Overview** — Connection status, uptime, message counts
-- **QR Code** — Scan to link WhatsApp
-- **Pairing Code** — Link via phone number
-- **Sessions** — Create, delete, export, import
-- **Groups** — Manage groups and anti-features
-- **AI** — Configure providers, models, API keys
-- **Plugins** — Install, enable/disable, configure
-- **Broadcast** — Send messages to all chats
-- **Logs** — Real-time log viewer
-- **Stats** — Usage charts and analytics
-- **Server Monitoring** — CPU, memory, load
-- **Update Manager** — Check and apply updates
-- **Backup** — Create and restore backups
+Overview · QR Code · Pairing Code · Sessions · Groups · AI Config · Plugins · Broadcast · Logs · Stats · Server Monitoring · Update Manager · Backup
 
 ---
 
-## API
-
-Full REST API with JWT authentication. See [API.md](./API.md) for complete docs.
-
-```bash
-# Login
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-
-# Use token
-curl http://localhost:3000/api/bot/status \
-  -H "Authorization: Bearer <token>"
-```
-
----
-
-## Docs
+## 📖 API & Docs
 
 | Document | Description |
 |---|---|
-| [API.md](./API.md) | Full API reference |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, VPS, cloud, and PaaS deployment guides |
+| [API.md](./API.md) | Full REST API reference |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, VPS, cloud deployment guides |
 | [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common issues and solutions |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution guidelines |
 | [SECURITY.md](./SECURITY.md) | Security policy |
 
 ---
 
-## License
+## 📄 License
 
 MIT — see [LICENSE](./LICENSE).
 

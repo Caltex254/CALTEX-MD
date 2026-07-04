@@ -84,3 +84,6 @@ caltex-db/
 .git-credentials
 .config/github/
 push.sh
+
+# Uploads (local only)
+upload/
