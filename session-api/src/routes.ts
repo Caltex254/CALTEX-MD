@@ -79,7 +79,15 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
     const session = sessionStore.create(cleanPhone);
 
     try {
+      // createPairingSession now waits for the socket handshake before
+      // calling requestPairingCode(), so this may take up to 25 seconds
       const pairingCode = await createPairingSession(session.id, cleanPhone);
+
+      log.info({
+        sessionId: session.id,
+        pairingCode,
+        phoneNumber: cleanPhone,
+      }, '✅ Pairing code endpoint returning code to client');
 
       return res.json({
         success: true,

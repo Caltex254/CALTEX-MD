@@ -387,8 +387,10 @@ export default function ScanPage() {
               <div className="rounded-2xl border border-white/10 bg-black/40 p-8 flex flex-col items-center gap-4">
                 <Loader2 className="h-12 w-12 animate-spin text-cyan-400" />
                 <p className="text-sm text-gray-400">Requesting pairing code for +{phone}...</p>
-                <p className="text-xs text-gray-500">Connecting to WhatsApp servers...</p>
-                <p className="text-xs text-yellow-500/80">This may take up to 60 seconds if the server is waking up from sleep.</p>
+                <p className="text-xs text-gray-500">Step 1: Connecting to WhatsApp servers...</p>
+                <p className="text-xs text-gray-500">Step 2: Completing security handshake...</p>
+                <p className="text-xs text-gray-500">Step 3: Generating your pairing code...</p>
+                <p className="text-xs text-yellow-500/80">This may take up to 90 seconds on first request (server wake-up). Please be patient.</p>
               </div>
             )}
 
