@@ -57,8 +57,8 @@ scripts/bug-search*.json
 scripts/mega-md.json
 scripts/global-bug.json
 
-# Download dir (local only)
-download/
+# Download dir (local only - but NOT the API route)
+/download/
 
 # IDE
 .vscode/
