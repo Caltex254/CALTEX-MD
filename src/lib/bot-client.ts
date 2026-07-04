@@ -1,5 +1,4 @@
-const BOT_SERVICE_PORT = 3031;
-const BOT_BASE_URL = `http://localhost:${BOT_SERVICE_PORT}`;
+const BOT_API_URL = process.env.BOT_API_URL || `http://localhost:3031`;
 
 interface BotResponse {
   success: boolean;
@@ -7,9 +6,13 @@ interface BotResponse {
   error?: string;
 }
 
+export function getBotApiUrl(): string {
+  return BOT_API_URL;
+}
+
 export async function botGet(path: string): Promise<BotResponse> {
   try {
-    const res = await fetch(`${BOT_BASE_URL}${path}`, { method: 'GET' });
+    const res = await fetch(`${BOT_API_URL}${path}`, { method: 'GET' });
     const data = await res.json();
     return { success: res.ok, data };
   } catch (error: any) {
@@ -19,7 +22,7 @@ export async function botGet(path: string): Promise<BotResponse> {
 
 export async function botPost(path: string, body?: any): Promise<BotResponse> {
   try {
-    const res = await fetch(`${BOT_BASE_URL}${path}`, {
+    const res = await fetch(`${BOT_API_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -33,7 +36,7 @@ export async function botPost(path: string, body?: any): Promise<BotResponse> {
 
 export async function botPut(path: string, body?: any): Promise<BotResponse> {
   try {
-    const res = await fetch(`${BOT_BASE_URL}${path}`, {
+    const res = await fetch(`${BOT_API_URL}${path}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -47,7 +50,7 @@ export async function botPut(path: string, body?: any): Promise<BotResponse> {
 
 export async function botDelete(path: string): Promise<BotResponse> {
   try {
-    const res = await fetch(`${BOT_BASE_URL}${path}`, { method: 'DELETE' });
+    const res = await fetch(`${BOT_API_URL}${path}`, { method: 'DELETE' });
     const data = await res.json();
     return { success: res.ok, data };
   } catch (error: any) {
@@ -55,6 +58,12 @@ export async function botDelete(path: string): Promise<BotResponse> {
   }
 }
 
-export function isBotOnline(): boolean {
-  return true; // Will be updated by actual health check
+/** Check if the bot service is reachable */
+export async function isBotOnline(): Promise<boolean> {
+  try {
+    const res = await fetch(`${BOT_API_URL}/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }

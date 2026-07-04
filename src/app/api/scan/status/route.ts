@@ -1,12 +1,27 @@
 import { NextResponse } from 'next/server';
-import { botGet } from '@/lib/bot-client';
-import { db } from '@/lib/db';
+import { botGet, isBotOnline } from '@/lib/bot-client';
 
 // Public endpoint — NO AUTH REQUIRED
 // Used by the /scan page for session linking
 export async function GET() {
   try {
-    // Try bot service first
+    // Check if bot service is reachable
+    const online = await isBotOnline();
+
+    if (!online) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          status: 'offline',
+          phoneNumber: null,
+          deviceName: null,
+          qrCode: null,
+          message: 'Bot service is offline. Deploy the bot service first, then connect.',
+        },
+      });
+    }
+
+    // Bot is online — get real status
     const result = await botGet('/status');
     if (result.success && result.data) {
       return NextResponse.json({
@@ -20,24 +35,12 @@ export async function GET() {
       });
     }
 
-    // Fallback: check DB
-    const sessions = await db.botSession.findMany({
-      orderBy: { lastActiveAt: 'desc' },
-    });
-
-    const activeSession = sessions.find((s) => s.status === 'connected');
-    const status = activeSession
-      ? 'connected'
-      : sessions.some((s) => s.status === 'qr')
-        ? 'qr'
-        : 'disconnected';
-
     return NextResponse.json({
       success: true,
       data: {
-        status,
-        phoneNumber: activeSession?.phoneNumber || null,
-        deviceName: activeSession?.deviceName || null,
+        status: 'disconnected',
+        phoneNumber: null,
+        deviceName: null,
         qrCode: null,
       },
     });

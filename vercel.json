@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npx next build",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
+  "env": {
+    "BOT_API_URL": "http://localhost:3031"
+  }
+}

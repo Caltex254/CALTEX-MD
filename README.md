@@ -24,7 +24,7 @@ Click the button below to generate your WhatsApp session (Pairing Code or QR Cod
 
 <div align="center">
 
-[![GET SESSION](https://img.shields.io/badge/🔑_GET_SESSION-Click_Here-red?style=for-the-badge&logo=whatsapp&logoColor=white)](https://caltex-md.vercel.app)
+[![GET SESSION](https://img.shields.io/badge/🔑_GET_SESSION-Click_Here-red?style=for-the-badge&logo=whatsapp&logoColor=white)](https://caltex-md.vercel.app/scan)
 
 </div>
 
@@ -40,8 +40,10 @@ Before deployment, configure your bot:
 ```env
 # Required
 DATABASE_URL=file:./data/caltex.db
-NEXTAUTH_SECRET=your-secret-key
 JWT_SECRET=your-jwt-secret
+
+# Bot service URL (for Vercel dashboard)
+BOT_API_URL=http://localhost:3031
 
 # Optional (for AI features)
 OPENAI_API_KEY=sk-...
@@ -89,7 +91,7 @@ docker compose up -d
 
 ### Method 1: Pairing Code (Recommended)
 
-1. Go to the [**Scanner Page**](https://caltex-md.vercel.app) or Dashboard > **Pairing Code**
+1. Go to the [**Scanner Page**](https://caltex-md.vercel.app/scan) or Dashboard > **Pairing Code**
 2. Enter your phone number **with country code, no +** (e.g., `254712345678`)
 3. Click **Get Code** — you'll receive an 8-digit pairing code
 4. On your phone: **WhatsApp** → **Settings** → **Linked Devices** → **Link with Phone Number**
@@ -97,7 +99,7 @@ docker compose up -d
 
 ### Method 2: QR Code
 
-1. Go to the [**Scanner Page**](https://caltex-md.vercel.app) or Dashboard > **QR Code**
+1. Go to the [**Scanner Page**](https://caltex-md.vercel.app/scan) or Dashboard > **QR Code**
 2. Scan the QR code with WhatsApp: **Settings** → **Linked Devices** → **Link a Device**
 
 After linking, the status shows **Connected** and the bot is ready!
@@ -110,51 +112,56 @@ After linking, the status shows **Connected** and the bot is ready!
 |---|---|---|
 | `PORT` | Dashboard port | `3000` |
 | `DATABASE_URL` | SQLite database path | `file:./data/caltex.db` |
-| `BOT_API_URL` | Bot service URL | `http://localhost:3031` |
-| `WS_URL` | WebSocket service URL | `http://localhost:3003` |
-| `NEXTAUTH_SECRET` | NextAuth secret | `change-me-in-production` |
+| `BOT_API_URL` | Bot service URL (for Vercel) | `http://localhost:3031` |
 | `JWT_SECRET` | JWT signing secret | `caltex-md-bot-secret-key-2024` |
 | `ADMIN_USER` | Dashboard username | `admin` |
-| `ADMIN_PASS` | Dashboard password | `admin123` |
+| `ADMIN_PASS` | Dashboard password | `waynekipkoech1` |
 
 ---
 
 ## 📋 Commands
 
-Prefix is configurable (default `!`). **125+ commands** across 15 categories:
+Prefix: **`.`** (dot) — configurable via `.changeprefix`. **125+ commands** across 15 categories:
 
 | Category | Key Commands |
 |---|---|
-| **General** | `!ping` `!help` `!menu` `!runtime` `!system` `!health` `!owner` `!repo` |
-| **AI** | `!ai` `!aiimage` `!aicode` `!aitranslate` `!aisummarize` `!airewrite` |
-| **Bug ☠️** | `!bug1`–`!bug20` (owner-only: crash loop, vcard, sticker, audio, reaction bomb, mention bomb, force stop...) |
-| **Download** | `!yta` `!ytv` `!ig` `!tiktok` `!fb` `!twitter` |
-| **Group** | `!groupinfo` `!promote` `!demote` `!mute` `!tagall` `!hidetag` `!welcome` |
-| **Moderation** | `!antilink` `!antibadword` `!antispam` `!antidelete` `!anticall` `!warn` `!purge` |
-| **Premium** | `!premium` `!addpremium` `!delpremium` `!premiumlist` |
-| **Plugins** | `!plugins` `!installplugin` `!enableplugin` `!disableplugin` `!reloadplugin` |
-| **Owner** | `!setprefix` `!broadcast` `!ban` `!restart` `!maintenance` `!update` `!rollback` |
-| **Other** | `!sticker` `!afk` `!remind` `!note` `!schedule` `!language` `!theme` `!apikeys` |
+| **General** | `.ping` `.help` `.menu` `.runtime` `.system` `.health` `.owner` `.repo` |
+| **AI** | `.ai` `.aiimage` `.aicode` `.aitranslate` `.aisummarize` `.airewrite` |
+| **Bug ☠️** | `.bug1`–`.bug20` (owner-only: crash loop, vcard, sticker, audio, reaction bomb, mention bomb, force stop...) |
+| **Download** | `.yta` `.ytv` `.ig` `.tiktok` `.fb` `.twitter` |
+| **Group** | `.groupinfo` `.promote` `.demote` `.mute` `.tagall` `.hidetag` `.welcome` |
+| **Moderation** | `.antilink` `.antibadword` `.antispam` `.antidelete` `.anticall` `.warn` `.purge` |
+| **Premium** | `.premium` `.addpremium` `.delpremium` `.premiumlist` |
+| **Plugins** | `.plugins` `.installplugin` `.enableplugin` `.disableplugin` `.reloadplugin` |
+| **Owner** | `.setprefix` `.broadcast` `.ban` `.restart` `.maintenance` `.update` `.rollback` |
+| **Other** | `.sticker` `.afk` `.remind` `.note` `.schedule` `.language` `.theme` `.apikeys` |
 
 ---
 
 ## 📊 Dashboard
 
-Web dashboard at `http://localhost:3000` (login: `admin` / `admin123`):
+Web dashboard at `http://localhost:3000` — login: `admin` / `waynekipkoech1`
 
-Overview · QR Code · Pairing Code · Sessions · Groups · AI Config · Plugins · Broadcast · Logs · Stats · Server Monitoring · Update Manager · Backup
+**Panels:** Overview · QR Code · Pairing Code · Sessions · Groups · AI Config · Plugins · Broadcast · Logs · Stats · Server Monitoring · Update Manager · Backup · Commands · Premium Manager · Database Manager · Notifications · Bug Menu
 
 ---
 
-## 📖 API & Docs
+## 🌐 Architecture
 
-| Document | Description |
-|---|---|
-| [API.md](./API.md) | Full REST API reference |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, VPS, cloud deployment guides |
-| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common issues and solutions |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution guidelines |
-| [SECURITY.md](./SECURITY.md) | Security policy |
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
+│  Vercel (Scan)  │────▶│  Bot Service     │────▶│  WhatsApp   │
+│  caltex-md.app  │     │  (port 3031)     │     │  Multi-Dev  │
+├─────────────────┤     ├──────────────────┤     └─────────────┘
+│  /scan          │     │  Baileys         │
+│  /dashboard     │     │  Plugin System   │
+│  /api/*         │     │  SQLite DB       │
+└─────────────────┘     └──────────────────┘
+```
+
+- **Vercel** hosts the scan page and dashboard (frontend + API routes)
+- **Bot Service** runs separately on Render/Railway/VPS (port 3031)
+- Set `BOT_API_URL` on Vercel to point to your deployed bot service
 
 ---
 

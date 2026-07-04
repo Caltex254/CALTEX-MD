@@ -1,30 +1,29 @@
 import { NextResponse } from 'next/server';
-import { botGet, botPost } from '@/lib/bot-client';
-import { db } from '@/lib/db';
+import { botGet, botPost, isBotOnline } from '@/lib/bot-client';
 
 // Public endpoint — NO AUTH REQUIRED
 // GET: Fetch current QR code
 export async function GET() {
   try {
+    const online = await isBotOnline();
+
+    if (!online) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          qr: null,
+          status: 'offline',
+          message: 'Bot service is offline. Deploy the bot service first to generate QR codes.',
+        },
+      });
+    }
+
     const result = await botGet('/qr');
 
     if (result.success && result.data?.qr) {
       return NextResponse.json({
         success: true,
         data: { qr: result.data.qr, status: 'qr' },
-      });
-    }
-
-    // Fallback: check DB
-    const qrSession = await db.botSession.findFirst({
-      where: { status: 'qr' },
-      orderBy: { lastActiveAt: 'desc' },
-    });
-
-    if (qrSession) {
-      return NextResponse.json({
-        success: true,
-        data: { qr: null, status: 'qr', message: 'QR session exists but no QR data available' },
       });
     }
 
@@ -43,6 +42,15 @@ export async function GET() {
 // POST: Request a fresh QR code
 export async function POST() {
   try {
+    const online = await isBotOnline();
+
+    if (!online) {
+      return NextResponse.json({
+        success: false,
+        error: 'Bot service is offline. Deploy the bot service first to generate QR codes.',
+      });
+    }
+
     const result = await botPost('/qr');
 
     if (result.success) {

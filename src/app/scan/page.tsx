@@ -17,7 +17,11 @@ import {
   ArrowRight,
   ExternalLink,
   Skull,
+  CloudOff,
+  Server,
 } from 'lucide-react'
+
+type BotStatus = 'connected' | 'disconnected' | 'connecting' | 'qr' | 'offline' | 'unknown'
 
 export default function ScanPage() {
   const [method, setMethod] = useState<'pairing' | 'qr' | null>(null)
@@ -26,7 +30,7 @@ export default function ScanPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
-  const [botStatus, setBotStatus] = useState<string>('unknown')
+  const [botStatus, setBotStatus] = useState<BotStatus>('unknown')
   const [qrCode, setQrCode] = useState<string>('')
   const [qrRefreshing, setQrRefreshing] = useState(false)
   const [step, setStep] = useState<'input' | 'generating' | 'code' | 'waiting' | 'connected'>('input')
@@ -37,15 +41,18 @@ export default function ScanPage() {
       const res = await fetch('/api/scan/status')
       const data = await res.json()
       if (data.success) {
-        setBotStatus(data.data?.status || 'disconnected')
+        const status = data.data?.status || 'unknown'
+        setBotStatus(status as BotStatus)
         if (data.data?.qrCode) setQrCode(data.data.qrCode)
       }
-    } catch {}
+    } catch {
+      setBotStatus('offline')
+    }
   }, [])
 
   useEffect(() => {
     fetchStatus()
-    const interval = setInterval(fetchStatus, 10000)
+    const interval = setInterval(fetchStatus, 15000)
     return () => clearInterval(interval)
   }, [fetchStatus])
 
@@ -83,11 +90,14 @@ export default function ScanPage() {
         setPairingCode(data.data.pairingCode)
         setStep('code')
       } else {
-        setError(data.message || data.error || 'Failed to generate pairing code')
+        const errMsg = data.error || 'Failed to generate pairing code'
+        // Add hint if available
+        const hint = data.hint ? `\n\n💡 ${data.hint}` : ''
+        setError(errMsg + hint)
         setStep('input')
       }
     } catch {
-      setError('Network error — make sure the bot service is running')
+      setError('Network error — please check your connection and try again')
       setStep('input')
     }
     setLoading(false)
@@ -115,6 +125,8 @@ export default function ScanPage() {
     setError('')
   }
 
+  const isOffline = botStatus === 'offline'
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
       {/* Header */}
@@ -137,6 +149,11 @@ export default function ScanPage() {
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                 Connected
               </span>
+            ) : isOffline ? (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-red-400 bg-red-400/10 px-3 py-1.5 rounded-full">
+                <CloudOff className="w-3 h-3" />
+                Bot Offline
+              </span>
             ) : (
               <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-400 bg-yellow-400/10 px-3 py-1.5 rounded-full">
                 <span className="w-2 h-2 rounded-full bg-yellow-400" />
@@ -157,6 +174,40 @@ export default function ScanPage() {
           </h2>
           <p className="text-gray-400 text-sm">Choose a method to link your WhatsApp</p>
         </div>
+
+        {/* Bot Offline Banner */}
+        {isOffline && !method && (
+          <div className="max-w-lg mx-auto rounded-2xl border border-red-500/30 bg-gradient-to-br from-red-900/30 to-red-950/50 p-5 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <CloudOff className="h-5 w-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm">Bot Service Offline</h3>
+                <p className="text-xs text-gray-400">The WhatsApp bot service is not running</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-300">
+              To generate pairing codes and QR codes, the bot service must be deployed and running. Follow the steps below:
+            </p>
+            <div className="bg-black/30 rounded-xl p-3 space-y-2">
+              <p className="text-xs font-medium text-cyan-400">📋 Setup Steps:</p>
+              <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                <li>Deploy the bot on <b className="text-white">Render</b>, <b className="text-white">Railway</b>, or a <b className="text-white">VPS</b></li>
+                <li>Set the <code className="bg-white/10 px-1 rounded text-cyan-300">BOT_API_URL</code> env var on Vercel to your bot URL</li>
+                <li>Redeploy on Vercel — the scanner will then connect to your bot</li>
+              </ol>
+            </div>
+            <a
+              href="https://github.com/Caltex254/CALTEX-MD#-quick-start"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors"
+            >
+              <Server className="h-3.5 w-3.5" /> View deployment guide on GitHub
+            </a>
+          </div>
+        )}
 
         {/* Method Cards */}
         {!method && (
@@ -234,10 +285,10 @@ export default function ScanPage() {
                   </button>
                 </div>
                 {error && (
-                  <p className="text-sm text-red-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                    {error}
-                  </p>
+                  <div className="text-sm text-red-400 flex items-start gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 shrink-0" />
+                    <span className="whitespace-pre-line">{error}</span>
+                  </div>
                 )}
 
                 {/* Steps preview */}
@@ -382,6 +433,12 @@ export default function ScanPage() {
                   <div className="text-center text-green-400">
                     <CheckCircle2 className="h-12 w-12 mx-auto mb-2" />
                     <p className="text-sm">Already Connected</p>
+                  </div>
+                ) : isOffline ? (
+                  <div className="text-center text-red-400">
+                    <CloudOff className="h-12 w-12 mx-auto mb-2" />
+                    <p className="text-sm">Bot offline</p>
+                    <p className="text-xs text-gray-500 mt-1">Deploy bot service first</p>
                   </div>
                 ) : (
                   <div className="text-center text-gray-500">

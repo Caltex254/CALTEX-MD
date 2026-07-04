@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { botPost } from '@/lib/bot-client';
+import { botPost, isBotOnline } from '@/lib/bot-client';
 
 // Public endpoint — NO AUTH REQUIRED
 // Used by the /scan page for pairing code generation
@@ -24,6 +24,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if bot service is reachable
+    const online = await isBotOnline();
+
+    if (!online) {
+      return NextResponse.json({
+        success: false,
+        error: 'Bot service is offline. Deploy the bot service first to generate pairing codes.',
+        hint: 'The WhatsApp bot service needs to be running. Deploy it on Render, Railway, or a VPS, then set BOT_API_URL environment variable.',
+      });
+    }
+
+    // Bot is online — request real pairing code
     const result = await botPost('/pairing-code', { phoneNumber: cleanPhone, sessionId });
 
     if (!result.success) {
