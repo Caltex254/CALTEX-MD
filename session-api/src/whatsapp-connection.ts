@@ -107,10 +107,11 @@ export async function createPairingSession(
     pairingCodeReject = reject;
   });
 
-  // Set a timeout to reject if pairing code isn't generated within 30 seconds
+  // Set a timeout to reject if pairing code isn't generated within 45 seconds
+  // (QR event can take 5-20 seconds to arrive, plus time for requestPairingCode)
   const timeoutId = setTimeout(() => {
-    pairingCodeReject!(new Error('Timeout: Pairing code was not generated within 30 seconds. WhatsApp servers may be slow.'));
-  }, 30000);
+    pairingCodeReject!(new Error('Timeout: Pairing code was not generated within 45 seconds. WhatsApp servers may be slow or unreachable.'));
+  }, 45000);
 
   const sock = makeWASocket({
     version,
@@ -154,11 +155,19 @@ export async function createPairingSession(
     // "When you want to request a pairing code, you should wait at
     // least until the connecting/QR event"
     //
-    // We request the code when connection === "connecting" OR when
-    // a QR event fires (both signal the socket handshake is done).
+    // IMPORTANT: The "connecting" event fires immediately on socket
+    // creation, BEFORE the WebSocket is actually open. Only the QR
+    // event is a reliable signal that the handshake is complete and
+    // the socket can send IQ stanzas (like requestPairingCode).
+    //
+    // Working implementations use either:
+    // - The QR event (most reliable)
+    // - A fixed delay of 2-3 seconds (Guru322, Kingjux)
+    //
+    // We use the QR event for reliability.
     // ==============================================================
-    if ((connection === 'connecting' || qr) && !sock.authState.creds.registered) {
-      log.info({ sessionId, phoneNumber, connection }, 'Socket ready — requesting pairing code');
+    if (qr && !sock.authState.creds.registered) {
+      log.info({ sessionId, phoneNumber }, 'QR event received — socket ready, requesting pairing code');
 
       try {
         const code = await sock.requestPairingCode(phoneNumber);
