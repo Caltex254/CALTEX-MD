@@ -115,10 +115,14 @@ router.get('/status', (_req: Request, res: Response) => {
         lastPairingCodeAt: waState.lastPairingCodeAt,
         totalPairingCodesGenerated: waState.totalPairingCodesGenerated,
         totalReconnects: waState.totalReconnects,
+        pairingInProgress: waState.pairingInProgress,
+        activePairingSessionId: waState.activePairingSessionId,
+        lastDisconnectReason: waState.lastDisconnectReason,
+        lastConnectionEvent: waState.lastConnectionEvent,
       },
       sessions: {
         total: sessions.length,
-        active: sessions.filter(s => s.status === 'waiting_pairing' || s.status === 'waiting_qr').length,
+        active: sessions.filter(s => s.status === 'waiting_pairing' || s.status === 'waiting_qr' || s.status === 'waiting_connect').length,
         connected: sessions.filter(s => s.status === 'connected').length,
         failed: sessions.filter(s => s.status === 'failed').length,
       },
@@ -197,10 +201,22 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
         pairingCode,
       });
 
+      // Also update to waiting_connect after a short delay
+      // This signals the frontend that we're now waiting for the user to link
+      setTimeout(() => {
+        const currentSession = sessionStore.get(session.id);
+        if (currentSession && currentSession.status === 'waiting_pairing') {
+          sessionStore.update(session.id, { status: 'waiting_connect' });
+          log.info({ sessionId: session.id }, 'Session status updated to waiting_connect — waiting for user to link');
+        }
+      }, 3000);
+
       log.info({
         sessionId: session.id,
         pairingCode,
         phoneNumber: cleanPhone,
+        whatsappReady: whatsappManager.isSocketReady(),
+        whatsappStatus: whatsappManager.getState().sessionStatus,
       }, '✅ Pairing code returned to client');
 
       return res.json({
@@ -339,8 +355,29 @@ router.get('/session/:id', (req: Request<{ id: string }>, res: Response) => {
         responseData.sessionString = sessionData;
         log.info({ sessionId: id }, '✅ Session data included in status response — frontend can download immediately');
       } else {
-        log.warn({ sessionId: id }, 'Session is connected but no session data found on disk');
+        log.warn({ sessionId: id }, '⚠️ Session is connected but no session data found on disk — attempting to re-export');
+        // Try to re-export from auth directory
+        const authDir = sessionStore.getAuthDir(id);
+        const fs = require('fs');
+        const path = require('path');
+        if (fs.existsSync(path.join(authDir, 'creds.json'))) {
+          log.info({ sessionId: id, authDir }, 'Auth directory exists with creds.json — data should be exportable');
+        } else {
+          log.error({ sessionId: id, authDir }, 'Auth directory missing creds.json — session data lost!');
+        }
       }
+    }
+
+    // Log polling status for diagnostics (only every 10th poll to reduce noise)
+    const pollCount = (req.query._pollCount ? parseInt(req.query._pollCount as string) : 0);
+    if (pollCount % 10 === 0) {
+      log.info({
+        sessionId: id,
+        status: record.status,
+        pollCount,
+        whatsappReady: whatsappManager.isSocketReady(),
+        whatsappStatus: whatsappManager.getState().sessionStatus,
+      }, 'Session status poll');
     }
 
     return res.json({

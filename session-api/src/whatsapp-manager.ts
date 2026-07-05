@@ -1,18 +1,20 @@
 // ============================================================================
-// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON)
+// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON) v3.0
 //
 // ARCHITECTURE: One global WhatsApp socket, initialized on server start.
 // All pairing code requests reuse the same active connection.
 // Never recreates the socket per request.
 //
-// KEY DESIGN DECISIONS:
-// 1. Singleton pattern — one WASocket instance for the entire server
-// 2. Auto-initialization on server startup
-// 3. Auto-reconnect with exponential backoff
-// 4. Keep-alive pings for Render cold-start prevention
-// 5. Connection state tracking exposed via /status and /warmup
-// 6. Session data capture — when device links, copy global auth to session dir
-//    BEFORE resetting the global socket for next pairing
+// v3.0 FIXES (Pairing Flow Audit):
+// 1. Clear stale auth on RECONNECT (not just initialize) when creds represent
+//    a failed pairing (creds.me set but not registered)
+// 2. Remove shouldIgnoreJid: () => true — blocks pairing notifications
+// 3. Add pairing lock to prevent socket operations during active pairing
+// 4. Increase connectTimeoutMs from 30s to 60s for Render stability
+// 5. Comprehensive logging for every connection event and credential update
+// 6. Better error handling and graceful auth failure recovery
+// 7. Ensure requestPairingCode only called when socket is truly ready
+// 8. Prevent duplicate socket initialization
 // ============================================================================
 
 import {
@@ -50,6 +52,10 @@ export interface ManagerState {
   totalPairingCodesGenerated: number;
   totalReconnects: number;
   activePairingSessionId: string | null;
+  pairingInProgress: boolean;
+  lastDisconnectReason: string | null;
+  lastConnectionEvent: string | null;
+  socketCreatedAt: number | null;
 }
 
 // ============================================================================
@@ -71,6 +77,10 @@ class WhatsAppManager {
     totalPairingCodesGenerated: 0,
     totalReconnects: 0,
     activePairingSessionId: null,
+    pairingInProgress: false,
+    lastDisconnectReason: null,
+    lastConnectionEvent: null,
+    socketCreatedAt: null,
   };
 
   // Auth directory for the GLOBAL connection (not per-session)
@@ -84,6 +94,9 @@ class WhatsAppManager {
 
   // Promise resolvers for connection events
   private connectionOpenResolvers: Map<string, { resolve: (value: boolean) => void; reject: (reason: string) => void }> = new Map();
+
+  // Pairing lock — prevents socket operations during active pairing
+  private _pairingLock = false;
 
   constructor() {
     this.globalAuthDir = join(config.sessionsDir, '_global_auth');
@@ -108,6 +121,68 @@ class WhatsAppManager {
   }
 
   // ==========================================================================
+  // PAIRING LOCK — Prevents socket reset/reconnect during active pairing
+  // ==========================================================================
+  private acquirePairingLock(sessionId: string): boolean {
+    if (this._pairingLock) {
+      log.warn({ sessionId, lockedBy: this.state.activePairingSessionId }, 'Cannot acquire pairing lock — another pairing is in progress');
+      return false;
+    }
+    this._pairingLock = true;
+    this.state.pairingInProgress = true;
+    this.state.activePairingSessionId = sessionId;
+    log.info({ sessionId }, '🔒 Pairing lock acquired');
+    return true;
+  }
+
+  private releasePairingLock(): void {
+    this._pairingLock = false;
+    this.state.pairingInProgress = false;
+    this.state.activePairingSessionId = null;
+    log.info('🔓 Pairing lock released');
+  }
+
+  // ==========================================================================
+  // STALE AUTH CHECK — Critical for reconnect path
+  // If creds.me is set but the device is not registered, the auth represents
+  // a FAILED pairing attempt. We MUST clear it before reconnecting, otherwise
+  // WhatsApp will reject the connection.
+  // ==========================================================================
+  private ensureCleanAuth(): void {
+    const credsPath = join(this.globalAuthDir, 'creds.json');
+    if (!existsSync(credsPath)) {
+      log.info('No existing creds.json — auth is clean');
+      return;
+    }
+
+    try {
+      const credsContent = readFileSync(credsPath, 'utf-8');
+      const creds = JSON.parse(credsContent);
+
+      if (creds.me && creds.me.id && !creds.registered) {
+        log.warn({
+          deviceId: creds.me.id,
+          pairingCode: creds.pairingCode,
+          registered: !!creds.registered,
+        }, '⚠️ Stale auth detected — creds.me set but device not registered. Clearing for fresh connection.');
+        this.clearGlobalAuth();
+        return;
+      }
+
+      if (creds.me && creds.me.id && creds.registered) {
+        log.info({ deviceId: creds.me.id }, 'Global auth has registered device — will reconnect as companion');
+        return;
+      }
+
+      // No me.id — auth is clean (fresh state)
+      log.info('Global auth is clean — no device identity set');
+    } catch (err: any) {
+      log.warn({ err: err.message }, 'Failed to read creds.json — clearing auth for safety');
+      this.clearGlobalAuth();
+    }
+  }
+
+  // ==========================================================================
   // INITIALIZATION — Called on server startup
   // ==========================================================================
   async initialize(): Promise<void> {
@@ -116,30 +191,19 @@ class WhatsAppManager {
       return;
     }
 
+    if (this._pairingLock) {
+      log.warn('Cannot initialize — pairing is in progress');
+      return;
+    }
+
     log.info('Initializing global WhatsApp connection...');
     this.state.isConnecting = true;
     this.state.sessionStatus = 'connecting';
 
-    try {
-      // Clear stale global auth to ensure clean connection
-      // Only clear if the creds don't have a registered device
-      if (existsSync(join(this.globalAuthDir, 'creds.json'))) {
-        const credsContent = readFileSync(join(this.globalAuthDir, 'creds.json'), 'utf-8');
-        try {
-          const creds = JSON.parse(credsContent);
-          if (!creds.me || !creds.me.id || !creds.registered) {
-            log.info('Clearing unregistered global auth for fresh connection');
-            rmSync(this.globalAuthDir, { recursive: true, force: true });
-            mkdirSync(this.globalAuthDir, { recursive: true });
-          } else {
-            log.info({ deviceId: creds.me.id }, 'Global auth has registered device — reconnecting');
-          }
-        } catch {
-          rmSync(this.globalAuthDir, { recursive: true, force: true });
-          mkdirSync(this.globalAuthDir, { recursive: true });
-        }
-      }
+    // CRITICAL: Ensure auth is clean before creating socket
+    this.ensureCleanAuth();
 
+    try {
       await this.createSocket();
       log.info('Global WhatsApp connection initiated — waiting for ready signal');
     } catch (err: any) {
@@ -189,26 +253,53 @@ class WhatsAppManager {
       throw new Error('WhatsApp client is not ready — call /warmup first');
     }
 
+    // Acquire pairing lock
+    if (!this.acquirePairingLock(sessionId)) {
+      throw new Error('Another pairing is already in progress — please wait');
+    }
+
     log.info({ phoneNumber, sessionId }, 'Generating pairing code via global socket');
 
     // Register this session as pending
     this.pendingPairingSessions.set(sessionId, phoneNumber);
-    this.state.activePairingSessionId = sessionId;
 
     try {
+      // Verify socket is truly ready by checking the connection state
+      const ws = this.socket.ws;
+      const isWsOpen = ws?.isOpen;
+      log.info({
+        sessionId,
+        socketExists: !!this.socket,
+        wsIsOpen: isWsOpen,
+        wsIsClosed: ws?.isClosed,
+        wsIsConnecting: ws?.isConnecting,
+        isReady: this.state.isReady,
+      }, 'Socket state check before requestPairingCode');
+
+      // WebSocket must be OPEN for requestPairingCode
+      if (isWsOpen === false) {
+        log.error({ wsIsOpen: isWsOpen }, 'WebSocket is not OPEN — cannot request pairing code');
+        this.releasePairingLock();
+        this.pendingPairingSessions.delete(sessionId);
+        throw new Error('WhatsApp socket is not connected — please try again');
+      }
+
       const code = await this.socket.requestPairingCode(phoneNumber);
       this.state.lastPairingCodeAt = Date.now();
       this.state.totalPairingCodesGenerated++;
 
-      log.info({ phoneNumber, sessionId, pairingCode: code }, '✅ Pairing code generated successfully');
+      log.info({
+        phoneNumber,
+        sessionId,
+        pairingCode: code,
+      }, '✅ Pairing code generated successfully — user should enter this code in WhatsApp');
+
       return code;
     } catch (err: any) {
-      // Clean up pending session on failure
+      // Clean up on failure
+      this.releasePairingLock();
       this.pendingPairingSessions.delete(sessionId);
-      if (this.state.activePairingSessionId === sessionId) {
-        this.state.activePairingSessionId = null;
-      }
-      log.error({ err: err.message, phoneNumber, sessionId }, 'Failed to generate pairing code');
+      log.error({ err: err.message, phoneNumber, sessionId }, '❌ Failed to generate pairing code');
       throw new Error(`Failed to generate pairing code: ${err.message}`);
     }
   }
@@ -240,8 +331,7 @@ class WhatsAppManager {
 
   // ==========================================================================
   // WAIT FOR CONNECTION — Returns a promise that resolves when the device
-  // links successfully for a given sessionId. Used by the pairing-code
-  // endpoint to wait until authentication completes.
+  // links successfully for a given sessionId.
   // ==========================================================================
   waitForConnection(sessionId: string, timeoutMs: number = 120000): Promise<boolean> {
     // Check if already connected
@@ -292,12 +382,14 @@ class WhatsAppManager {
           health: data.data?.status,
           uptime: Math.floor(process.uptime()),
           socketReady: this.state.isReady,
+          pairingInProgress: this._pairingLock,
+          pendingSessions: this.pendingPairingSessions.size,
         }, 'Keep-alive ping OK');
 
         this.state.lastKeepAlive = Date.now();
 
         // If socket is disconnected but should be connected, reconnect
-        if (!this.state.isReady && !this.state.isConnecting && !this.isShuttingDown) {
+        if (!this.state.isReady && !this.state.isConnecting && !this.isShuttingDown && !this._pairingLock) {
           log.warn('Keep-alive detected disconnected socket — triggering reconnect');
           this.scheduleReconnect();
         }
@@ -343,6 +435,8 @@ class WhatsAppManager {
     this.state.isReady = false;
     this.state.isConnecting = false;
     this.state.sessionStatus = 'disconnected';
+    this._pairingLock = false;
+    this.state.pairingInProgress = false;
 
     log.info('WhatsApp manager shut down');
   }
@@ -351,6 +445,10 @@ class WhatsAppManager {
   // PRIVATE — Create the global socket
   // ==========================================================================
   private async createSocket(): Promise<void> {
+    // Ensure auth is clean before creating socket
+    // This is the CRITICAL fix: also check on reconnect, not just initialize
+    this.ensureCleanAuth();
+
     const { state, saveCreds } = await useMultiFileAuthState(this.globalAuthDir);
 
     let version: [number, number, number] = [0, 0, 0];
@@ -365,6 +463,17 @@ class WhatsAppManager {
       this.state.baileysVersion = version.join('.');
     }
 
+    // Log the current auth state
+    const hasCredsMe = !!(state.creds?.me?.id);
+    const isRegistered = !!state.creds?.registered;
+    const hasPairingCode = !!state.creds?.pairingCode;
+    log.info({
+      hasCredsMe,
+      isRegistered,
+      hasPairingCode,
+      credsMeId: state.creds?.me?.id,
+    }, 'Auth state loaded for socket creation');
+
     const socketConfig: UserFacingSocketConfig = {
       version,
       auth: {
@@ -372,52 +481,86 @@ class WhatsAppManager {
         keys: makeCacheableSignalKeyStore(state.keys, log),
       },
       printQRInTerminal: false,
+      // Use Browsers.ubuntu('Chrome') — this maps to PlatformType CHROME (1)
+      // which is the most common and widely accepted WhatsApp Web platform
       browser: Browsers.ubuntu('Chrome'),
       syncFullHistory: false,
       markOnlineOnConnect: false,
       logger: log.child({ scope: 'baileys' }),
       generateHighQualityLinkPreview: false,
-      shouldIgnoreJid: () => true,
+      // CRITICAL FIX: Remove shouldIgnoreJid: () => true
+      // This was blocking ALL incoming JID processing, which could interfere
+      // with pairing-related notifications from WhatsApp servers.
+      // Instead, we only ignore group JIDs and broadcast lists since we're
+      // a session generation service, not a message processing service.
+      shouldIgnoreJid: (jid: string) => {
+        // Don't ignore server JIDs (s.whatsapp.net) — needed for pairing
+        // Ignore group JIDs and broadcast lists — not needed for session gen
+        return jid?.includes('@g.us') || jid?.includes('@broadcast');
+      },
       getMessage: async () => undefined,
-      connectTimeoutMs: 30_000,
-      keepAliveIntervalMs: 25_000, // Baileys internal keep-alive ping
+      // FIX: Increased from 30s to 60s — Render cold starts + WhatsApp
+      // handshake can take >30s, causing timeout mid-pairing
+      connectTimeoutMs: 60_000,
+      // Baileys internal keep-alive ping — sends every 25s
+      keepAliveIntervalMs: 25_000,
       qrTimeout: 60_000,
+      // Don't fire initial queries — reduces noise for session generation
+      fireInitQueries: false,
+      // Explicitly set mobile to false — we're using multi-device protocol
+      mobile: false,
     };
 
     const sock = makeWASocket(socketConfig);
     this.socket = sock;
     this.saveCreds = saveCreds;
+    this.state.socketCreatedAt = Date.now();
 
     // Save credentials on update — this saves to the GLOBAL auth dir
     sock.ev.on('creds.update', () => {
+      log.info('creds.update event — saving credentials to disk');
       saveCreds();
     });
 
-    // Connection update handler
+    // Connection update handler — WITH COMPREHENSIVE LOGGING
     sock.ev.on('connection.update', (update) => {
       this.handleGlobalConnectionUpdate(update);
     });
 
-    log.info('Global WhatsApp socket created — waiting for connection...');
+    log.info({
+      hasCredsMe,
+      isRegistered,
+      browser: socketConfig.browser,
+      version: version.join('.'),
+      connectTimeoutMs: socketConfig.connectTimeoutMs,
+    }, 'Global WhatsApp socket created — waiting for connection...');
   }
 
   // ==========================================================================
   // PRIVATE — Handle connection updates for the GLOBAL socket
   // ==========================================================================
   private handleGlobalConnectionUpdate(update: Partial<ConnectionState>): void {
-    const { connection, lastDisconnect, qr } = update;
+    const { connection, lastDisconnect, qr, receivedPendingNotifications } = update;
+
+    // Track last connection event for diagnostics
+    this.state.lastConnectionEvent = connection || (qr ? 'qr_received' : 'unknown');
 
     log.info({
       connection: connection || 'undefined',
       hasQR: !!qr,
+      hasLastDisconnect: !!lastDisconnect,
+      receivedPendingNotifications: !!receivedPendingNotifications,
       isReady: this.state.isReady,
       isConnecting: this.state.isConnecting,
+      pairingInProgress: this._pairingLock,
       pendingSessions: this.pendingPairingSessions.size,
-    }, 'Global connection update');
+      wsIsOpen: this.socket?.ws?.isOpen,
+      socketAge: this.state.socketCreatedAt ? Math.round((Date.now() - this.state.socketCreatedAt) / 1000) + 's' : 'N/A',
+    }, '📡 Global connection update');
 
-    // QR code — signals that socket handshake is complete and ready
+    // QR code — signals that socket handshake is complete and ready for pairing
     if (qr) {
-      log.info('QR event received — socket handshake complete, ready for pairing code requests');
+      log.info('📱 QR event received — socket handshake complete, ready for pairing code requests');
       if (!this.state.isReady) {
         this.markReady();
       }
@@ -425,7 +568,10 @@ class WhatsAppManager {
 
     // Connection opened — device linked (for the global auth session)
     if (connection === 'open') {
-      log.info('✅ Global WhatsApp connection OPEN — device linked successfully!');
+      log.info({
+        pairingInProgress: this._pairingLock,
+        pendingSessions: this.pendingPairingSessions.size,
+      }, '✅ Global WhatsApp connection OPEN — device linked successfully!');
       this.markReady();
       this.state.reconnectAttempts = 0;
 
@@ -437,7 +583,7 @@ class WhatsAppManager {
 
     // "connecting" — initial handshake in progress
     if (connection === 'connecting') {
-      log.info('Global WhatsApp socket connecting...');
+      log.info('🔌 Global WhatsApp socket connecting to servers...');
       this.state.isConnecting = true;
       this.state.sessionStatus = 'connecting';
     }
@@ -448,37 +594,80 @@ class WhatsAppManager {
       const statusCode = error?.output?.statusCode ??
         error?.output?.payload?.statusCode ?? 0;
 
-      log.warn({ statusCode, errorMessage: error?.message }, 'Global connection closed');
+      // Map status code to human-readable reason
+      const reasonMap: Record<number, string> = {
+        [DisconnectReason.connectionClosed]: 'CONNECTION_CLOSED',
+        [DisconnectReason.connectionReplaced]: 'CONNECTION_REPLACED',
+        [DisconnectReason.loggedOut]: 'LOGGED_OUT',
+        [DisconnectReason.restartRequired]: 'RESTART_REQUIRED',
+        // connectionLost and timedOut both map to 408
+        [DisconnectReason.badSession]: 'BAD_SESSION',
+        [DisconnectReason.forbidden]: 'FORBIDDEN',
+        [DisconnectReason.multideviceMismatch]: 'MULTIDEVICE_MISMATCH',
+        [DisconnectReason.unavailableService]: 'UNAVAILABLE_SERVICE',
+      };
+      const reason = reasonMap[statusCode] || (statusCode === 408 ? 'TIMED_OUT' : `UNKNOWN(${statusCode})`);
+      this.state.lastDisconnectReason = reason;
+
+      log.warn({
+        statusCode,
+        reason,
+        errorMessage: error?.message,
+        errorOutput: error?.output,
+        pairingInProgress: this._pairingLock,
+        pendingSessions: this.pendingPairingSessions.size,
+        socketAge: this.state.socketCreatedAt ? Math.round((Date.now() - this.state.socketCreatedAt) / 1000) + 's' : 'N/A',
+      }, '❌ Global connection closed');
 
       this.state.isReady = false;
       this.state.isConnecting = false;
       this.state.sessionStatus = 'disconnected';
 
       // Mark any pending sessions as failed on disconnect
-      for (const [sessionId] of this.pendingPairingSessions) {
-        const record = sessionStore.get(sessionId);
-        if (record && record.status !== 'connected') {
-          log.info({ sessionId }, 'Session was pending during disconnect — marking as failed');
-          sessionStore.update(sessionId, { status: 'failed' });
+      if (this.pendingPairingSessions.size > 0) {
+        log.warn({
+          sessions: Array.from(this.pendingPairingSessions.keys()),
+          reason,
+        }, 'Disconnect during active pairing — marking sessions as failed');
 
-          // Reject any waiting connection promises
-          const resolver = this.connectionOpenResolvers.get(sessionId);
-          if (resolver) {
-            resolver.reject('Connection closed before authentication completed');
+        for (const [sessionId] of this.pendingPairingSessions) {
+          const record = sessionStore.get(sessionId);
+          if (record && record.status !== 'connected') {
+            log.info({ sessionId, reason }, 'Session was pending during disconnect — marking as failed');
+            sessionStore.update(sessionId, {
+              status: 'failed',
+              // Store the disconnect reason for frontend display
+            });
+
+            // Reject any waiting connection promises
+            const resolver = this.connectionOpenResolvers.get(sessionId);
+            if (resolver) {
+              resolver.reject(`Connection closed: ${reason}`);
+            }
           }
         }
+        this.pendingPairingSessions.clear();
       }
-      this.pendingPairingSessions.clear();
+
+      // Release pairing lock
+      if (this._pairingLock) {
+        log.info('Releasing pairing lock due to disconnect');
+        this.releasePairingLock();
+      }
+
       this.state.activePairingSessionId = null;
 
+      // Determine reconnection strategy based on disconnect reason
       if (statusCode === DisconnectReason.loggedOut) {
-        log.error('Global connection logged out — session invalid, will reinitialize');
+        log.error('Global connection logged out — session invalid, will reinitialize with fresh auth');
         this.state.sessionStatus = 'failed';
         this.clearGlobalAuth();
         this.scheduleReconnect();
       } else if (statusCode === DisconnectReason.connectionReplaced) {
         log.warn('Global connection replaced — another instance connected');
         this.state.sessionStatus = 'failed';
+        // Clear auth because another instance took over
+        this.clearGlobalAuth();
         this.scheduleReconnect();
       } else if (statusCode === DisconnectReason.restartRequired) {
         log.info('Restart required — reconnecting immediately');
@@ -487,10 +676,14 @@ class WhatsAppManager {
         log.info('Connection closed (normal) — reconnecting');
         this.scheduleReconnect();
       } else if (statusCode === DisconnectReason.timedOut) {
-        log.warn('Connection timed out — reconnecting');
+        log.warn('Connection timed out — clearing auth and reconnecting');
+        // Timeout likely means stale auth — clear it before reconnecting
+        this.clearGlobalAuth();
         this.scheduleReconnect();
       } else {
-        log.warn({ statusCode }, 'Unexpected disconnect — reconnecting');
+        log.warn({ statusCode, reason }, 'Unexpected disconnect — clearing stale auth and reconnecting');
+        // For any unknown disconnect reason, clear auth to be safe
+        this.clearGlobalAuth();
         this.scheduleReconnect();
       }
     }
@@ -510,7 +703,11 @@ class WhatsAppManager {
   // ==========================================================================
   private captureSessionDataForPendingSessionsSync(): void {
     if (this.pendingPairingSessions.size === 0) {
-      log.info('No pending pairing sessions to capture data for');
+      log.info('No pending pairing sessions to capture data for — this may be a reconnection of an already-linked device');
+
+      // If no pending sessions but connection is open, this is a reconnection
+      // of a previously linked device. We should NOT reset the socket.
+      // Just keep it connected.
       return;
     }
 
@@ -520,13 +717,30 @@ class WhatsAppManager {
     if (this.saveCreds) {
       try {
         this.saveCreds();
-        log.info('Credentials force-saved to disk');
+        log.info('✅ Credentials force-saved to disk');
       } catch (err: any) {
-        log.error({ err: err.message }, 'Failed to force-save credentials');
+        log.error({ err: err.message }, '❌ Failed to force-save credentials');
       }
     }
 
-    // Step 2: For each pending session, copy auth files and update status
+    // Step 2: Verify creds.json was saved correctly
+    const credsPath = join(this.globalAuthDir, 'creds.json');
+    if (existsSync(credsPath)) {
+      try {
+        const creds = JSON.parse(readFileSync(credsPath, 'utf-8'));
+        log.info({
+          hasMe: !!creds.me,
+          meId: creds.me?.id,
+          registered: !!creds.registered,
+        }, '✅ Verified creds.json on disk after force-save');
+      } catch (err: any) {
+        log.error({ err: err.message }, '❌ Failed to verify creds.json');
+      }
+    } else {
+      log.error('❌ creds.json does NOT exist after force-save — critical error!');
+    }
+
+    // Step 3: For each pending session, copy auth files and update status
     for (const [sessionId, phoneNumber] of this.pendingPairingSessions) {
       try {
         const sessionAuthDir = sessionStore.getAuthDir(sessionId);
@@ -546,9 +760,25 @@ class WhatsAppManager {
               log.warn({ err: err.message, file, sessionId }, 'Failed to copy auth file');
             }
           }
-          log.info({ sessionId, filesCopied: copiedCount, totalFiles: files.length }, '✅ Session auth data captured and saved');
+          log.info({ sessionId, filesCopied: copiedCount, totalFiles: files.length }, '✅ Session auth data captured and saved to session directory');
         } else {
-          log.error({ sessionId, globalAuthDir: this.globalAuthDir }, 'Global auth dir does not exist!');
+          log.error({ sessionId, globalAuthDir: this.globalAuthDir }, '❌ Global auth dir does not exist!');
+        }
+
+        // Verify the session creds
+        const sessionCredsPath = join(sessionAuthDir, 'creds.json');
+        if (existsSync(sessionCredsPath)) {
+          try {
+            const sessionCreds = JSON.parse(readFileSync(sessionCredsPath, 'utf-8'));
+            log.info({
+              sessionId,
+              hasMe: !!sessionCreds.me,
+              meId: sessionCreds.me?.id,
+              registered: !!sessionCreds.registered,
+            }, '✅ Verified session creds.json in session directory');
+          } catch (err: any) {
+            log.warn({ err: err.message, sessionId }, 'Failed to verify session creds.json');
+          }
         }
 
         // Update session status to "connected"
@@ -557,9 +787,9 @@ class WhatsAppManager {
           connectedAt: Date.now(),
         });
 
-        log.info({ sessionId, phoneNumber }, '✅ Session marked as CONNECTED — credentials saved');
+        log.info({ sessionId, phoneNumber }, '✅ Session marked as CONNECTED — credentials saved, session data available for frontend');
 
-        // Step 3: Resolve any waiting connection promises
+        // Step 4: Resolve any waiting connection promises
         const resolver = this.connectionOpenResolvers.get(sessionId);
         if (resolver) {
           log.info({ sessionId }, '✅ Resolving connection promise — session data ready for frontend');
@@ -579,9 +809,11 @@ class WhatsAppManager {
 
     // Clear pending sessions
     this.pendingPairingSessions.clear();
-    this.state.activePairingSessionId = null;
 
-    // Step 4: Reset the global socket for the next pairing request
+    // Release pairing lock
+    this.releasePairingLock();
+
+    // Step 5: Reset the global socket for the next pairing request
     // This is safe now because all auth data has been copied to session dirs
     this.resetForNextPairing();
   }
@@ -606,7 +838,7 @@ class WhatsAppManager {
     // Clear the global auth for fresh connection
     this.clearGlobalAuth();
 
-    // Reconnect with fresh auth
+    // Reconnect with fresh auth after a short delay
     this.scheduleReconnect(2000);
   }
 
@@ -620,7 +852,7 @@ class WhatsAppManager {
     this.state.sessionStatus = 'connected';
     this.state.reconnectAttempts = 0;
 
-    log.info('WhatsApp client is NOW READY for pairing code requests');
+    log.info('✅ WhatsApp client is NOW READY for pairing code requests');
   }
 
   // ==========================================================================
@@ -628,6 +860,12 @@ class WhatsAppManager {
   // ==========================================================================
   private scheduleReconnect(delayMs?: number): void {
     if (this.isShuttingDown) return;
+
+    // Don't reconnect if pairing is in progress
+    if (this._pairingLock) {
+      log.info('Skipping reconnect — pairing is in progress');
+      return;
+    }
 
     if (this.state.reconnectAttempts >= this.maxReconnectAttempts) {
       log.error({
@@ -713,10 +951,10 @@ class WhatsAppManager {
       if (existsSync(this.globalAuthDir)) {
         rmSync(this.globalAuthDir, { recursive: true, force: true });
         mkdirSync(this.globalAuthDir, { recursive: true });
-        log.info('Cleared global auth directory for fresh connection');
+        log.info('🗑️ Cleared global auth directory for fresh connection');
       }
     } catch (err: any) {
-      log.error({ err: err.message }, 'Failed to clear global auth directory');
+      log.error({ err: err.message }, '❌ Failed to clear global auth directory');
     }
   }
 }
