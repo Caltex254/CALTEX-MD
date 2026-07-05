@@ -1,13 +1,14 @@
 // ============================================================================
 // CALTEX Session API - Express Routes
-// All REST API endpoints
+// All REST API endpoints — optimized for global WhatsApp singleton
 // ============================================================================
 
 import { Router, Request, Response } from 'express';
 import { sessionStore } from './session-store';
-import { createQRSession, createPairingSession } from './whatsapp-connection';
+import { whatsappManager } from './whatsapp-manager';
 import { createLogger } from './logger';
 import { config } from './config';
+import QRCode from 'qrcode';
 
 const log = createLogger('routes');
 
@@ -35,14 +36,22 @@ router.get('/health', (_req: Request, res: Response) => {
   const sessions = sessionStore.list();
   const active = sessions.filter(s => s.status === 'waiting_qr' || s.status === 'waiting_pairing' || s.status === 'waiting_connect');
   const connected = sessions.filter(s => s.status === 'connected');
+  const waState = whatsappManager.getState();
 
   res.json({
     success: true,
     data: {
       status: 'healthy',
       service: 'CALTEX Session API',
-      version: '1.0.0',
-      uptime: process.uptime(),
+      version: '2.0.0',
+      uptime: Math.floor(process.uptime()),
+      whatsapp: {
+        ready: waState.isReady,
+        status: waState.sessionStatus,
+        baileysVersion: waState.baileysVersion,
+        lastConnectedAt: waState.lastConnectedAt,
+        reconnectAttempts: waState.reconnectAttempts,
+      },
       sessions: {
         total: sessions.length,
         active: active.length,
@@ -54,7 +63,75 @@ router.get('/health', (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /pairing-code — Generate Pairing Code
+// GET /warmup — Initialize WhatsApp if not ready
+// ---------------------------------------------------------------------------
+router.get('/warmup', async (_req: Request, res: Response) => {
+  try {
+    const result = await whatsappManager.warmup();
+    const waState = whatsappManager.getState();
+
+    const statusCode = result.status === 'READY' ? 200 :
+                       result.status === 'WARMING_UP' ? 202 : 503;
+
+    res.status(statusCode).json({
+      success: result.status === 'READY',
+      data: {
+        status: result.status,
+        message: result.message,
+        whatsapp: {
+          ready: waState.isReady,
+          sessionStatus: waState.sessionStatus,
+          baileysVersion: waState.baileysVersion,
+          lastConnectedAt: waState.lastConnectedAt,
+        },
+      },
+    });
+  } catch (err: any) {
+    log.error({ err: err.message }, 'Warmup endpoint error');
+    res.status(500).json({ success: false, error: 'Warmup failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /status — Detailed connection state
+// ---------------------------------------------------------------------------
+router.get('/status', (_req: Request, res: Response) => {
+  const waState = whatsappManager.getState();
+  const sessions = sessionStore.list();
+
+  res.json({
+    success: true,
+    data: {
+      whatsapp: {
+        isReady: waState.isReady,
+        isConnecting: waState.isConnecting,
+        lastConnectedAt: waState.lastConnectedAt,
+        reconnectAttempts: waState.reconnectAttempts,
+        sessionStatus: waState.sessionStatus,
+        baileysVersion: waState.baileysVersion,
+        startedAt: waState.startedAt,
+        lastKeepAlive: waState.lastKeepAlive,
+        lastPairingCodeAt: waState.lastPairingCodeAt,
+        totalPairingCodesGenerated: waState.totalPairingCodesGenerated,
+        totalReconnects: waState.totalReconnects,
+      },
+      sessions: {
+        total: sessions.length,
+        active: sessions.filter(s => s.status === 'waiting_pairing' || s.status === 'waiting_qr').length,
+        connected: sessions.filter(s => s.status === 'connected').length,
+        failed: sessions.filter(s => s.status === 'failed').length,
+      },
+      server: {
+        uptime: Math.floor(process.uptime()),
+        memoryUsage: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+        nodeVersion: process.version,
+      },
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /pairing-code — Generate Pairing Code (using global socket)
 // ---------------------------------------------------------------------------
 router.post('/pairing-code', async (req: Request, res: Response) => {
   try {
@@ -73,21 +150,56 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
       });
     }
 
-    log.info({ phoneNumber: cleanPhone }, 'Pairing code request');
+    log.info({ phoneNumber: cleanPhone, whatsappReady: whatsappManager.isSocketReady() }, 'Pairing code request');
 
-    // Create session
+    // AUTO-WARMUP: If WhatsApp not ready, trigger warmup and wait
+    if (!whatsappManager.isSocketReady()) {
+      log.info('WhatsApp not ready — triggering auto-warmup');
+      const warmupResult = await whatsappManager.warmup();
+
+      if (warmupResult.status !== 'READY') {
+        // Wait a bit longer for auto-warmup
+        const startTime = Date.now();
+        while (!whatsappManager.isSocketReady() && Date.now() - startTime < config.autoWarmupTimeoutMs) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (!whatsappManager.isSocketReady()) {
+        return res.status(503).json({
+          success: false,
+          error: 'WhatsApp service is warming up — please try again in a few seconds',
+          data: {
+            status: 'WARMING_UP',
+            whatsappStatus: whatsappManager.getState().sessionStatus,
+          },
+        });
+      }
+    }
+
+    // Create session record
     const session = sessionStore.create(cleanPhone);
+    const authDir = sessionStore.getAuthDir(session.id);
 
     try {
-      // createPairingSession now waits for the socket handshake before
-      // calling requestPairingCode(), so this may take up to 25 seconds
-      const pairingCode = await createPairingSession(session.id, cleanPhone);
+      // Generate pairing code via the GLOBAL socket
+      const pairingCode = await whatsappManager.generatePairingCode(
+        cleanPhone,
+        session.id,
+        authDir
+      );
+
+      // Update session
+      sessionStore.update(session.id, {
+        status: 'waiting_pairing',
+        pairingCode,
+      });
 
       log.info({
         sessionId: session.id,
         pairingCode,
         phoneNumber: cleanPhone,
-      }, '✅ Pairing code endpoint returning code to client');
+      }, 'Pairing code returned to client');
 
       return res.json({
         success: true,
@@ -96,7 +208,7 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
           pairingCode,
           phoneNumber: cleanPhone,
           status: 'waiting_pairing',
-          expiresIn: 120, // seconds
+          expiresIn: 120,
         },
       });
     } catch (err: any) {
@@ -113,41 +225,58 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /qr-code — Generate QR Code
+// POST /qr-code — Generate QR Code (using global socket)
 // ---------------------------------------------------------------------------
 router.post('/qr-code', async (_req: Request, res: Response) => {
   try {
     log.info('QR code request');
 
+    if (!whatsappManager.isSocketReady()) {
+      log.info('WhatsApp not ready for QR — triggering auto-warmup');
+      const warmupResult = await whatsappManager.warmup();
+
+      if (warmupResult.status !== 'READY') {
+        const startTime = Date.now();
+        while (!whatsappManager.isSocketReady() && Date.now() - startTime < config.autoWarmupTimeoutMs) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (!whatsappManager.isSocketReady()) {
+        return res.status(503).json({
+          success: false,
+          error: 'WhatsApp service is warming up — please try again in a few seconds',
+        });
+      }
+    }
+
     // Create session
     const session = sessionStore.create();
 
     try {
-      await createQRSession(session.id);
+      // Wait for the next QR code from the global socket
+      const qrString = await whatsappManager.waitForQRCode(30000);
 
-      // Wait for QR to be generated (up to 10 seconds)
-      let attempts = 0;
-      while (attempts < 20) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const record = sessionStore.get(session.id);
-        if (record?.qrCode) {
-          return res.json({
-            success: true,
-            data: {
-              sessionId: session.id,
-              qrCode: record.qrCode,
-              status: 'waiting_qr',
-              expiresIn: 60, // seconds
-            },
-          });
-        }
-        attempts++;
-      }
+      // Generate QR image
+      const qrDataUrl = await QRCode.toDataURL(qrString, {
+        width: 512,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+      });
 
-      // QR not generated in time
-      return res.status(502).json({
-        success: false,
-        error: 'QR code generation timed out — WhatsApp servers may be slow. Try again.',
+      sessionStore.update(session.id, {
+        status: 'waiting_qr',
+        qrCode: qrDataUrl,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          sessionId: session.id,
+          qrCode: qrDataUrl,
+          status: 'waiting_qr',
+          expiresIn: 60,
+        },
       });
     } catch (err: any) {
       sessionStore.delete(session.id);
@@ -272,7 +401,7 @@ router.get('/session/:id/data', (req: Request<{ id: string }>, res: Response) =>
       success: true,
       data: {
         sessionId: record.id,
-        sessionString: sessionData, // The full session JSON string
+        sessionString: sessionData,
         phoneNumber: record.phoneNumber,
         connectedAt: record.connectedAt ? new Date(record.connectedAt).toISOString() : undefined,
       },

@@ -31,6 +31,7 @@ export default function ScanPage() {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [apiOnline, setApiOnline] = useState<boolean | null>(null)
+  const [whatsappReady, setWhatsappReady] = useState<boolean | null>(null)
   const [qrCode, setQrCode] = useState<string>('')
   const [qrRefreshing, setQrRefreshing] = useState(false)
   const [step, setStep] = useState<Step>('input')
@@ -49,11 +50,37 @@ export default function ScanPage() {
     }
   }, [])
 
+  // Warmup WhatsApp connection — call /warmup to pre-initialize the socket
+  const warmupWhatsApp = useCallback(async () => {
+    try {
+      const res = await fetch('/api/scan/warmup')
+      const data = await res.json()
+      if (data.data?.status === 'READY') {
+        setWhatsappReady(true)
+      } else {
+        setWhatsappReady(false)
+        // Retry warmup in 3 seconds if still warming up
+        setTimeout(() => warmupWhatsApp(), 3000)
+      }
+    } catch {
+      setWhatsappReady(false)
+      // Retry in 5 seconds
+      setTimeout(() => warmupWhatsApp(), 5000)
+    }
+  }, [])
+
   useEffect(() => {
     checkApiHealth()
     const interval = setInterval(checkApiHealth, 30000)
     return () => clearInterval(interval)
   }, [checkApiHealth])
+
+  // Auto-warmup as soon as API is confirmed online
+  useEffect(() => {
+    if (apiOnline === true) {
+      warmupWhatsApp()
+    }
+  }, [apiOnline, warmupWhatsApp])
 
   // Fetch session data after connection
   const fetchSessionData = useCallback(async (sid: string) => {
@@ -154,6 +181,29 @@ export default function ScanPage() {
     setStep('generating')
 
     try {
+      // Ensure WhatsApp is warmed up before requesting pairing code
+      try {
+        const warmupRes = await fetch('/api/scan/warmup')
+        const warmupData = await warmupRes.json()
+        if (warmupData.data?.status === 'WARMING_UP') {
+          // Wait for warmup to complete (up to 15 seconds)
+          const startTime = Date.now()
+          while (Date.now() - startTime < 15000) {
+            await new Promise(r => setTimeout(r, 2000))
+            const retryRes = await fetch('/api/scan/warmup')
+            const retryData = await retryRes.json()
+            if (retryData.data?.status === 'READY') {
+              setWhatsappReady(true)
+              break
+            }
+          }
+        } else if (warmupData.data?.status === 'READY') {
+          setWhatsappReady(true)
+        }
+      } catch {
+        // Warmup failed — still try the pairing code request
+      }
+
       const res = await fetch('/api/scan/pairing-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,7 +213,7 @@ export default function ScanPage() {
       if (data.success && data.data?.pairingCode) {
         setPairingCode(data.data.pairingCode)
         setSessionId(data.data.sessionId)
-        // Go directly to 'code' step - polling starts automatically via useEffect
+        setWhatsappReady(true)
         setStep('code')
       } else {
         setError(data.error || 'Failed to generate pairing code')
@@ -256,7 +306,7 @@ export default function ScanPage() {
             ) : apiOnline ? (
               <span className="flex items-center gap-1.5 text-xs font-medium text-green-400 bg-green-400/10 px-3 py-1.5 rounded-full">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                API Online
+                {whatsappReady ? 'WhatsApp Ready' : 'API Online'}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 text-xs font-medium text-red-400 bg-red-400/10 px-3 py-1.5 rounded-full">
@@ -386,11 +436,20 @@ export default function ScanPage() {
             {step === 'generating' && (
               <div className="rounded-2xl border border-white/10 bg-black/40 p-8 flex flex-col items-center gap-4">
                 <Loader2 className="h-12 w-12 animate-spin text-cyan-400" />
-                <p className="text-sm text-gray-400">Requesting pairing code for +{phone}...</p>
-                <p className="text-xs text-gray-500">Step 1: Connecting to WhatsApp servers...</p>
-                <p className="text-xs text-gray-500">Step 2: Completing security handshake...</p>
-                <p className="text-xs text-gray-500">Step 3: Generating your pairing code...</p>
-                <p className="text-xs text-yellow-500/80">This may take up to 90 seconds on first request (server wake-up). Please be patient.</p>
+                <p className="text-sm text-gray-400">Generating pairing code for +{phone}...</p>
+                {whatsappReady ? (
+                  <>
+                    <p className="text-xs text-green-400">WhatsApp service is ready</p>
+                    <p className="text-xs text-gray-500">Generating your pairing code...</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500">Step 1: Warming up WhatsApp service...</p>
+                    <p className="text-xs text-gray-500">Step 2: Completing security handshake...</p>
+                    <p className="text-xs text-gray-500">Step 3: Generating your pairing code...</p>
+                    <p className="text-xs text-yellow-500/80">First request may take up to 30 seconds (server wake-up). Please be patient.</p>
+                  </>
+                )}
               </div>
             )}
 
@@ -558,7 +617,7 @@ export default function ScanPage() {
                     </p>
                     <ol className="space-y-1 text-sm text-gray-300 list-decimal list-inside">
                       <li>Open WhatsApp on your phone</li>
-                      <li>Go to Settings > Linked Devices</li>
+                      <li>Go to Settings &gt; Linked Devices</li>
                       <li>Tap "Link a Device"</li>
                       <li>Point your camera at this QR code</li>
                     </ol>

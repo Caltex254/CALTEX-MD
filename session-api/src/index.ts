@@ -1,6 +1,12 @@
 // ============================================================================
-// CALTEX Session API - Main Entry Point
-// Standalone WhatsApp session generation service
+// CALTEX Session API - Main Entry Point (v2.0 — Production-Grade)
+//
+// OPTIMIZATIONS:
+// 1. WhatsApp singleton initialized on server startup (no lazy init)
+// 2. Keep-alive system prevents Render cold starts
+// 3. Auto-reconnect with exponential backoff
+// 4. Warmup endpoint for pre-connection
+// 5. Fast start — ready within seconds of deployment
 // ============================================================================
 
 import express from 'express';
@@ -10,7 +16,7 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config';
 import { router } from './routes';
 import { createLogger } from './logger';
-import { cleanupAllSockets } from './whatsapp-connection';
+import { whatsappManager } from './whatsapp-manager';
 import { sessionStore } from './session-store';
 
 const log = createLogger('server');
@@ -71,14 +77,22 @@ app.use('/', router);
 
 // Root endpoint
 app.get('/', (_req, res) => {
+  const waState = whatsappManager.getState();
   res.json({
     success: true,
     data: {
       service: 'CALTEX Session API',
-      version: '1.0.0',
-      description: 'Standalone WhatsApp session generation service for CALTEX MD',
+      version: '2.0.0',
+      description: 'Production-grade WhatsApp session generation service for CALTEX MD',
+      whatsapp: {
+        ready: waState.isReady,
+        status: waState.sessionStatus,
+        version: waState.baileysVersion,
+      },
       endpoints: {
         health: 'GET /health',
+        warmup: 'GET /warmup',
+        status: 'GET /status',
         pairingCode: 'POST /pairing-code',
         qrCode: 'POST /qr-code',
         sessionStatus: 'GET /session/:id',
@@ -104,7 +118,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // ---------------------------------------------------------------------------
-// Start Server
+// Start Server + Initialize WhatsApp IMMEDIATELY
 // ---------------------------------------------------------------------------
 const server = app.listen(config.port, () => {
   log.info({
@@ -112,7 +126,24 @@ const server = app.listen(config.port, () => {
     env: config.nodeEnv,
     corsOrigins: config.corsOrigins,
     sessionExpiryMinutes: config.sessionExpiryMs / 60000,
-  }, '🚀 CALTEX Session API started');
+  }, '🚀 CALTEX Session API v2.0 started');
+
+  // ============================================================
+  // CRITICAL: Initialize WhatsApp connection ON SERVER START
+  // This ensures the socket is ready BEFORE any user request
+  // ============================================================
+  log.info('⚡ Initializing WhatsApp connection on startup...');
+  whatsappManager.initialize().then(() => {
+    log.info('WhatsApp initialization initiated — connection in progress');
+  }).catch((err) => {
+    log.error({ err }, 'WhatsApp initialization failed on startup — will auto-reconnect');
+  });
+
+  // ============================================================
+  // Start keep-alive system to prevent Render from sleeping
+  // ============================================================
+  whatsappManager.startKeepAlive();
+  log.info({ intervalMs: config.keepAliveIntervalMs }, 'Keep-alive system started');
 });
 
 // ---------------------------------------------------------------------------
@@ -120,12 +151,15 @@ const server = app.listen(config.port, () => {
 // ---------------------------------------------------------------------------
 function shutdown(signal: string) {
   log.info({ signal }, 'Shutting down...');
-  cleanupAllSockets();
-  sessionStore.stopCleanup();
-  server.close(() => {
-    log.info('Server closed');
-    process.exit(0);
+
+  whatsappManager.shutdown().then(() => {
+    sessionStore.stopCleanup();
+    server.close(() => {
+      log.info('Server closed');
+      process.exit(0);
+    });
   });
+
   // Force exit after 10s
   setTimeout(() => {
     log.warn('Forcing exit after timeout');

@@ -32,4 +32,16 @@ export const config = {
 
   // Render health check path
   healthCheckPath: '/health',
+
+  // Keep-alive interval (ms) — must be < 5 min to prevent Render sleep
+  keepAliveIntervalMs: parseInt(process.env.KEEP_ALIVE_INTERVAL_MS || '270000', 10), // 4.5 min
+
+  // Warmup timeout (ms) — how long to wait for WhatsApp ready on /warmup
+  warmupTimeoutMs: parseInt(process.env.WARMUP_TIMEOUT_MS || '20000', 10), // 20s
+
+  // Pairing code wait timeout (ms) — max time to wait for pairing code generation
+  pairingCodeTimeoutMs: parseInt(process.env.PAIRING_CODE_TIMEOUT_MS || '30000', 10), // 30s
+
+  // Auto-warmup on pairing code request (wait up to this many ms for ready)
+  autoWarmupTimeoutMs: parseInt(process.env.AUTO_WARMUP_TIMEOUT_MS || '15000', 10), // 15s
 };
