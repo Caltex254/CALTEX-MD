@@ -10136,3 +10136,11 @@
 {"level":30,"time":1783252484994,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
 {"level":30,"time":1783252544995,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","module":"connection-manager","sessionId":"caltex-md","msg":"QR code received"}
 {"level":30,"time":1783252545000,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
+{"level":30,"time":1783252565001,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","module":"connection-manager","sessionId":"caltex-md","msg":"QR code received"}
+{"level":30,"time":1783252565006,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
+{"level":30,"time":1783252585007,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","module":"connection-manager","sessionId":"caltex-md","msg":"QR code received"}
+{"level":30,"time":1783252585011,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
+{"level":30,"time":1783252605012,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","module":"connection-manager","sessionId":"caltex-md","msg":"QR code received"}
+{"level":30,"time":1783252605016,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}
+{"level":30,"time":1783252625017,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","module":"connection-manager","sessionId":"caltex-md","msg":"QR code received"}
+{"level":30,"time":1783252625021,"pid":927,"hostname":"c-6a4a4552-14c2a3ca-2a664a89631b","sessionId":"caltex-md","msg":"QR code generated - scan with WhatsApp"}

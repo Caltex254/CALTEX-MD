@@ -100,3 +100,40 @@ Stage Summary:
 - Aurora + waves + particles create vibrant futuristic atmosphere
 - Cards stand out against brighter background
 - No backend/API changes, all functionality preserved
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix post-authentication flow — session data now reaches frontend
+
+Work Log:
+- Audited complete flow: whatsapp-manager.ts, routes.ts, session-store.ts, frontend scan page, API proxy routes
+- Found 5 critical bugs:
+  1. captureSessionDataForPendingSessions used setTimeout(3000) which raced with resetForNextPairing
+  2. resetForNextPairing deleted global auth files before the 3s delayed copy could happen
+  3. creds.update → saveCreds() was async and could be delayed, not guaranteed before file copy
+  4. GET /session/:id didn't include sessionString when connected, requiring a separate request
+  5. Frontend polling didn't use sessionString from status response even if available
+- Fixed whatsapp-manager.ts:
+  - Renamed to captureSessionDataForPendingSessionsSync — runs synchronously on connection=open
+  - Force-calls saveCreds() before copying auth files
+  - Copies all auth files synchronously before calling resetForNextPairing()
+  - resetForNextPairing only called AFTER all sessions captured
+  - Added connectionOpenResolvers Map for real-time connection notification
+  - Added waitForConnection() method with timeout
+- Fixed routes.ts:
+  - GET /session/:id now includes sessionString when status=connected
+  - Added sessionApiOnline field to /status response
+  - QR sessions register in pendingPairingSessions for connection capture
+  - Added detailed logging with ✅ and ❌ markers
+- Fixed scan/page.tsx:
+  - Polling now uses sessionString from status response directly
+  - Falls back to separate fetchSessionData() if sessionString not included
+  - setSessionData() called before setStep('connected')
+- Deployed to Vercel (frontend) and Render (session-api)
+
+Stage Summary:
+- Complete flow now: Generate Code → User links → connection=open → creds saved → files copied → status=connected → sessionString in poll → frontend gets session immediately
+- No more race condition between file copy and global auth reset
+- Detailed logging at every step for debugging
+- Both pairing code and QR code flows work
