@@ -192,7 +192,7 @@ export default function ScanPage() {
     }
   }, [apiOnline, warmupWhatsApp])
 
-  // Fetch session data after connection
+  // Fetch session data after connection (fallback)
   const fetchSessionData = useCallback(async (sid: string) => {
     try {
       const res = await fetch(`/api/scan/download?sessionId=${sid}`)
@@ -206,6 +206,8 @@ export default function ScanPage() {
   }, [])
 
   // Start polling for connection status
+  // The backend /session/:id endpoint now returns sessionString
+  // when status is 'connected', so we can get it immediately.
   const startPolling = useCallback((sid: string) => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
@@ -221,8 +223,15 @@ export default function ScanPage() {
             clearInterval(pollingRef.current)
             pollingRef.current = null
           }
+          // Use sessionString from the polling response directly
+          // (the backend now includes it in the status response)
+          if (data.data.sessionString) {
+            setSessionData(data.data.sessionString)
+          } else {
+            // Fallback: fetch session data separately
+            fetchSessionData(sid)
+          }
           setStep('connected')
-          fetchSessionData(sid)
         } else if (data.success && data.data?.status === 'failed') {
           if (pollingRef.current) {
             clearInterval(pollingRef.current)

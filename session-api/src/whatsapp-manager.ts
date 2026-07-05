@@ -12,6 +12,7 @@
 // 4. Keep-alive pings for Render cold-start prevention
 // 5. Connection state tracking exposed via /status and /warmup
 // 6. Session data capture — when device links, copy global auth to session dir
+//    BEFORE resetting the global socket for next pairing
 // ============================================================================
 
 import {
@@ -27,7 +28,7 @@ import {
 } from '@whiskeysockets/baileys';
 import { createLogger } from './logger';
 import { config } from './config';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, cpSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { sessionStore } from './session-store';
 
@@ -81,6 +82,9 @@ class WhatsAppManager {
   private isShuttingDown = false;
   private pendingPairingSessions: Map<string, string> = new Map(); // sessionId → phoneNumber
 
+  // Promise resolvers for connection events
+  private connectionOpenResolvers: Map<string, { resolve: (value: boolean) => void; reject: (reason: string) => void }> = new Map();
+
   constructor() {
     this.globalAuthDir = join(config.sessionsDir, '_global_auth');
     if (!existsSync(this.globalAuthDir)) {
@@ -112,23 +116,17 @@ class WhatsAppManager {
       return;
     }
 
-    log.info('⚡ Initializing global WhatsApp connection...');
+    log.info('Initializing global WhatsApp connection...');
     this.state.isConnecting = true;
     this.state.sessionStatus = 'connecting';
 
     try {
       // Clear stale global auth to ensure clean connection
-      // This is important: a stale auth from a previous pairing can cause issues
-      // because the socket would try to resume an old session instead of being
-      // fresh for a new pairing code request
+      // Only clear if the creds don't have a registered device
       if (existsSync(join(this.globalAuthDir, 'creds.json'))) {
         const credsContent = readFileSync(join(this.globalAuthDir, 'creds.json'), 'utf-8');
         try {
           const creds = JSON.parse(credsContent);
-          // If the global auth has a registered device, it means a previous
-          // pairing was completed. In that case, we keep it so the socket
-          // can reconnect as that device (for session data retrieval).
-          // But if not registered, clear it for a fresh start.
           if (!creds.me || !creds.me.id || !creds.registered) {
             log.info('Clearing unregistered global auth for fresh connection');
             rmSync(this.globalAuthDir, { recursive: true, force: true });
@@ -161,7 +159,6 @@ class WhatsAppManager {
     }
 
     if (this.state.isConnecting) {
-      // Wait for connection to complete (up to 20s)
       log.info('Warmup requested — already connecting, waiting for ready...');
       const ready = await this.waitForReady(20000);
       if (ready) {
@@ -170,7 +167,6 @@ class WhatsAppManager {
       return { status: 'WARMING_UP', message: 'WhatsApp client is connecting, please wait...' };
     }
 
-    // Not connecting and not ready — trigger initialization
     log.info('Warmup requested — initializing connection...');
     await this.initialize();
 
@@ -183,10 +179,6 @@ class WhatsAppManager {
 
   // ==========================================================================
   // PAIRING CODE — Generate using the global socket
-  //
-  // CRITICAL: Before calling requestPairingCode, we must clear the global
-  // auth to get a fresh connection. This is because requestPairingCode only
-  // works on a fresh (unregistered) socket.
   // ==========================================================================
   async generatePairingCode(
     phoneNumber: string,
@@ -199,8 +191,7 @@ class WhatsAppManager {
 
     log.info({ phoneNumber, sessionId }, 'Generating pairing code via global socket');
 
-    // Register this session as pending — when connection opens, we'll
-    // capture the session data for it
+    // Register this session as pending
     this.pendingPairingSessions.set(sessionId, phoneNumber);
     this.state.activePairingSessionId = sessionId;
 
@@ -209,7 +200,7 @@ class WhatsAppManager {
       this.state.lastPairingCodeAt = Date.now();
       this.state.totalPairingCodesGenerated++;
 
-      log.info({ phoneNumber, sessionId, pairingCode: code }, 'Pairing code generated successfully');
+      log.info({ phoneNumber, sessionId, pairingCode: code }, '✅ Pairing code generated successfully');
       return code;
     } catch (err: any) {
       // Clean up pending session on failure
@@ -244,6 +235,41 @@ class WhatsAppManager {
       };
 
       this.socket!.ev.on('connection.update', handler);
+    });
+  }
+
+  // ==========================================================================
+  // WAIT FOR CONNECTION — Returns a promise that resolves when the device
+  // links successfully for a given sessionId. Used by the pairing-code
+  // endpoint to wait until authentication completes.
+  // ==========================================================================
+  waitForConnection(sessionId: string, timeoutMs: number = 120000): Promise<boolean> {
+    // Check if already connected
+    const existing = sessionStore.get(sessionId);
+    if (existing && existing.status === 'connected') {
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.connectionOpenResolvers.delete(sessionId);
+        resolve(false); // Resolve false instead of reject — allows polling to continue
+      }, timeoutMs);
+
+      this.connectionOpenResolvers.set(sessionId, {
+        resolve: (value: boolean) => {
+          clearTimeout(timeout);
+          this.connectionOpenResolvers.delete(sessionId);
+          resolve(value);
+        },
+        reject: (reason: string) => {
+          clearTimeout(timeout);
+          this.connectionOpenResolvers.delete(sessionId);
+          resolve(false);
+        },
+      });
+
+      log.info({ sessionId, timeoutMs }, 'Waiting for WhatsApp connection on session...');
     });
   }
 
@@ -362,7 +388,7 @@ class WhatsAppManager {
     this.socket = sock;
     this.saveCreds = saveCreds;
 
-    // Save credentials on update
+    // Save credentials on update — this saves to the GLOBAL auth dir
     sock.ev.on('creds.update', () => {
       saveCreds();
     });
@@ -399,12 +425,14 @@ class WhatsAppManager {
 
     // Connection opened — device linked (for the global auth session)
     if (connection === 'open') {
-      log.info('Global WhatsApp connection OPEN — device linked successfully!');
+      log.info('✅ Global WhatsApp connection OPEN — device linked successfully!');
       this.markReady();
       this.state.reconnectAttempts = 0;
 
-      // Capture session data for all pending pairing sessions
-      this.captureSessionDataForPendingSessions();
+      // CRITICAL: Capture session data SYNCHRONOUSLY before any reset
+      // The saveCreds() has already been called by creds.update event,
+      // so the files are on disk. We must copy them BEFORE resetting.
+      this.captureSessionDataForPendingSessionsSync();
     }
 
     // "connecting" — initial handshake in progress
@@ -426,13 +454,18 @@ class WhatsAppManager {
       this.state.isConnecting = false;
       this.state.sessionStatus = 'disconnected';
 
-      // Clear pending sessions on disconnect
+      // Mark any pending sessions as failed on disconnect
       for (const [sessionId] of this.pendingPairingSessions) {
         const record = sessionStore.get(sessionId);
         if (record && record.status !== 'connected') {
-          // Don't mark as failed immediately — give grace period
           log.info({ sessionId }, 'Session was pending during disconnect — marking as failed');
           sessionStore.update(sessionId, { status: 'failed' });
+
+          // Reject any waiting connection promises
+          const resolver = this.connectionOpenResolvers.get(sessionId);
+          if (resolver) {
+            resolver.reject('Connection closed before authentication completed');
+          }
         }
       }
       this.pendingPairingSessions.clear();
@@ -441,7 +474,6 @@ class WhatsAppManager {
       if (statusCode === DisconnectReason.loggedOut) {
         log.error('Global connection logged out — session invalid, will reinitialize');
         this.state.sessionStatus = 'failed';
-        // Clear the auth dir so we get fresh credentials
         this.clearGlobalAuth();
         this.scheduleReconnect();
       } else if (statusCode === DisconnectReason.connectionReplaced) {
@@ -465,74 +497,97 @@ class WhatsAppManager {
   }
 
   // ==========================================================================
-  // PRIVATE — Capture session data for pending pairing sessions
+  // PRIVATE — Capture session data SYNCHRONOUSLY
   //
-  // When the global socket's connection goes "open", it means a device was
-  // linked. We copy the global auth data to the session's auth directory.
+  // When connection goes "open", a device was linked. We MUST:
+  // 1. Force-save credentials to disk immediately
+  // 2. Copy all auth files from global auth dir to each session's auth dir
+  // 3. Update session status to "connected"
+  // 4. Resolve any waiting connection promises
+  // 5. THEN reset the global socket for the next pairing
+  //
+  // This MUST be synchronous to avoid race conditions with resetForNextPairing.
   // ==========================================================================
-  private captureSessionDataForPendingSessions(): void {
+  private captureSessionDataForPendingSessionsSync(): void {
     if (this.pendingPairingSessions.size === 0) {
       log.info('No pending pairing sessions to capture data for');
       return;
     }
 
-    log.info({ count: this.pendingPairingSessions.size }, 'Capturing session data for pending sessions');
+    log.info({ count: this.pendingPairingSessions.size }, '📦 Capturing session data for pending sessions');
 
-    // Give credentials a moment to be saved to disk
-    setTimeout(() => {
-      for (const [sessionId, phoneNumber] of this.pendingPairingSessions) {
-        try {
-          const sessionAuthDir = sessionStore.getAuthDir(sessionId);
+    // Step 1: Force-save credentials to ensure files are on disk
+    if (this.saveCreds) {
+      try {
+        this.saveCreds();
+        log.info('Credentials force-saved to disk');
+      } catch (err: any) {
+        log.error({ err: err.message }, 'Failed to force-save credentials');
+      }
+    }
 
-          // Copy all auth files from global auth dir to session auth dir
-          if (existsSync(this.globalAuthDir)) {
-            const files = readdirSync(this.globalAuthDir);
-            for (const file of files) {
-              const srcPath = join(this.globalAuthDir, file);
-              const dstPath = join(sessionAuthDir, file);
-              try {
-                const content = readFileSync(srcPath);
-                writeFileSync(dstPath, content);
-              } catch (err: any) {
-                log.warn({ err: err.message, file }, 'Failed to copy auth file');
-              }
+    // Step 2: For each pending session, copy auth files and update status
+    for (const [sessionId, phoneNumber] of this.pendingPairingSessions) {
+      try {
+        const sessionAuthDir = sessionStore.getAuthDir(sessionId);
+
+        // Copy all auth files from global auth dir to session auth dir
+        if (existsSync(this.globalAuthDir)) {
+          const files = readdirSync(this.globalAuthDir);
+          let copiedCount = 0;
+          for (const file of files) {
+            const srcPath = join(this.globalAuthDir, file);
+            const dstPath = join(sessionAuthDir, file);
+            try {
+              const content = readFileSync(srcPath);
+              writeFileSync(dstPath, content);
+              copiedCount++;
+            } catch (err: any) {
+              log.warn({ err: err.message, file, sessionId }, 'Failed to copy auth file');
             }
-            log.info({ sessionId, filesCopied: files.length }, 'Session auth data captured');
           }
+          log.info({ sessionId, filesCopied: copiedCount, totalFiles: files.length }, '✅ Session auth data captured and saved');
+        } else {
+          log.error({ sessionId, globalAuthDir: this.globalAuthDir }, 'Global auth dir does not exist!');
+        }
 
-          // Update session status
-          sessionStore.update(sessionId, {
-            status: 'connected',
-            connectedAt: Date.now(),
-            pairingCode: undefined,
-            qrCode: undefined,
-          });
+        // Update session status to "connected"
+        sessionStore.update(sessionId, {
+          status: 'connected',
+          connectedAt: Date.now(),
+        });
 
-          log.info({ sessionId, phoneNumber }, 'Session marked as connected');
-        } catch (err: any) {
-          log.error({ err: err.message, sessionId }, 'Failed to capture session data');
-          sessionStore.update(sessionId, { status: 'failed' });
+        log.info({ sessionId, phoneNumber }, '✅ Session marked as CONNECTED — credentials saved');
+
+        // Step 3: Resolve any waiting connection promises
+        const resolver = this.connectionOpenResolvers.get(sessionId);
+        if (resolver) {
+          log.info({ sessionId }, '✅ Resolving connection promise — session data ready for frontend');
+          resolver.resolve(true);
+        }
+      } catch (err: any) {
+        log.error({ err: err.message, sessionId }, '❌ Failed to capture session data');
+        sessionStore.update(sessionId, { status: 'failed' });
+
+        // Reject any waiting connection promises
+        const resolver = this.connectionOpenResolvers.get(sessionId);
+        if (resolver) {
+          resolver.reject(`Failed to capture session data: ${err.message}`);
         }
       }
+    }
 
-      // Clear pending sessions
-      this.pendingPairingSessions.clear();
-      this.state.activePairingSessionId = null;
+    // Clear pending sessions
+    this.pendingPairingSessions.clear();
+    this.state.activePairingSessionId = null;
 
-      // IMPORTANT: After capturing, we need to reset the global socket
-      // so it's fresh for the next pairing code request.
-      // The global auth now has linked device credentials, which means
-      // requestPairingCode won't work anymore until we clear and reconnect.
-      this.resetForNextPairing();
-    }, 3000);
+    // Step 4: Reset the global socket for the next pairing request
+    // This is safe now because all auth data has been copied to session dirs
+    this.resetForNextPairing();
   }
 
   // ==========================================================================
   // PRIVATE — Reset the global socket for the next pairing request
-  //
-  // After a successful link, the global auth has device credentials.
-  // We need to clear them and reconnect fresh so the next pairing
-  // code request works.
   // ==========================================================================
   private resetForNextPairing(): void {
     log.info('Resetting global socket for next pairing request...');
@@ -580,7 +635,6 @@ class WhatsAppManager {
         max: this.maxReconnectAttempts,
       }, 'Max reconnect attempts reached — will retry in 5 minutes');
 
-      // Reset attempts and try again after a long delay
       this.state.reconnectAttempts = 0;
       delayMs = 300000; // 5 minutes
     }

@@ -102,6 +102,7 @@ router.get('/status', (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
+      sessionApiOnline: waState.isReady || waState.isConnecting,
       whatsapp: {
         isReady: waState.isReady,
         isConnecting: waState.isConnecting,
@@ -150,7 +151,7 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
       });
     }
 
-    log.info({ phoneNumber: cleanPhone, whatsappReady: whatsappManager.isSocketReady() }, 'Pairing code request');
+    log.info({ phoneNumber: cleanPhone, whatsappReady: whatsappManager.isSocketReady() }, 'Pairing code request received');
 
     // AUTO-WARMUP: If WhatsApp not ready, trigger warmup and wait
     if (!whatsappManager.isSocketReady()) {
@@ -158,7 +159,6 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
       const warmupResult = await whatsappManager.warmup();
 
       if (warmupResult.status !== 'READY') {
-        // Wait a bit longer for auto-warmup
         const startTime = Date.now();
         while (!whatsappManager.isSocketReady() && Date.now() - startTime < config.autoWarmupTimeoutMs) {
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -181,6 +181,8 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
     const session = sessionStore.create(cleanPhone);
     const authDir = sessionStore.getAuthDir(session.id);
 
+    log.info({ sessionId: session.id, phoneNumber: cleanPhone }, 'Session created for pairing');
+
     try {
       // Generate pairing code via the GLOBAL socket
       const pairingCode = await whatsappManager.generatePairingCode(
@@ -199,7 +201,7 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
         sessionId: session.id,
         pairingCode,
         phoneNumber: cleanPhone,
-      }, 'Pairing code returned to client');
+      }, '✅ Pairing code returned to client');
 
       return res.json({
         success: true,
@@ -213,6 +215,7 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
       });
     } catch (err: any) {
       sessionStore.delete(session.id);
+      log.error({ err: err.message, phoneNumber: cleanPhone }, '❌ Failed to generate pairing code');
       return res.status(502).json({
         success: false,
         error: err.message || 'Failed to generate pairing code',
@@ -229,7 +232,7 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 router.post('/qr-code', async (_req: Request, res: Response) => {
   try {
-    log.info('QR code request');
+    log.info('QR code request received');
 
     if (!whatsappManager.isSocketReady()) {
       log.info('WhatsApp not ready for QR — triggering auto-warmup');
@@ -252,6 +255,10 @@ router.post('/qr-code', async (_req: Request, res: Response) => {
 
     // Create session
     const session = sessionStore.create();
+    // Register as pending for connection capture
+    whatsappManager.getSocket(); // just to verify socket exists
+
+    log.info({ sessionId: session.id }, 'Session created for QR code');
 
     try {
       // Wait for the next QR code from the global socket
@@ -269,6 +276,13 @@ router.post('/qr-code', async (_req: Request, res: Response) => {
         qrCode: qrDataUrl,
       });
 
+      // Also register this session as pending so connection capture works
+      // We use an internal method by setting the pending map
+      // For QR sessions, we need to add to pendingPairingSessions
+      (whatsappManager as any).pendingPairingSessions.set(session.id, 'qr-session');
+
+      log.info({ sessionId: session.id }, '✅ QR code returned to client');
+
       return res.json({
         success: true,
         data: {
@@ -280,6 +294,7 @@ router.post('/qr-code', async (_req: Request, res: Response) => {
       });
     } catch (err: any) {
       sessionStore.delete(session.id);
+      log.error({ err: err.message }, '❌ Failed to generate QR code');
       return res.status(502).json({
         success: false,
         error: err.message || 'Failed to generate QR code',
@@ -293,6 +308,8 @@ router.post('/qr-code', async (_req: Request, res: Response) => {
 
 // ---------------------------------------------------------------------------
 // GET /session/:id — Session Status
+// This is the CRITICAL polling endpoint — the frontend checks this
+// repeatedly to detect when authentication completes.
 // ---------------------------------------------------------------------------
 router.get('/session/:id', (req: Request<{ id: string }>, res: Response) => {
   try {
@@ -303,17 +320,32 @@ router.get('/session/:id', (req: Request<{ id: string }>, res: Response) => {
       return res.status(404).json({ success: false, error: 'Session not found' });
     }
 
+    // Build the response — include session data if connected
+    const responseData: any = {
+      sessionId: record.id,
+      status: record.status,
+      phoneNumber: record.phoneNumber,
+      pairingCode: record.status === 'waiting_pairing' ? record.pairingCode : undefined,
+      qrCode: record.status === 'waiting_qr' ? record.qrCode : undefined,
+      createdAt: new Date(record.createdAt).toISOString(),
+      connectedAt: record.connectedAt ? new Date(record.connectedAt).toISOString() : undefined,
+    };
+
+    // If connected, also include the session string so the frontend
+    // can get it immediately without a second request
+    if (record.status === 'connected') {
+      const sessionData = sessionStore.exportSession(id);
+      if (sessionData) {
+        responseData.sessionString = sessionData;
+        log.info({ sessionId: id }, '✅ Session data included in status response — frontend can download immediately');
+      } else {
+        log.warn({ sessionId: id }, 'Session is connected but no session data found on disk');
+      }
+    }
+
     return res.json({
       success: true,
-      data: {
-        sessionId: record.id,
-        status: record.status,
-        phoneNumber: record.phoneNumber,
-        pairingCode: record.status === 'waiting_pairing' ? record.pairingCode : undefined,
-        qrCode: record.status === 'waiting_qr' ? record.qrCode : undefined,
-        createdAt: new Date(record.createdAt).toISOString(),
-        connectedAt: record.connectedAt ? new Date(record.connectedAt).toISOString() : undefined,
-      },
+      data: responseData,
     });
   } catch (err: any) {
     log.error({ err: err.message }, 'Session status endpoint error');
