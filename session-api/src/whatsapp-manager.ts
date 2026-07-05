@@ -1,38 +1,40 @@
 // ============================================================================
-// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON) v4.0
+// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON) v5.0
 //
 // ARCHITECTURE: One global WhatsApp socket, initialized on server start.
 // All pairing code requests reuse the same active connection.
 // Never recreates the socket per request.
 //
-// v4.1 FIXES (Post-Authentication Onboarding Message):
+// v5.0 FIXES (Pairing Reliability — Root Cause Analysis):
 //
-// NEW FEATURE: After successful WhatsApp authentication:
-//   1. Generate a unique CALTEX Session ID (CALTEX-XXXX-XXXX)
-//   2. Store the Session ID in the session record
-//   3. Automatically send a professional onboarding WhatsApp message
-//      to the user's WhatsApp account with their Session ID
-//   4. Display the Session ID on the frontend with copy/download/guide
-//   5. Retry once if message sending fails
-//   6. Auto-remove linked device if session generation fails
-//   7. Prevent duplicate onboarding messages
-//   8. Comprehensive logging at every step
+// ROOT CAUSE of inconsistent pairing ("Couldn't link device"):
 //
-// v4.0 FIXES (Post-Authentication Session Delivery):
+// When a transient connectionClosed (511) happens DURING pairing (after
+// requestPairingCode but before isNewLogin), the old code:
+//   1. Marked all pendingPairingSessions as FAILED
+//   2. Cleared the global auth directory (deleting pairing credentials)
+//   3. Reconnected with fresh auth (pairing code invalidated)
 //
-// ROOT CAUSE: When pairing succeeds, Baileys fires:
-//   1. CB:pair-success → creds.update → connection.update({isNewLogin:true})
-//   2. Connection RESTARTS (close + reconnect) ← this is normal Baileys behavior
-//   3. CB:success → creds.update → connection.update({connection:'open'})
+// This is WRONG because connectionClosed is often recoverable — the
+// pairing code is still valid on WhatsApp's server. The user may have
+// already entered the code on their phone, and the server is processing
+// the link. By destroying our auth, we guarantee failure.
 //
 // FIXES:
-// 1. Track "pairing-linked" sessions separately — survive disconnects
-// 2. Don't clear pending sessions on DisconnectReason.restartRequired
-// 3. Await saveCreds() before copying files
-// 4. Save creds synchronously with writeFileSync as a belt-and-suspenders
-// 5. Capture session data on connection:open with proper async handling
-// 6. Auto-remove linked device if session generation fails
-// 7. Comprehensive logging at every step
+// 1. Don't clear auth on connectionClosed if there are pending pairing sessions
+// 2. Don't mark pending sessions as failed on recoverable disconnects
+//    (connectionClosed, timedOut, unavailableService) — let them survive
+// 3. Only fail pending sessions on FATAL disconnects (loggedOut,
+//    connectionReplaced, badSession, forbidden, multideviceMismatch)
+// 4. Remove fireInitQueries: false → use default (true)
+// 5. Remove mobile: false (deprecated in Baileys)
+// 6. Add pairing code expiry timeout — auto-fail pending sessions
+//    after 3 minutes if no connection (codes expire in ~2 min)
+// 7. Log the exact Boom statusCode and error stack on every disconnect
+// 8. Guard against pairing lock blocking reconnect in edge case
+//
+// v4.1 (Post-Authentication Onboarding): preserved, no changes
+// v4.0 (Post-Authentication Session Delivery): preserved
 // ============================================================================
 
 import {
@@ -105,6 +107,7 @@ class WhatsAppManager {
   private globalAuthDir: string;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pairingExpiryTimer: ReturnType<typeof setTimeout> | null = null;
   private maxReconnectAttempts = 10;
   private baseReconnectDelayMs = 2000;
   private isShuttingDown = false;
@@ -304,6 +307,10 @@ class WhatsAppManager {
         pairingCode: code,
       }, '✅ Pairing code generated — user should enter this in WhatsApp');
 
+      // Start a 3-minute expiry timer — pairing codes expire after ~2 minutes,
+      // and we want to auto-cleanup if the user never enters the code
+      this.startPairingExpiryTimer(sessionId);
+
       return code;
     } catch (err: any) {
       this.releasePairingLock();
@@ -417,6 +424,50 @@ class WhatsAppManager {
   }
 
   // ==========================================================================
+  // PAIRING CODE EXPIRY TIMER
+  // Auto-fails pending sessions if no connection after 3 minutes
+  // ==========================================================================
+  private startPairingExpiryTimer(sessionId: string): void {
+    this.clearPairingExpiryTimer();
+
+    const EXPIRY_MS = 180_000; // 3 minutes (pairing codes expire in ~2 min)
+
+    log.info({ sessionId, expiryMs: EXPIRY_MS }, '⏱️ Starting pairing code expiry timer');
+
+    this.pairingExpiryTimer = setTimeout(() => {
+      log.warn({ sessionId }, '⏱️ Pairing code expired — auto-failing pending session');
+
+      const record = sessionStore.get(sessionId);
+      if (record && record.status !== 'connected') {
+        sessionStore.update(sessionId, { status: 'failed' });
+        log.info({ sessionId }, '❌ Session marked as failed due to pairing code expiry');
+      }
+
+      // Clear from pending map
+      this.pendingPairingSessions.delete(sessionId);
+
+      // If no more pending or linked sessions, release lock and reset
+      if (this.pendingPairingSessions.size === 0 && this.linkedSessions.size === 0) {
+        this.releasePairingLock();
+        // Reset socket for next pairing attempt
+        log.info('No more pending/linked sessions — resetting for next pairing');
+        this.resetForNextPairing();
+      }
+    }, EXPIRY_MS);
+
+    if (this.pairingExpiryTimer.unref) {
+      this.pairingExpiryTimer.unref();
+    }
+  }
+
+  private clearPairingExpiryTimer(): void {
+    if (this.pairingExpiryTimer) {
+      clearTimeout(this.pairingExpiryTimer);
+      this.pairingExpiryTimer = null;
+    }
+  }
+
+  // ==========================================================================
   // SHUTDOWN
   // ==========================================================================
   async shutdown(): Promise<void> {
@@ -424,6 +475,7 @@ class WhatsAppManager {
     log.info('Shutting down WhatsApp manager...');
 
     this.stopKeepAlive();
+    this.clearPairingExpiryTimer();
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -499,8 +551,8 @@ class WhatsAppManager {
       connectTimeoutMs: 60_000,
       keepAliveIntervalMs: 25_000,
       qrTimeout: 60_000,
-      fireInitQueries: false,
-      mobile: false,
+      // NOTE: fireInitQueries defaults to true — needed for proper connection init
+      // NOTE: mobile is deprecated in Baileys — do not set it
     };
 
     const sock = makeWASocket(socketConfig);
@@ -621,10 +673,14 @@ class WhatsAppManager {
       const reason = reasonMap[statusCode] || (statusCode === 408 ? 'TIMED_OUT' : `UNKNOWN(${statusCode})`);
       this.state.lastDisconnectReason = reason;
 
+      // ── DETAILED DISCONNECT LOGGING ──
+      // Log every detail for debugging, including the Boom error stack
       log.warn({
         statusCode,
         reason,
         errorMessage: error?.message,
+        errorStack: error?.stack?.split('\n')?.slice(0, 3),  // First 3 lines of stack
+        errorOutputPayload: error?.output?.payload,
         pairingInProgress: this._pairingLock,
         pendingSessions: this.pendingPairingSessions.size,
         linkedSessions: this.linkedSessions.size,
@@ -635,62 +691,105 @@ class WhatsAppManager {
       this.state.isConnecting = false;
       this.state.sessionStatus = 'disconnected';
 
-      // ── CRITICAL: Handle disconnect differently based on linked sessions ──
+      // ── CRITICAL: Classify disconnect as FATAL or RECOVERABLE ──
       //
-      // If we have linkedSessions, this disconnect is the EXPECTED restart
-      // after pair-success. We must NOT mark them as failed or clear them.
+      // FATAL disconnects mean the pairing is permanently broken:
+      //   - loggedOut, connectionReplaced, badSession, forbidden, multideviceMismatch
       //
-      // If we have pendingPairingSessions (no link yet), this is an unexpected
-      // disconnect during pairing — mark them as failed.
-      const hasLinkedSessions = this.linkedSessions.size > 0;
+      // RECOVERABLE disconnects mean the pairing might still succeed:
+      //   - connectionClosed (transient network issue)
+      //   - timedOut (server busy, can retry)
+      //   - unavailableService (temporary server issue)
+      //   - restartRequired (normal Baileys restart after pairing)
+      //
+      // For RECOVERABLE disconnects during active pairing:
+      //   - Do NOT mark pending sessions as failed
+      //   - Do NOT clear the auth directory
+      //   - Reconnect with the same auth — the pairing code is still valid
+      //
+      const FATAL_DISCONNECT_REASONS = new Set([
+        DisconnectReason.loggedOut,          // 401
+        DisconnectReason.connectionReplaced, // 403
+        DisconnectReason.badSession,         // 428
+        DisconnectReason.forbidden,          // 403
+        DisconnectReason.multideviceMismatch,// 405
+      ]);
 
+      const isFatal = FATAL_DISCONNECT_REASONS.has(statusCode);
+      const hasLinkedSessions = this.linkedSessions.size > 0;
+      const hasPendingSessions = this.pendingPairingSessions.size > 0;
+
+      // ── Handle pending sessions based on disconnect type ──
+      if (hasPendingSessions) {
+        if (isFatal) {
+          // Fatal disconnect — pairing cannot recover, mark sessions as failed
+          log.warn({
+            sessions: Array.from(this.pendingPairingSessions.keys()),
+            reason,
+            statusCode,
+          }, '❌ Fatal disconnect during pairing — marking pending sessions as FAILED');
+
+          for (const [sessionId] of this.pendingPairingSessions) {
+            const record = sessionStore.get(sessionId);
+            if (record && record.status !== 'connected') {
+              log.info({ sessionId, reason, statusCode }, 'Pending session failed due to fatal disconnect');
+              sessionStore.update(sessionId, { status: 'failed' });
+
+              const resolver = this.connectionOpenResolvers.get(sessionId);
+              if (resolver) {
+                resolver.reject(`Connection closed (fatal): ${reason}`);
+              }
+            }
+          }
+          this.pendingPairingSessions.clear();
+        } else {
+          // Recoverable disconnect — pairing might still succeed on reconnect
+          log.info({
+            sessions: Array.from(this.pendingPairingSessions.keys()),
+            reason,
+            statusCode,
+          }, '🔄 Recoverable disconnect during pairing — preserving pending sessions for reconnect');
+          // Do NOT clear pendingPairingSessions — they survive the reconnect
+          // Do NOT mark sessions as failed — the pairing code is still valid
+        }
+      }
+
+      // ── Handle linked sessions ──
       if (hasLinkedSessions) {
         log.info({
           linkedSessions: Array.from(this.linkedSessions.keys()),
           reason,
-        }, '🔗 Connection closed during pairing restart — linked sessions preserved, NOT marking as failed');
+        }, '🔗 Connection closed with linked sessions — preserving for reconnect');
         // Don't touch linkedSessions — they will be captured on reconnect
       }
 
-      // Handle pending sessions (not yet linked)
-      if (this.pendingPairingSessions.size > 0) {
-        log.warn({
-          sessions: Array.from(this.pendingPairingSessions.keys()),
-          reason,
-        }, 'Disconnect during pending pairing — marking as failed');
-
-        for (const [sessionId] of this.pendingPairingSessions) {
-          const record = sessionStore.get(sessionId);
-          if (record && record.status !== 'connected') {
-            log.info({ sessionId, reason }, 'Pending session failed during disconnect');
-            sessionStore.update(sessionId, { status: 'failed' });
-
-            const resolver = this.connectionOpenResolvers.get(sessionId);
-            if (resolver) {
-              resolver.reject(`Connection closed: ${reason}`);
-            }
-          }
-        }
-        this.pendingPairingSessions.clear();
-      }
-
-      // Release pairing lock if not in linked state
-      if (this._pairingLock && !hasLinkedSessions) {
-        log.info('Releasing pairing lock due to disconnect (no linked sessions)');
+      // ── Release pairing lock on fatal disconnect only ──
+      if (this._pairingLock && isFatal && !hasLinkedSessions) {
+        log.info('Releasing pairing lock due to fatal disconnect (no linked sessions)');
         this.releasePairingLock();
       }
 
       this.state.activePairingSessionId = null;
 
-      // Reconnection strategy
+      // ── Reconnection strategy ──
       if (statusCode === DisconnectReason.loggedOut) {
         log.error('Logged out — session invalid, reinitializing with fresh auth');
         this.state.sessionStatus = 'failed';
-        // If we had linked sessions, they're now orphaned — try to remove the device
         if (hasLinkedSessions) {
           this.cleanupOrphanedLinkedDevices();
         }
+        // Clear pending sessions on logout
+        if (hasPendingSessions) {
+          for (const [sessionId] of this.pendingPairingSessions) {
+            const record = sessionStore.get(sessionId);
+            if (record && record.status !== 'connected') {
+              sessionStore.update(sessionId, { status: 'failed' });
+            }
+          }
+          this.pendingPairingSessions.clear();
+        }
         this.clearGlobalAuth();
+        this.releasePairingLock();
         this.scheduleReconnect();
       } else if (statusCode === DisconnectReason.connectionReplaced) {
         log.warn('Connection replaced — another instance connected');
@@ -699,6 +798,7 @@ class WhatsAppManager {
           this.cleanupOrphanedLinkedDevices();
         }
         this.clearGlobalAuth();
+        this.releasePairingLock();
         this.scheduleReconnect();
       } else if (statusCode === DisconnectReason.restartRequired) {
         // ── THIS IS THE NORMAL RESTART AFTER PAIRING ──
@@ -706,22 +806,53 @@ class WhatsAppManager {
         log.info('Restart required (normal after pairing) — reconnecting immediately, keeping auth');
         this.scheduleReconnect(1000);
       } else if (statusCode === DisconnectReason.connectionClosed) {
-        log.info('Connection closed (normal) — reconnecting');
-        if (!hasLinkedSessions) {
+        // ── RECOVERABLE: Connection closed (transient network issue) ──
+        // If we have pending or linked sessions, the pairing may still succeed
+        log.info({
+          hasPendingSessions,
+          hasLinkedSessions,
+        }, 'Connection closed (recoverable) — reconnecting');
+        // Only clear auth if there are NO pending/linked sessions
+        if (!hasLinkedSessions && !hasPendingSessions) {
           this.clearGlobalAuth();
+        } else {
+          log.info('Preserving auth — active pairing session may recover on reconnect');
+        }
+        // Release pairing lock only if no pending/linked sessions
+        if (this._pairingLock && !hasPendingSessions && !hasLinkedSessions) {
+          this.releasePairingLock();
         }
         this.scheduleReconnect();
       } else if (statusCode === 408) { // timedOut
-        log.warn('Connection timed out — clearing auth and reconnecting');
-        if (hasLinkedSessions) {
-          this.cleanupOrphanedLinkedDevices();
+        // ── RECOVERABLE: Timeout (server busy, can retry) ──
+        log.warn({
+          hasPendingSessions,
+          hasLinkedSessions,
+        }, 'Connection timed out (recoverable) — reconnecting');
+        if (!hasLinkedSessions && !hasPendingSessions) {
+          this.clearGlobalAuth();
+        } else {
+          log.info('Preserving auth — active pairing session may recover on reconnect');
         }
-        this.clearGlobalAuth();
+        if (this._pairingLock && !hasPendingSessions && !hasLinkedSessions) {
+          this.releasePairingLock();
+        }
         this.scheduleReconnect();
       } else {
-        log.warn({ statusCode, reason }, 'Unexpected disconnect — reconnecting');
-        if (!hasLinkedSessions) {
+        // ── Unknown disconnect — treat as recoverable if we have sessions ──
+        log.warn({
+          statusCode,
+          reason,
+          hasPendingSessions,
+          hasLinkedSessions,
+        }, 'Unexpected disconnect — reconnecting');
+        if (!hasLinkedSessions && !hasPendingSessions) {
           this.clearGlobalAuth();
+        } else {
+          log.info('Preserving auth — active pairing session may recover on reconnect');
+        }
+        if (this._pairingLock && !hasPendingSessions && !hasLinkedSessions) {
+          this.releasePairingLock();
         }
         this.scheduleReconnect();
       }
@@ -911,6 +1042,9 @@ class WhatsAppManager {
     // Clear session tracking
     this.linkedSessions.clear();
     this.pendingPairingSessions.clear();
+
+    // Clear pairing expiry timer — pairing succeeded
+    this.clearPairingExpiryTimer();
 
     // Release pairing lock
     this.releasePairingLock();
@@ -1128,8 +1262,11 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
   // ==========================================================================
   private scheduleReconnect(delayMs?: number): void {
     if (this.isShuttingDown) return;
-    if (this._pairingLock && this.linkedSessions.size === 0) {
-      log.info('Skipping reconnect — pairing is in progress');
+    // Only skip reconnect if pairing lock is held AND there are no sessions
+    // (pending or linked) that need recovery. If there ARE pending/linked
+    // sessions, we MUST reconnect to give them a chance to complete.
+    if (this._pairingLock && this.linkedSessions.size === 0 && this.pendingPairingSessions.size === 0) {
+      log.info('Skipping reconnect — pairing lock held with no sessions to recover');
       return;
     }
 
