@@ -195,21 +195,12 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
         authDir
       );
 
-      // Update session
+      // Update session status — use waiting_connect immediately since
+      // the code has been generated and we're now waiting for the user to link
       sessionStore.update(session.id, {
-        status: 'waiting_pairing',
+        status: 'waiting_connect',
         pairingCode,
       });
-
-      // Also update to waiting_connect after a short delay
-      // This signals the frontend that we're now waiting for the user to link
-      setTimeout(() => {
-        const currentSession = sessionStore.get(session.id);
-        if (currentSession && currentSession.status === 'waiting_pairing') {
-          sessionStore.update(session.id, { status: 'waiting_connect' });
-          log.info({ sessionId: session.id }, 'Session status updated to waiting_connect — waiting for user to link');
-        }
-      }, 3000);
 
       log.info({
         sessionId: session.id,
@@ -225,7 +216,7 @@ router.post('/pairing-code', async (req: Request, res: Response) => {
           sessionId: session.id,
           pairingCode,
           phoneNumber: cleanPhone,
-          status: 'waiting_pairing',
+          status: 'waiting_connect',
           expiresIn: 120,
         },
       });
@@ -341,7 +332,7 @@ router.get('/session/:id', (req: Request<{ id: string }>, res: Response) => {
       sessionId: record.id,
       status: record.status,
       phoneNumber: record.phoneNumber,
-      pairingCode: record.status === 'waiting_pairing' ? record.pairingCode : undefined,
+      pairingCode: (record.status === 'waiting_pairing' || record.status === 'waiting_connect') ? record.pairingCode : undefined,
       qrCode: record.status === 'waiting_qr' ? record.qrCode : undefined,
       createdAt: new Date(record.createdAt).toISOString(),
       connectedAt: record.connectedAt ? new Date(record.connectedAt).toISOString() : undefined,
