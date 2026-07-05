@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'fs';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from 'crypto';
 import { createLogger } from './logger';
 import { config } from './config';
 
@@ -22,6 +23,8 @@ export interface SessionRecord {
   connectedAt?: number;
   creds?: any;                  // WhatsApp credentials after connection
   sessionData?: Record<string, any>; // Full session data (all auth files)
+  caltexSessionId?: string;     // Human-readable Session ID for bot deployment (e.g. CALTEX-A1B2-C3D4)
+  onboardingSent?: boolean;     // Whether the WhatsApp onboarding message was sent
 }
 
 class SessionStore {
@@ -187,6 +190,40 @@ class SessionStore {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
     }
+  }
+
+  /** Generate a unique CALTEX Session ID (human-readable, for bot deployment) */
+  generateCaltexSessionId(): string {
+    // Format: CALTEX-XXXX-XXXX where X is uppercase alphanumeric
+    // Use crypto.randomBytes for strong uniqueness
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I,O,0,1 to avoid confusion
+    const generateSegment = (len: number): string => {
+      const bytes = randomBytes(len);
+      let seg = '';
+      for (let i = 0; i < len; i++) {
+        seg += chars[bytes[i] % chars.length];
+      }
+      return seg;
+    };
+
+    // Generate and check uniqueness
+    let sessionId: string;
+    let attempts = 0;
+    do {
+      sessionId = `CALTEX-${generateSegment(4)}-${generateSegment(4)}`;
+      attempts++;
+      // Check no existing session has this caltexSessionId
+      const exists = Array.from(this.sessions.values()).some(s => s.caltexSessionId === sessionId);
+      if (!exists) break;
+    } while (attempts < 100);
+
+    log.info({ caltexSessionId: sessionId }, '🔑 Generated unique CALTEX Session ID');
+    return sessionId;
+  }
+
+  /** Find a session by its CALTEX Session ID */
+  findByCaltexSessionId(caltexSessionId: string): SessionRecord | undefined {
+    return Array.from(this.sessions.values()).find(s => s.caltexSessionId === caltexSessionId);
   }
 }
 

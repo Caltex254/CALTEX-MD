@@ -17,6 +17,9 @@ import {
   Download,
   FileJson,
   AlertTriangle,
+  ExternalLink,
+  BookOpen,
+  PartyPopper,
 } from 'lucide-react'
 import Image from 'next/image'
 
@@ -137,6 +140,9 @@ export default function ScanPage() {
   const [qrRefreshing, setQrRefreshing] = useState(false)
   const [step, setStep] = useState<Step>('input')
   const [sessionData, setSessionData] = useState<string>('')
+  const [caltexSessionId, setCaltexSessionId] = useState<string>('')
+  const [showGuide, setShowGuide] = useState(false)
+  const [showSuccessAnim, setShowSuccessAnim] = useState(false)
   const [pollCount, setPollCount] = useState(0)
   const [pageLoaded, setPageLoaded] = useState(false)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
@@ -200,6 +206,9 @@ export default function ScanPage() {
       if (data.success && data.data?.sessionString) {
         setSessionData(data.data.sessionString)
       }
+      if (data.data?.caltexSessionId) {
+        setCaltexSessionId(data.data.caltexSessionId)
+      }
     } catch (err) {
       console.error('Failed to fetch session data:', err)
     }
@@ -231,6 +240,12 @@ export default function ScanPage() {
             // Fallback: fetch session data separately
             fetchSessionData(sid)
           }
+          // Extract CALTEX Session ID from polling response
+          if (data.data.caltexSessionId) {
+            setCaltexSessionId(data.data.caltexSessionId)
+          }
+          // Trigger success animation
+          setShowSuccessAnim(true)
           setStep('connected')
         } else if (data.success && data.data?.status === 'failed') {
           if (pollingRef.current) {
@@ -354,6 +369,12 @@ export default function ScanPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const copySessionId = () => {
+    navigator.clipboard.writeText(caltexSessionId)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   const downloadSession = () => {
     const blob = new Blob([sessionData], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -374,64 +395,275 @@ export default function ScanPage() {
     setSessionId('')
     setError('')
     setSessionData('')
+    setCaltexSessionId('')
+    setShowGuide(false)
+    setShowSuccessAnim(false)
     setPollCount(0)
   }
 
   // Connected session display (shared between pairing and QR)
   const ConnectedPanel = () => (
-    <div className="glass-card rounded-2xl border border-green-500/30 p-6 space-y-5 animate-fade-in" style={{ boxShadow: '0 0 30px rgba(37,211,102,0.12)' }}>
-      <div className="flex items-center gap-3">
-        <div className="relative">
-          <CheckCircle2 className="h-10 w-10" style={{ color: '#25D366' }} />
-          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-ping" style={{ backgroundColor: '#25D366' }} />
+    <div className="space-y-4 animate-fade-in">
+      {/* Success Header with confetti-like animation */}
+      <div
+        className="glass-card rounded-2xl border p-6 space-y-5 relative overflow-hidden"
+        style={{
+          borderColor: 'rgba(37,211,102,0.3)',
+          boxShadow: '0 0 40px rgba(37,211,102,0.12), 0 0 80px rgba(0,229,255,0.06)',
+        }}
+      >
+        {/* Animated success glow */}
+        {showSuccessAnim && (
+          <div className="absolute inset-0 pointer-events-none success-glow-anim" />
+        )}
+
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="relative">
+            <div
+              className="h-12 w-12 rounded-full flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(37,211,102,0.2), rgba(0,229,255,0.15))',
+                boxShadow: '0 0 20px rgba(37,211,102,0.3)',
+              }}
+            >
+              <PartyPopper className="h-6 w-6" style={{ color: '#25D366' }} />
+            </div>
+            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-ping" style={{ backgroundColor: '#25D366' }} />
+          </div>
+          <div>
+            <h3
+              className="font-bold text-xl"
+              style={{
+                background: 'linear-gradient(135deg, #25D366, #00E5FF)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              Session Connected!
+            </h3>
+            <p className="text-sm text-slate-400">Your WhatsApp is linked. Your Session ID has been sent to your WhatsApp.</p>
+          </div>
         </div>
-        <div>
-          <h3 className="font-bold text-white text-xl">Session Connected!</h3>
-          <p className="text-sm text-slate-400">Your WhatsApp is linked. Download your session below.</p>
+
+        {/* CALTEX Session ID — the star of the show */}
+        {caltexSessionId ? (
+          <div
+            className="rounded-xl p-5 space-y-3 relative overflow-hidden"
+            style={{
+              background: 'linear-gradient(135deg, rgba(0,229,255,0.08), rgba(108,59,255,0.06), rgba(255,193,7,0.04))',
+              border: '1px solid rgba(0,229,255,0.2)',
+              boxShadow: '0 0 25px rgba(0,229,255,0.08)',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-medium" style={{ color: '#00E5FF' }}>
+                🔑 YOUR SESSION ID
+              </p>
+              <span
+                className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                style={{
+                  color: '#25D366',
+                  background: 'rgba(37,211,102,0.12)',
+                  border: '1px solid rgba(37,211,102,0.2)',
+                }}
+              >
+                Step 1 Complete
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <p
+                className="text-2xl sm:text-3xl font-mono font-bold tracking-wider flex-1"
+                style={{
+                  color: '#00E5FF',
+                  textShadow: '0 0 20px rgba(0,229,255,0.4), 0 0 40px rgba(108,59,255,0.2)',
+                }}
+              >
+                {caltexSessionId}
+              </p>
+              <button
+                onClick={copySessionId}
+                className="p-3 rounded-xl transition-all hover:scale-105 active:scale-95 shrink-0"
+                style={{
+                  background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
+                  boxShadow: '0 4px 15px rgba(0,229,255,0.3)',
+                }}
+                title="Copy Session ID"
+              >
+                {copied ? (
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                ) : (
+                  <Copy className="h-5 w-5 text-white" />
+                )}
+              </button>
+            </div>
+            {copied && (
+              <p className="text-xs animate-fade-in" style={{ color: '#25D366' }}>
+                ✓ Session ID copied to clipboard!
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Generating your Session ID...
+          </div>
+        )}
+
+        {/* Action buttons row */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={copySessionId}
+            disabled={!caltexSessionId}
+            className="py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            style={{
+              background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
+              boxShadow: '0 4px 15px rgba(0,229,255,0.3)',
+            }}
+          >
+            {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? 'Copied!' : 'Copy Session ID'}
+          </button>
+          <button
+            onClick={() => setShowGuide(!showGuide)}
+            className="py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, #6C3BFF, #FFC107)',
+              boxShadow: '0 4px 15px rgba(108,59,255,0.3)',
+            }}
+          >
+            <BookOpen className="h-4 w-4" />
+            {showGuide ? 'Hide Guide' : 'Deployment Guide'}
+          </button>
+        </div>
+
+        {/* Secondary actions */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={downloadSession}
+            disabled={!sessionData}
+            className="py-2.5 rounded-xl border border-white/12 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Download JSON
+          </button>
+          <button
+            onClick={copySessionData}
+            disabled={!sessionData}
+            className="py-2.5 rounded-xl border border-white/12 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          >
+            <FileJson className="h-4 w-4" />
+            Copy Full Session
+          </button>
+        </div>
+
+        {/* WhatsApp message indicator */}
+        <div
+          className="flex items-center gap-2 rounded-lg px-3 py-2"
+          style={{
+            background: 'rgba(37,211,102,0.06)',
+            border: '1px solid rgba(37,211,102,0.12)',
+          }}
+        >
+          <Smartphone className="h-3.5 w-3.5" style={{ color: '#25D366' }} />
+          <span className="text-xs text-slate-400">Onboarding message sent to your WhatsApp with this Session ID</span>
         </div>
       </div>
 
-      {sessionData ? (
-        <div className="space-y-3">
-          <div className="glass-card rounded-xl p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-medium mb-2">Session ID</p>
-            <p className="text-sm font-mono break-all" style={{ color: '#00E5FF' }}>{sessionId}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={copySessionData}
-              className="py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+      {/* Deployment Guide — expandable */}
+      {showGuide && (
+        <div
+          className="glass-card rounded-2xl p-6 space-y-4 animate-fade-in"
+          style={{
+            border: '1px solid rgba(108,59,255,0.2)',
+            boxShadow: '0 0 30px rgba(108,59,255,0.08)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
               style={{
-                background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
-                boxShadow: '0 4px 15px rgba(0,229,255,0.3)',
+                background: 'linear-gradient(135deg, rgba(108,59,255,0.2), rgba(255,193,7,0.12))',
               }}
             >
-              {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copied!' : 'Copy Session'}
-            </button>
-            <button
-              onClick={downloadSession}
-              className="py-3 rounded-xl border border-white/15 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <Download className="h-4 w-4" />
-              Download JSON
-            </button>
+              <BookOpen className="h-5 w-5" style={{ color: '#9C4DFF' }} />
+            </div>
+            <div>
+              <h4 className="font-bold text-white text-lg">Deployment Guide</h4>
+              <p className="text-xs text-slate-400">Step 2 of 2 — Activate your bot</p>
+            </div>
           </div>
-          <div className="glass-card rounded-xl p-4 space-y-2">
-            <p className="text-sm font-medium flex items-center gap-2">
-              <FileJson className="h-4 w-4" style={{ color: '#00E5FF' }} /> How to use your session:
+
+          <ol className="space-y-3">
+            {[
+              {
+                step: '1',
+                title: 'Fork or download the official CALTEX MD repository',
+                desc: 'Visit the GitHub repository and fork it to your account, or download the source code.',
+              },
+              {
+                step: '2',
+                title: 'Choose your hosting platform',
+                desc: 'Deploy to Render, Heroku, Railway, Pterodactyl Panel, a VPS, or any Node.js-supported hosting.',
+              },
+              {
+                step: '3',
+                title: 'Find the SESSION_ID environment variable',
+                desc: 'During deployment setup, locate the environment variable named SESSION_ID (or SESSION_DATA).',
+              },
+              {
+                step: '4',
+                title: 'Paste your Session ID',
+                desc: caltexSessionId
+                  ? `Set SESSION_ID to: ${caltexSessionId}`
+                  : 'Copy the Session ID shown above and paste it as the value.',
+              },
+              {
+                step: '5',
+                title: 'Complete deployment',
+                desc: 'Finish the deployment process. Your bot will start automatically.',
+              },
+              {
+                step: '6',
+                title: 'Bot connects automatically',
+                desc: 'Once deployed, your CALTEX MD bot will automatically connect to this WhatsApp account.',
+              },
+            ].map((item) => (
+              <li key={item.step} className="flex items-start gap-3">
+                <span
+                  className="flex items-center justify-center h-7 w-7 rounded-full text-xs font-bold shrink-0 mt-0.5"
+                  style={{
+                    background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
+                    boxShadow: '0 2px 8px rgba(0,229,255,0.3)',
+                    color: '#081C3A',
+                  }}
+                >
+                  {item.step}
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-white">{item.title}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          {/* Security warning */}
+          <div
+            className="rounded-xl p-3"
+            style={{
+              background: 'rgba(255,193,7,0.06)',
+              border: '1px solid rgba(255,193,7,0.12)',
+            }}
+          >
+            <p className="text-xs flex items-start gap-2" style={{ color: '#FFC107' }}>
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                <b>Important:</b> Keep your Session ID private. Never share it with anyone.
+                Anyone with this Session ID may be able to control your bot.
+                If compromised, generate a new session immediately.
+              </span>
             </p>
-            <ol className="space-y-1 text-sm text-slate-300 list-decimal list-inside">
-              <li>Copy or download the session data above</li>
-              <li>Set it as the <code className="bg-black/30 px-1 rounded" style={{ color: '#00E5FF' }}>SESSION_DATA</code> environment variable</li>
-              <li>Deploy the CALTEX MD bot — it will auto-connect using this session</li>
-            </ol>
           </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Fetching session data...
         </div>
       )}
     </div>
@@ -1213,6 +1445,26 @@ export default function ScanPage() {
         input:focus {
           border-color: rgba(0,229,255,0.5) !important;
           box-shadow: 0 0 0 1px rgba(0,229,255,0.2);
+        }
+
+        /* Success glow animation */
+        @keyframes success-glow {
+          0% {
+            opacity: 1;
+            background: radial-gradient(ellipse at center, rgba(37,211,102,0.15) 0%, rgba(0,229,255,0.08) 30%, transparent 70%);
+          }
+          50% {
+            opacity: 0.6;
+            background: radial-gradient(ellipse at center, rgba(0,229,255,0.12) 0%, rgba(108,59,255,0.08) 30%, transparent 70%);
+          }
+          100% {
+            opacity: 0;
+            background: radial-gradient(ellipse at center, rgba(108,59,255,0.1) 0%, rgba(255,193,7,0.05) 30%, transparent 70%);
+          }
+        }
+
+        .success-glow-anim {
+          animation: success-glow 2.5s ease-out forwards;
         }
       `}</style>
     </div>

@@ -8,6 +8,8 @@ import { sessionStore } from './session-store';
 import { whatsappManager } from './whatsapp-manager';
 import { createLogger } from './logger';
 import { config } from './config';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import QRCode from 'qrcode';
 
 const log = createLogger('routes');
@@ -336,6 +338,8 @@ router.get('/session/:id', (req: Request<{ id: string }>, res: Response) => {
       qrCode: record.status === 'waiting_qr' ? record.qrCode : undefined,
       createdAt: new Date(record.createdAt).toISOString(),
       connectedAt: record.connectedAt ? new Date(record.connectedAt).toISOString() : undefined,
+      caltexSessionId: record.status === 'connected' ? record.caltexSessionId : undefined,
+      onboardingSent: record.status === 'connected' ? record.onboardingSent : undefined,
     };
 
     // If connected, also include the session string so the frontend
@@ -349,9 +353,7 @@ router.get('/session/:id', (req: Request<{ id: string }>, res: Response) => {
         log.warn({ sessionId: id }, '⚠️ Session is connected but no session data found on disk — attempting to re-export');
         // Try to re-export from auth directory
         const authDir = sessionStore.getAuthDir(id);
-        const fs = require('fs');
-        const path = require('path');
-        if (fs.existsSync(path.join(authDir, 'creds.json'))) {
+        if (existsSync(join(authDir, 'creds.json'))) {
           log.info({ sessionId: id, authDir }, 'Auth directory exists with creds.json — data should be exportable');
         } else {
           log.error({ sessionId: id, authDir }, 'Auth directory missing creds.json — session data lost!');
@@ -464,6 +466,8 @@ router.get('/session/:id/data', (req: Request<{ id: string }>, res: Response) =>
         sessionString: sessionData,
         phoneNumber: record.phoneNumber,
         connectedAt: record.connectedAt ? new Date(record.connectedAt).toISOString() : undefined,
+        caltexSessionId: record.caltexSessionId,
+        onboardingSent: record.onboardingSent,
       },
     });
   } catch (err: any) {

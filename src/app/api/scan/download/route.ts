@@ -52,6 +52,8 @@ export async function GET(request: NextRequest) {
           sessionString: data.data.sessionString,
           phoneNumber: data.data.phoneNumber,
           connectedAt: data.data.connectedAt,
+          caltexSessionId: data.data.caltexSessionId,
+          onboardingSent: data.data.onboardingSent,
         },
       });
     }

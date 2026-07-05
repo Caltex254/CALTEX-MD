@@ -236,3 +236,17 @@ Stage Summary:
 - saveCreds() now properly awaited before file copy
 - Auto-removal of orphaned linked devices on failure
 - Both Render and Vercel deployments verified and running
+---
+Task ID: 1
+Agent: main
+Task: Add post-authentication onboarding feature
+
+Work Log:
+- Added caltexSessionId and onboardingSent to SessionRecord
+- Added generateCaltexSessionId() in session-store.ts
+- Added sendOnboardingMessage() with retry-once in whatsapp-manager.ts
+- Updated routes.ts to include caltexSessionId in responses
+- Redesigned frontend ConnectedPanel with Session ID, deployment guide, animations
+- Updated Vercel proxy to pass through new fields
+- TypeScript compiles cleanly
+

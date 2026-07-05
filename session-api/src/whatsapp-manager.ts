@@ -5,6 +5,19 @@
 // All pairing code requests reuse the same active connection.
 // Never recreates the socket per request.
 //
+// v4.1 FIXES (Post-Authentication Onboarding Message):
+//
+// NEW FEATURE: After successful WhatsApp authentication:
+//   1. Generate a unique CALTEX Session ID (CALTEX-XXXX-XXXX)
+//   2. Store the Session ID in the session record
+//   3. Automatically send a professional onboarding WhatsApp message
+//      to the user's WhatsApp account with their Session ID
+//   4. Display the Session ID on the frontend with copy/download/guide
+//   5. Retry once if message sending fails
+//   6. Auto-remove linked device if session generation fails
+//   7. Prevent duplicate onboarding messages
+//   8. Comprehensive logging at every step
+//
 // v4.0 FIXES (Post-Authentication Session Delivery):
 //
 // ROOT CAUSE: When pairing succeeds, Baileys fires:
@@ -12,15 +25,9 @@
 //   2. Connection RESTARTS (close + reconnect) ← this is normal Baileys behavior
 //   3. CB:success → creds.update → connection.update({connection:'open'})
 //
-// The old code cleared pendingPairingSessions on disconnect (step 2),
-// so when connection:open finally fired (step 3), there were no sessions
-// to capture data for. Also, saveCreds() is async (uses fs/promises writeFile)
-// but was called without await, so files weren't on disk when copied.
-//
 // FIXES:
 // 1. Track "pairing-linked" sessions separately — survive disconnects
 // 2. Don't clear pending sessions on DisconnectReason.restartRequired
-//    (this is the normal Baileys restart after pairing)
 // 3. Await saveCreds() before copying files
 // 4. Save creds synchronously with writeFileSync as a belt-and-suspenders
 // 5. Capture session data on connection:open with proper async handling
@@ -834,24 +841,57 @@ class WhatsAppManager {
           log.error({ sessionId }, '❌ Step 3: Session creds.json NOT found after copy!');
         }
 
-        // Step 4: Update session status to "connected"
+        // Step 4: Generate unique CALTEX Session ID and update session status
+        const caltexSessionId = sessionStore.generateCaltexSessionId();
+        log.info({ sessionId, caltexSessionId }, '🔑 Step 4: CALTEX Session ID generated');
+
+        // Resolve actual phone number for onboarding message
+        // For QR sessions, phoneNumber may be 'qr-session' — extract from creds.me.id
+        let actualPhoneNumber = phoneNumber;
+        if (!phoneNumber || phoneNumber === 'qr-session') {
+          try {
+            const sessionCredsPath = join(sessionAuthDir, 'creds.json');
+            if (existsSync(sessionCredsPath)) {
+              const sessionCreds = JSON.parse(readFileSync(sessionCredsPath, 'utf-8'));
+              const meId = sessionCreds?.me?.id;
+              if (meId) {
+                // me.id format: "254712345678@s.whatsapp.net" or "254712345678:0@s.whatsapp.net"
+                actualPhoneNumber = meId.split('@')[0].split(':')[0];
+                log.info({ sessionId, meId, extractedPhone: actualPhoneNumber }, '📱 Extracted phone number from creds for QR session');
+              }
+            }
+          } catch (err: any) {
+            log.warn({ err: err.message, sessionId }, 'Failed to extract phone number from session creds');
+          }
+        }
+
         sessionStore.update(sessionId, {
           status: 'connected',
           connectedAt: Date.now(),
+          caltexSessionId,
+          phoneNumber: actualPhoneNumber !== phoneNumber ? actualPhoneNumber : undefined,
         });
 
-        log.info({ sessionId, phoneNumber }, '✅ Step 4: Session marked as CONNECTED — credentials saved');
+        log.info({ sessionId, phoneNumber: actualPhoneNumber, caltexSessionId }, '✅ Step 4: Session marked as CONNECTED — credentials saved, CALTEX Session ID stored');
 
-        // Step 5: Resolve any waiting connection promises
+        // Step 5: Send onboarding WhatsApp message with Session ID
+        if (actualPhoneNumber && actualPhoneNumber !== 'qr-session') {
+          await this.sendOnboardingMessage(sessionId, actualPhoneNumber, caltexSessionId);
+        } else {
+          log.warn({ sessionId }, '⚠️ Step 5: Cannot send onboarding message — no valid phone number available');
+        }
+
+        // Step 6: Resolve any waiting connection promises
         const resolver = this.connectionOpenResolvers.get(sessionId);
         if (resolver) {
-          log.info({ sessionId }, '✅ Step 5: Resolving connection promise — session data ready for frontend');
+          log.info({ sessionId }, '✅ Step 6: Resolving connection promise — session data ready for frontend');
           resolver.resolve(true);
         }
 
         log.info({
           sessionId,
           phoneNumber,
+          caltexSessionId,
         }, '🎉 SESSION DELIVERY COMPLETE — session is now available for frontend polling');
       } catch (err: any) {
         log.error({ err: err.message, sessionId }, '❌ Failed to capture session data — marking as failed');
@@ -875,9 +915,132 @@ class WhatsAppManager {
     // Release pairing lock
     this.releasePairingLock();
 
-    // Step 6: Reset the global socket for the next pairing request
-    log.info('Step 6: Resetting global socket for next pairing request...');
+    // Step 7: Reset the global socket for the next pairing request
+    log.info('Step 7: Resetting global socket for next pairing request...');
     this.resetForNextPairing();
+  }
+
+  // ==========================================================================
+  // PRIVATE — Send onboarding WhatsApp message after successful auth
+  //
+  // This sends the professional onboarding message to the user's WhatsApp
+  // account immediately after they successfully link their device.
+  // Includes retry-once logic if the first send fails.
+  // Prevents duplicate messages by checking onboardingSent flag.
+  // ==========================================================================
+  private async sendOnboardingMessage(
+    sessionId: string,
+    phoneNumber: string,
+    caltexSessionId: string
+  ): Promise<void> {
+    // Prevent duplicate messages
+    const record = sessionStore.get(sessionId);
+    if (record?.onboardingSent) {
+      log.info({ sessionId, caltexSessionId }, '⏭️ Onboarding message already sent — skipping duplicate');
+      return;
+    }
+
+    if (!this.socket) {
+      log.error({ sessionId }, '❌ Cannot send onboarding message — no socket available');
+      return;
+    }
+
+    // Format the JID for the user's phone number
+    // WhatsApp JID format: <phoneNumber>@s.whatsapp.net
+    const jid = `${phoneNumber}@s.whatsapp.net`;
+
+    const message = `\u{1F916} *CALTEX MD*
+
+\u2705 *STEP 1 OF 2 COMPLETED*
+
+Congratulations! \u{1F389}
+
+Your WhatsApp account has been linked successfully to CALTEX MD.
+
+\u{1F511} *YOUR SESSION ID*
+
+${caltexSessionId}
+
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+
+\u{1F4CC} *NEXT STEP (STEP 2 OF 2)*
+
+To activate your personal CALTEX MD bot:
+
+1\uFE0F\u20E3 Fork or download the official CALTEX MD repository.
+
+2\uFE0F\u20E3 Deploy the bot to your preferred hosting platform:
+\u2022 Render
+\u2022 Heroku
+\u2022 Railway
+\u2022 Pterodactyl Panel
+\u2022 VPS
+\u2022 Any Node.js supported hosting
+
+3\uFE0F\u20E3 During deployment, locate the environment variable for the Session ID (or SESSION_ID).
+
+4\uFE0F\u20E3 Paste the Session ID shown above.
+
+5\uFE0F\u20E3 Complete deployment.
+
+6\uFE0F\u20E3 Once deployment finishes, your CALTEX MD bot will automatically connect to this WhatsApp account.
+
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+
+\u26A0\uFE0F *IMPORTANT*
+
+\u2022 Keep this Session ID private.
+\u2022 Never share it with anyone.
+\u2022 Anyone with this Session ID may be able to control your bot.
+\u2022 If compromised, generate a new session.
+
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+
+\u{1F389} Thank you for choosing CALTEX MD.
+
+Enjoy your powerful WhatsApp Multi-Device Bot!`;
+
+    log.info({ sessionId, phoneNumber, caltexSessionId, jid }, '📩 Step 5: Sending onboarding WhatsApp message...');
+
+    // Attempt to send — with one retry on failure
+    let sent = false;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await this.socket.sendMessage(jid, { text: message });
+        sent = true;
+        log.info({
+          sessionId,
+          phoneNumber,
+          caltexSessionId,
+          attempt,
+        }, '✅ Step 5: Onboarding WhatsApp message DELIVERED successfully');
+        break;
+      } catch (err: any) {
+        log.error({
+          err: err.message,
+          sessionId,
+          phoneNumber,
+          attempt,
+          maxAttempts: 2,
+        }, attempt === 1 ? '⚠️ Step 5: Failed to send onboarding message — will retry once' : '❌ Step 5: Failed to send onboarding message after retry');
+
+        if (attempt === 1) {
+          // Wait 2 seconds before retry
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
+    // Update session record with onboarding status
+    if (sent) {
+      sessionStore.update(sessionId, { onboardingSent: true });
+      log.info({ sessionId, caltexSessionId }, '✅ Step 5: onboardingSent flag set to true');
+    } else {
+      log.error({ sessionId, caltexSessionId }, '❌ Step 5: Onboarding message delivery FAILED after retry — session data still available via frontend');
+      // Don't mark session as failed — the session data is still valid,
+      // the user can still get it from the website. The WhatsApp message
+      // is a convenience, not a requirement.
+    }
   }
 
   // ==========================================================================
