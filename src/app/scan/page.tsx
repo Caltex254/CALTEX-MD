@@ -206,7 +206,7 @@ export default function ScanPage() {
   }, [])
 
   // Start polling for connection status
-  // The backend /session/:id endpoint now returns sessionString
+  // The backend /session/:id endpoint returns sessionString
   // when status is 'connected', so we can get it immediately.
   const startPolling = useCallback((sid: string) => {
     if (pollingRef.current) {
@@ -218,13 +218,13 @@ export default function ScanPage() {
       try {
         const res = await fetch(`/api/scan/qr?sessionId=${sid}`)
         const data = await res.json()
+
         if (data.success && data.data?.status === 'connected') {
           if (pollingRef.current) {
             clearInterval(pollingRef.current)
             pollingRef.current = null
           }
           // Use sessionString from the polling response directly
-          // (the backend now includes it in the status response)
           if (data.data.sessionString) {
             setSessionData(data.data.sessionString)
           } else {
@@ -240,6 +240,7 @@ export default function ScanPage() {
           setError('Connection failed. The pairing code may have expired. Please try again.')
           setStep('input')
         }
+        // For waiting_connect, waiting_pairing, waiting_qr: keep polling
       } catch {
         // keep polling
       }
