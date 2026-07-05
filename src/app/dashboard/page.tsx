@@ -71,31 +71,93 @@ function LoginGate() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{
+        background: '#060B1A',
+        backgroundImage: 'radial-gradient(ellipse at 20% 50%, rgba(0,229,255,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 50%, rgba(156,77,255,0.06) 0%, transparent 50%)',
+      }}
+    >
+      <Card
+        className="w-full max-w-sm animate-fade-in"
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(0,229,255,0.1)',
+          boxShadow: '0 0 30px rgba(0,229,255,0.05)',
+        }}
+      >
         <CardHeader className="text-center pb-2">
-          <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-cyan-500/30 mx-auto mb-3 shadow-lg shadow-cyan-500/20">
-            <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
+          <div
+            className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-3 animate-logo-pulse"
+            style={{
+              border: '2px solid rgba(0,229,255,0.3)',
+              boxShadow: '0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(156,77,255,0.1)',
+              padding: '2px',
+            }}
+          >
+            <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover rounded-full" />
           </div>
-          <CardTitle className="text-xl">CALTEX MD</CardTitle>
-          <p className="text-sm text-muted-foreground">WhatsApp Bot Dashboard</p>
+          <CardTitle
+            className="text-xl font-bold"
+            style={{
+              background: 'linear-gradient(135deg, #00E5FF, #9C4DFF, #FFC107)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            CALTEX MD
+          </CardTitle>
+          <p className="text-sm text-gray-400">WhatsApp Bot Dashboard</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
+              <Input
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="bg-black/40 border-white/10 text-white placeholder-gray-500 focus:border-cyan-500/50"
+              />
             </div>
             <div>
-              <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="bg-black/40 border-white/10 text-white placeholder-gray-500 focus:border-cyan-500/50"
+              />
             </div>
-            {error && <p className="text-sm text-destructive text-center">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+            <Button
+              type="submit"
+              className="w-full font-medium"
+              disabled={loading}
+              style={{
+                background: 'linear-gradient(135deg, #00E5FF, #9C4DFF)',
+                boxShadow: '0 4px 15px rgba(0,229,255,0.3)',
+              }}
+            >
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
               Sign In
             </Button>
           </form>
         </CardContent>
       </Card>
+      <style jsx global>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes logo-pulse {
+          0%, 100% { box-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(156,77,255,0.1); }
+          50% { box-shadow: 0 0 30px rgba(0,229,255,0.4), 0 0 60px rgba(156,77,255,0.2); }
+        }
+        .animate-fade-in { animation: fade-in 0.6s ease-out both; }
+        .animate-logo-pulse { animation: logo-pulse 3s ease-in-out infinite; }
+      `}</style>
     </div>
   )
 }
@@ -105,7 +167,7 @@ function DashboardLayout() {
   const ActivePanel = panelMap[activePanel] || OverviewPanel
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden" style={{ background: '#060B1A' }}>
       <DashboardSidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <DashboardHeader />
@@ -135,11 +197,28 @@ export default function Home() {
   // Show loading until we have a token decision
   if (typeof window === 'undefined' || (storedToken && !token)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
-        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-cyan-500/30 shadow-lg shadow-cyan-500/20">
-          <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-3"
+        style={{ background: '#060B1A' }}
+      >
+        <div
+          className="w-14 h-14 rounded-full overflow-hidden animate-logo-pulse"
+          style={{
+            border: '2px solid rgba(0,229,255,0.3)',
+            boxShadow: '0 0 20px rgba(0,229,255,0.2)',
+            padding: '2px',
+          }}
+        >
+          <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover rounded-full" />
         </div>
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-6 w-6 animate-spin" style={{ color: '#00E5FF' }} />
+        <style jsx global>{`
+          @keyframes logo-pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(0,229,255,0.2); }
+            50% { box-shadow: 0 0 30px rgba(0,229,255,0.4); }
+          }
+          .animate-logo-pulse { animation: logo-pulse 2s ease-in-out infinite; }
+        `}</style>
       </div>
     )
   }

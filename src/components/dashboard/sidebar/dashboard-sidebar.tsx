@@ -45,70 +45,134 @@ export function DashboardSidebar() {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={toggleSidebar}
         />
       )}
 
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full bg-card border-r border-border flex flex-col transition-all duration-300',
+          'fixed top-0 left-0 z-50 h-full flex flex-col transition-all duration-300',
           sidebarOpen ? 'w-64' : 'w-0 lg:w-16',
           'lg:relative lg:z-0'
         )}
+        style={{
+          background: 'rgba(6,11,26,0.95)',
+          borderRight: '1px solid rgba(0,229,255,0.08)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 h-16">
           {sidebarOpen ? (
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-full overflow-hidden border border-cyan-500/30 shrink-0">
-                <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className="w-9 h-9 rounded-full overflow-hidden shrink-0"
+                style={{
+                  border: '2px solid rgba(0,229,255,0.3)',
+                  boxShadow: '0 0 10px rgba(0,229,255,0.15)',
+                  padding: '1px',
+                }}
+              >
+                <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover rounded-full" />
               </div>
               <div className="min-w-0">
-                <h1 className="font-bold text-sm truncate">CALTEX MD</h1>
-                <p className="text-[10px] text-muted-foreground truncate">WhatsApp Bot</p>
+                <h1
+                  className="font-bold text-sm truncate"
+                  style={{
+                    background: 'linear-gradient(135deg, #00E5FF, #9C4DFF)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  CALTEX MD
+                </h1>
+                <p className="text-[10px] text-gray-500 truncate">WhatsApp Bot</p>
               </div>
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-cyan-500/30 mx-auto">
-              <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
+            <div
+              className="w-8 h-8 rounded-full overflow-hidden mx-auto"
+              style={{
+                border: '1.5px solid rgba(0,229,255,0.3)',
+                boxShadow: '0 0 8px rgba(0,229,255,0.15)',
+                padding: '1px',
+              }}
+            >
+              <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover rounded-full" />
             </div>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={toggleSidebar}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-gray-400 hover:text-white hover:bg-white/5" onClick={toggleSidebar}>
             {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4 rotate-180" />}
           </Button>
         </div>
 
-        <Separator />
+        <Separator style={{ backgroundColor: 'rgba(0,229,255,0.08)' }} />
 
         {/* Status indicator */}
         {sidebarOpen && (
           <div className="px-4 py-2">
             <div className="flex items-center gap-2 text-xs">
-              <span className={cn(
-                'h-2 w-2 rounded-full',
-                botStatus === 'connected' ? 'bg-green-500' : botStatus === 'qr' ? 'bg-yellow-500' : 'bg-red-500'
-              )} />
-              <span className="text-muted-foreground capitalize">{botStatus}</span>
-              {botStatus === 'connected' && <Badge variant="secondary" className="text-[10px] h-4 ml-auto">Online</Badge>}
+              <span className="relative flex h-2 w-2">
+                {botStatus === 'connected' && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: '#25D366' }} />
+                )}
+                <span
+                  className={cn('relative inline-flex rounded-full h-2 w-2')}
+                  style={{
+                    backgroundColor: botStatus === 'connected' ? '#25D366' : botStatus === 'qr' ? '#FFC107' : '#ef4444',
+                  }}
+                />
+              </span>
+              <span className="text-gray-400 capitalize">{botStatus}</span>
+              {botStatus === 'connected' && (
+                <Badge
+                  className="text-[10px] h-4 ml-auto"
+                  style={{
+                    background: 'rgba(37,211,102,0.15)',
+                    color: '#25D366',
+                    border: '1px solid rgba(37,211,102,0.2)',
+                  }}
+                >
+                  Online
+                </Badge>
+              )}
             </div>
           </div>
         )}
 
         {/* Navigation */}
         <ScrollArea className="flex-1 px-2 py-2">
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => { setActivePanel(item.id); if (window.innerWidth < 1024) toggleSidebar(); }}
                 className={cn(
-                  'flex items-center gap-3 w-full rounded-md px-3 py-2 text-sm transition-colors',
-                  activePanel === item.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-sm transition-all duration-200',
                   !sidebarOpen && 'justify-center px-2'
                 )}
+                style={{
+                  background: activePanel === item.id
+                    ? 'linear-gradient(135deg, rgba(0,229,255,0.15), rgba(156,77,255,0.1))'
+                    : 'transparent',
+                  color: activePanel === item.id ? '#00E5FF' : '#9ca3af',
+                  borderLeft: activePanel === item.id ? '2px solid #00E5FF' : '2px solid transparent',
+                  boxShadow: activePanel === item.id ? '0 0 10px rgba(0,229,255,0.1)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (activePanel !== item.id) {
+                    e.currentTarget.style.background = 'rgba(0,229,255,0.05)'
+                    e.currentTarget.style.color = '#e5e7eb'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activePanel !== item.id) {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.color = '#9ca3af'
+                  }
+                }}
                 title={!sidebarOpen ? item.label : undefined}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
@@ -118,17 +182,17 @@ export function DashboardSidebar() {
           </nav>
         </ScrollArea>
 
-        <Separator />
+        <Separator style={{ backgroundColor: 'rgba(0,229,255,0.08)' }} />
 
         {/* Footer */}
         <div className="p-2">
           <Button
             variant="ghost"
             size={sidebarOpen ? 'sm' : 'icon'}
-            className="w-full"
+            className="w-full text-gray-400 hover:text-white hover:bg-white/5"
             onClick={toggleDarkMode}
           >
-            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {darkMode ? <Sun className="h-4 w-4" style={{ color: '#FFC107' }} /> : <Moon className="h-4 w-4" />}
             {sidebarOpen && <span className="ml-2 text-sm">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>}
           </Button>
         </div>
