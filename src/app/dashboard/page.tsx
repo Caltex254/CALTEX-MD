@@ -74,8 +74,8 @@ function LoginGate() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center pb-2">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">
-            CT
+          <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-cyan-500/30 mx-auto mb-3 shadow-lg shadow-cyan-500/20">
+            <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
           </div>
           <CardTitle className="text-xl">CALTEX MD</CardTitle>
           <p className="text-sm text-muted-foreground">WhatsApp Bot Dashboard</p>
@@ -135,8 +135,11 @@ export default function Home() {
   // Show loading until we have a token decision
   if (typeof window === 'undefined' || (storedToken && !token)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-cyan-500/30 shadow-lg shadow-cyan-500/20">
+          <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
+        </div>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     )
   }

@@ -14,26 +14,30 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CALTEX MD - WhatsApp Bot Dashboard",
+  title: "CALTEX MD - WhatsApp Bot Session Generator",
   description:
-    "CALTEX MD is a powerful, production-ready WhatsApp Multi-Device bot with AI features, plugin system, web dashboard, and REST API.",
+    "CALTEX MD — The most powerful WhatsApp Bot Session Generator. Generate secure Pairing Codes and QR Sessions instantly.",
   keywords: [
     "CALTEX MD",
     "WhatsApp Bot",
     "Multi-Device",
     "AI Chatbot",
-    "Dashboard",
+    "Session Generator",
+    "Pairing Code",
+    "QR Code",
     "Baileys",
     "TypeScript",
   ],
-  authors: [{ name: "CALTEX MD Team" }],
+  authors: [{ name: "CALTEX MD" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/caltex-profile.png",
+    apple: "/caltex-profile.png",
   },
   openGraph: {
-    title: "CALTEX MD - WhatsApp Bot Dashboard",
-    description: "Powerful WhatsApp Multi-Device bot with AI and dashboard",
+    title: "CALTEX MD - WhatsApp Bot Session Generator",
+    description: "Generate secure Pairing Codes and QR Sessions instantly",
     type: "website",
+    images: ["/caltex-profile.png"],
   },
 };
 

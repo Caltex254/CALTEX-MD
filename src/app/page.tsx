@@ -129,8 +129,8 @@ export default function ScanPage() {
       <header className="border-b border-white/10 backdrop-blur-sm bg-black/30">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
-              CT
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center text-white font-bold text-sm overflow-hidden border border-cyan-500/30">
+              <img src="/caltex-profile.png" alt="CT" className="w-full h-full object-cover" />
             </div>
             <div>
               <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">

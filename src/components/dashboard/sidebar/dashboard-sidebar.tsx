@@ -59,15 +59,19 @@ export function DashboardSidebar() {
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 h-16">
-          {sidebarOpen && (
+          {sidebarOpen ? (
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-orange-500 flex items-center justify-center text-white font-bold text-xs shrink-0">
-                CT
+              <div className="w-8 h-8 rounded-full overflow-hidden border border-cyan-500/30 shrink-0">
+                <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
               </div>
               <div className="min-w-0">
                 <h1 className="font-bold text-sm truncate">CALTEX MD</h1>
                 <p className="text-[10px] text-muted-foreground truncate">WhatsApp Bot</p>
               </div>
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full overflow-hidden border border-cyan-500/30 mx-auto">
+              <img src="/caltex-profile.png" alt="CALTEX MD" className="w-full h-full object-cover" />
             </div>
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={toggleSidebar}>
