@@ -191,3 +191,48 @@ Stage Summary:
 - WhatsApp socket confirmed ready on Render after deploy
 - Complete flow: Generate Code → Socket stays connected → User enters code →
   connection=open → Session captured → Status=connected → Frontend receives session
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix post-authentication session delivery — frontend never receives session after successful WhatsApp link
+
+Work Log:
+- User confirmed: WhatsApp links successfully (device appears in WhatsApp) but frontend never receives session
+- Deep-audited the entire data flow from Baileys events → backend capture → API response → frontend polling
+- Analyzed Baileys source code for the exact event sequence during pairing
+
+ROOT CAUSE (Critical Discovery):
+When pairing succeeds, Baileys fires this sequence:
+1. CB:pair-success → creds.update → connection.update({isNewLogin: true})
+2. Connection RESTARTS (DisconnectReason.restartRequired) — this is NORMAL Baileys behavior
+3. CB:success → creds.update → connection.update({connection: 'open'})
+
+The old code had TWO critical bugs:
+A) On disconnect (step 2), it cleared pendingPairingSessions, so when connection:open
+   fired (step 3), there were no sessions to capture data for → early return
+B) saveCreds() is async (uses fs/promises writeFile via Mutex) but was called
+   synchronously — files weren't guaranteed on disk when copying
+
+FIXES IMPLEMENTED:
+- whatsapp-manager.ts: Complete rewrite of session capture flow
+  - Added linkedSessions Map: populated from pendingPairingSessions when isNewLogin=true
+  - linkedSessions SURVIVE the Baileys restart (not cleared on disconnect)
+  - captureSessionData() is now async — properly awaits saveCreds()
+  - Also writes creds.json synchronously as safety net from socket.authState
+  - Don't clear global auth when linked sessions exist (needed for reconnect)
+  - Don't clear linked sessions on DisconnectReason.restartRequired
+  - Socket.logout() to remove orphaned linked devices on session gen failure
+  - Comprehensive step-by-step logging (Step 1-6) in captureSessionData
+  - cleanupOrphanedLinkedDevices() for auth failures after device was linked
+- routes.ts: Session status set to waiting_connect immediately after code generation
+  - pairingCode included in response for both waiting_pairing and waiting_connect
+- Frontend: Updated polling comments, handles waiting_connect properly
+
+Stage Summary:
+- Root cause identified: Baileys connection restart after pair-success was clearing
+  pending sessions before connection:open could capture data
+- New linkedSessions tracking survives the restart
+- saveCreds() now properly awaited before file copy
+- Auto-removal of orphaned linked devices on failure
+- Both Render and Vercel deployments verified and running
