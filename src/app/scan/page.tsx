@@ -28,9 +28,9 @@ type Step = 'input' | 'generating' | 'code' | 'waiting' | 'connected'
 function MarqueeBanner() {
   return (
     <div
-      className="relative overflow-hidden border-b border-cyan-500/10"
+      className="relative overflow-hidden border-b border-cyan-400/10"
       style={{
-        background: 'linear-gradient(90deg, rgba(6,11,26,0.95), rgba(20,10,50,0.9), rgba(6,11,26,0.95))',
+        background: 'linear-gradient(90deg, rgba(8,28,58,0.95), rgba(13,43,82,0.9), rgba(8,28,58,0.95))',
       }}
     >
       <div className="marquee-container group py-2">
@@ -41,7 +41,7 @@ function MarqueeBanner() {
                 className="font-bold tracking-wider"
                 style={{
                   color: '#00E5FF',
-                  textShadow: '0 0 10px rgba(0,229,255,0.6), 0 0 30px rgba(156,77,255,0.3)',
+                  textShadow: '0 0 10px rgba(0,229,255,0.6), 0 0 30px rgba(108,59,255,0.3)',
                   fontSize: '0.7rem',
                 }}
               >
@@ -56,18 +56,18 @@ function MarqueeBanner() {
 }
 
 // ============================================================================
-// Floating Particles Component (Cyan + Purple)
+// Floating Particles Component (Cyan + Blue + Purple, slow)
 // ============================================================================
 function FloatingParticles() {
   const particles = useRef(
-    Array.from({ length: 30 }, (_, i) => ({
+    Array.from({ length: 35 }, (_, i) => ({
       id: i,
       left: Math.random() * 100,
-      size: Math.random() * 3 + 1,
-      duration: Math.random() * 15 + 10,
-      delay: Math.random() * 10,
-      opacity: Math.random() * 0.3 + 0.05,
-      isCyan: i % 2 === 0,
+      size: Math.random() * 3 + 1.5,
+      duration: Math.random() * 25 + 18, // slower: 18-43s
+      delay: Math.random() * 15,
+      opacity: Math.random() * 0.25 + 0.08,
+      color: i % 3 === 0 ? '#00E5FF' : i % 3 === 1 ? '#3B82F6' : '#6C3BFF',
     }))
   )
 
@@ -82,14 +82,39 @@ function FloatingParticles() {
             width: `${p.size}px`,
             height: `${p.size}px`,
             opacity: p.opacity,
-            backgroundColor: p.isCyan ? '#00E5FF' : '#9C4DFF',
+            backgroundColor: p.color,
             animation: `float-up ${p.duration}s linear ${p.delay}s infinite`,
-            boxShadow: p.isCyan
-              ? '0 0 4px rgba(0,229,255,0.4)'
-              : '0 0 4px rgba(156,77,255,0.4)',
+            boxShadow: `0 0 ${p.size * 2}px ${p.color}40`,
           }}
         />
       ))}
+    </div>
+  )
+}
+
+// ============================================================================
+// Aurora Effect behind Welcome section
+// ============================================================================
+function AuroraEffect() {
+  return (
+    <div className="aurora-container pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="aurora-layer aurora-1" />
+      <div className="aurora-layer aurora-2" />
+      <div className="aurora-layer aurora-3" />
+    </div>
+  )
+}
+
+// ============================================================================
+// Wave Effects (top and bottom)
+// ============================================================================
+function WaveEffect({ position }: { position: 'top' | 'bottom' }) {
+  return (
+    <div
+      className={`wave-container wave-${position} pointer-events-none fixed left-0 right-0 z-[1]`}
+    >
+      <div className="wave-line wave-line-1" />
+      <div className="wave-line wave-line-2" />
     </div>
   )
 }
@@ -344,7 +369,7 @@ export default function ScanPage() {
 
   // Connected session display (shared between pairing and QR)
   const ConnectedPanel = () => (
-    <div className="glass-card rounded-2xl border border-green-500/30 p-6 space-y-5 animate-fade-in" style={{ boxShadow: '0 0 30px rgba(37,211,102,0.1)' }}>
+    <div className="glass-card rounded-2xl border border-green-500/30 p-6 space-y-5 animate-fade-in" style={{ boxShadow: '0 0 30px rgba(37,211,102,0.12)' }}>
       <div className="flex items-center gap-3">
         <div className="relative">
           <CheckCircle2 className="h-10 w-10" style={{ color: '#25D366' }} />
@@ -352,14 +377,14 @@ export default function ScanPage() {
         </div>
         <div>
           <h3 className="font-bold text-white text-xl">Session Connected!</h3>
-          <p className="text-sm text-gray-400">Your WhatsApp is linked. Download your session below.</p>
+          <p className="text-sm text-slate-400">Your WhatsApp is linked. Download your session below.</p>
         </div>
       </div>
 
       {sessionData ? (
         <div className="space-y-3">
           <div className="glass-card rounded-xl p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500 font-medium mb-2">Session ID</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-medium mb-2">Session ID</p>
             <p className="text-sm font-mono break-all" style={{ color: '#00E5FF' }}>{sessionId}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -367,7 +392,7 @@ export default function ScanPage() {
               onClick={copySessionData}
               className="py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
               style={{
-                background: 'linear-gradient(135deg, #00E5FF, #9C4DFF)',
+                background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
                 boxShadow: '0 4px 15px rgba(0,229,255,0.3)',
               }}
             >
@@ -376,7 +401,7 @@ export default function ScanPage() {
             </button>
             <button
               onClick={downloadSession}
-              className="py-3 rounded-xl border border-white/10 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="py-3 rounded-xl border border-white/15 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <Download className="h-4 w-4" />
               Download JSON
@@ -386,15 +411,15 @@ export default function ScanPage() {
             <p className="text-sm font-medium flex items-center gap-2">
               <FileJson className="h-4 w-4" style={{ color: '#00E5FF' }} /> How to use your session:
             </p>
-            <ol className="space-y-1 text-sm text-gray-300 list-decimal list-inside">
+            <ol className="space-y-1 text-sm text-slate-300 list-decimal list-inside">
               <li>Copy or download the session data above</li>
-              <li>Set it as the <code className="bg-black/40 px-1 rounded" style={{ color: '#00E5FF' }}>SESSION_DATA</code> environment variable</li>
+              <li>Set it as the <code className="bg-black/30 px-1 rounded" style={{ color: '#00E5FF' }}>SESSION_DATA</code> environment variable</li>
               <li>Deploy the CALTEX MD bot — it will auto-connect using this session</li>
             </ol>
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-slate-400">
           <Loader2 className="h-4 w-4 animate-spin" />
           Fetching session data...
         </div>
@@ -403,9 +428,13 @@ export default function ScanPage() {
   )
 
   return (
-    <div className="min-h-screen text-white relative" style={{ background: '#060B1A' }}>
+    <div className="min-h-screen text-white relative" style={{ background: '#081C3A' }}>
       {/* Animated gradient background */}
       <div className="fixed inset-0 z-0 animated-bg" />
+
+      {/* Wave effects */}
+      <WaveEffect position="top" />
+      <WaveEffect position="bottom" />
 
       {/* Floating particles */}
       <FloatingParticles />
@@ -413,14 +442,14 @@ export default function ScanPage() {
       {/* Main content */}
       <div className={`relative z-10 transition-all duration-700 ${pageLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
         {/* Header */}
-        <header className="border-b border-white/5 backdrop-blur-xl sticky top-0 z-50" style={{ background: 'rgba(6,11,26,0.8)' }}>
+        <header className="border-b border-white/8 backdrop-blur-xl sticky top-0 z-50" style={{ background: 'rgba(8,28,58,0.85)', boxShadow: '0 1px 20px rgba(0,0,0,0.2)' }}>
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div
                 className="relative w-11 h-11 rounded-full overflow-hidden shadow-lg"
                 style={{
                   border: '2px solid rgba(0,229,255,0.4)',
-                  boxShadow: '0 0 15px rgba(0,229,255,0.2), 0 0 30px rgba(156,77,255,0.1)',
+                  boxShadow: '0 0 15px rgba(0,229,255,0.25), 0 0 30px rgba(108,59,255,0.12)',
                 }}
               >
                 <Image
@@ -435,7 +464,7 @@ export default function ScanPage() {
                 <h1
                   className="text-xl font-bold"
                   style={{
-                    background: 'linear-gradient(135deg, #00E5FF, #9C4DFF, #FFC107)',
+                    background: 'linear-gradient(135deg, #00E5FF, #6C3BFF, #FFC107)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                   }}
@@ -449,13 +478,13 @@ export default function ScanPage() {
             {/* Status indicator */}
             <div className="flex items-center gap-3">
               {apiLatency !== null && (
-                <span className="hidden sm:flex items-center gap-1 text-[10px]" style={{ color: 'rgba(0,229,255,0.4)' }}>
+                <span className="hidden sm:flex items-center gap-1 text-[10px]" style={{ color: 'rgba(0,229,255,0.5)' }}>
                   <Zap className="w-3 h-3" />
                   {apiLatency}ms
                 </span>
               )}
               {apiOnline === null ? (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400 bg-gray-400/10 px-3 py-1.5 rounded-full">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-400/10 px-3 py-1.5 rounded-full">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Checking...
                 </span>
@@ -464,9 +493,9 @@ export default function ScanPage() {
                   className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full"
                   style={{
                     color: '#25D366',
-                    background: 'rgba(37,211,102,0.1)',
-                    border: '1px solid rgba(37,211,102,0.2)',
-                    boxShadow: '0 0 10px rgba(37,211,102,0.15)',
+                    background: 'rgba(37,211,102,0.12)',
+                    border: '1px solid rgba(37,211,102,0.25)',
+                    boxShadow: '0 0 12px rgba(37,211,102,0.15)',
                   }}
                 >
                   <span className="relative flex h-2 w-2">
@@ -491,32 +520,45 @@ export default function ScanPage() {
 
         <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
           {/* Welcome Section */}
-          <div className="text-center space-y-4 animate-fade-in">
-            <div className="flex items-center justify-center gap-4 mb-3">
+          <div className="text-center space-y-4 animate-fade-in relative">
+            {/* Aurora effect behind welcome */}
+            <div className="absolute inset-0 -top-10 -bottom-10 aurora-glow pointer-events-none" />
+
+            <div className="flex items-center justify-center gap-4 mb-3 relative">
               <div className="h-px w-16" style={{ background: 'linear-gradient(to right, transparent, rgba(0,229,255,0.5))' }} />
-              <div
-                className="relative rounded-full animate-logo-pulse"
-                style={{
-                  boxShadow: '0 0 25px rgba(0,229,255,0.3), 0 0 50px rgba(156,77,255,0.15)',
-                  border: '2px solid rgba(0,229,255,0.3)',
-                  padding: '3px',
-                }}
-              >
-                <Image
-                  src="/caltex-profile.png"
-                  alt="CALTEX MD"
-                  width={72}
-                  height={72}
-                  className="rounded-full"
-                  priority
+              {/* Logo with radial glow */}
+              <div className="relative">
+                {/* Radial glow behind logo */}
+                <div
+                  className="absolute inset-0 -m-6 rounded-full animate-logo-glow"
+                  style={{
+                    background: 'radial-gradient(circle, rgba(0,229,255,0.2) 0%, rgba(108,59,255,0.1) 40%, transparent 70%)',
+                  }}
                 />
+                <div
+                  className="relative rounded-full animate-logo-pulse"
+                  style={{
+                    boxShadow: '0 0 25px rgba(0,229,255,0.35), 0 0 50px rgba(108,59,255,0.15)',
+                    border: '2px solid rgba(0,229,255,0.35)',
+                    padding: '3px',
+                  }}
+                >
+                  <Image
+                    src="/caltex-profile.png"
+                    alt="CALTEX MD"
+                    width={72}
+                    height={72}
+                    className="rounded-full"
+                    priority
+                  />
+                </div>
               </div>
-              <div className="h-px w-16" style={{ background: 'linear-gradient(to left, transparent, rgba(156,77,255,0.5))' }} />
+              <div className="h-px w-16" style={{ background: 'linear-gradient(to left, transparent, rgba(108,59,255,0.5))' }} />
             </div>
-            <h2 className="text-4xl sm:text-5xl font-bold">
+            <h2 className="text-4xl sm:text-5xl font-bold relative">
               <span
                 style={{
-                  background: 'linear-gradient(135deg, #00E5FF, #9C4DFF, #FFC107)',
+                  background: 'linear-gradient(135deg, #00E5FF, #6C3BFF, #FFC107)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}
@@ -524,7 +566,7 @@ export default function ScanPage() {
                 Welcome to CALTEX MD
               </span>
             </h2>
-            <p className="text-gray-300 text-base max-w-lg mx-auto leading-relaxed">
+            <p className="text-slate-300 text-base max-w-lg mx-auto leading-relaxed relative">
               The most powerful WhatsApp Bot Session Generator. Generate secure Pairing Codes and QR Sessions instantly.
             </p>
           </div>
@@ -536,10 +578,10 @@ export default function ScanPage() {
                 <CloudOff className="h-5 w-5 text-red-400" />
                 <div>
                   <h3 className="font-bold text-white text-sm">Session API Offline</h3>
-                  <p className="text-xs text-gray-400">The session generation service is waking up</p>
+                  <p className="text-xs text-slate-400">The session generation service is waking up</p>
                 </div>
               </div>
-              <p className="text-sm text-gray-300">
+              <p className="text-sm text-slate-300">
                 Render free tier services sleep after inactivity. The API will be back online in about 30-60 seconds. Please wait and refresh.
               </p>
             </div>
@@ -554,62 +596,15 @@ export default function ScanPage() {
                 disabled={apiOnline === false}
                 className="group relative overflow-hidden glass-card rounded-2xl p-7 text-left transition-all duration-500 hover:scale-[1.03] active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed card-float animate-card-float"
                 style={{
-                  border: '1px solid rgba(0,229,255,0.15)',
-                  boxShadow: '0 0 20px rgba(0,229,255,0.05), inset 0 1px 0 rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(0,229,255,0.18)',
+                  boxShadow: '0 0 30px rgba(0,229,255,0.08), 0 0 60px rgba(0,229,255,0.04), inset 0 1px 0 rgba(255,255,255,0.06)',
                 }}
               >
                 {/* Animated gradient border overlay */}
-                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(135deg, rgba(0,229,255,0.08), rgba(156,77,255,0.08))' }} />
+                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(135deg, rgba(0,229,255,0.1), rgba(108,59,255,0.08))' }} />
 
-                {/* Glow effect on hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-transparent to-transparent group-hover:from-cyan-500/5 group-hover:to-blue-600/5 transition-all duration-500" />
-
-                {/* Ready indicator */}
-                <span className="absolute top-3 right-3 flex items-center gap-1.5">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: '#25D366' }} />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: '#25D366' }} />
-                  </span>
-                  <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#25D366' }}>Ready</span>
-                </span>
-
-                <div className="relative z-10">
-                  <div
-                    className="w-18 h-18 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-500"
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(0,229,255,0.15), rgba(156,77,255,0.1))',
-                      width: '72px',
-                      height: '72px',
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 15px rgba(0,229,255,0.1)',
-                    }}
-                  >
-                    <Key
-                      className="h-9 w-9 transition-all duration-500"
-                      style={{ color: '#00E5FF' }}
-                    />
-                  </div>
-                  <h3 className="font-bold text-xl text-white mb-1.5 tracking-wide">PAIRING CODE</h3>
-                  <p className="text-sm text-gray-400">Connect with 8-digit code</p>
-                </div>
-
-                {/* Bottom glow bar */}
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" style={{ background: 'linear-gradient(90deg, #00E5FF, #9C4DFF)' }} />
-              </button>
-
-              {/* QR Code Card */}
-              <button
-                onClick={() => { setMethod('qr'); generateQR() }}
-                disabled={apiOnline === false}
-                className="group relative overflow-hidden glass-card rounded-2xl p-7 text-left transition-all duration-500 hover:scale-[1.03] active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed card-float animate-card-float"
-                style={{
-                  border: '1px solid rgba(156,77,255,0.15)',
-                  boxShadow: '0 0 20px rgba(156,77,255,0.05), inset 0 1px 0 rgba(255,255,255,0.05)',
-                  animationDelay: '0.15s',
-                }}
-              >
-                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(135deg, rgba(156,77,255,0.08), rgba(255,193,7,0.05))' }} />
-
-                <div className="absolute inset-0 bg-gradient-to-br from-transparent to-transparent group-hover:from-purple-500/5 group-hover:to-pink-600/5 transition-all duration-500" />
+                {/* Ambient glow on hover */}
+                <div className="absolute -inset-1 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" style={{ boxShadow: '0 0 40px rgba(0,229,255,0.12), 0 0 80px rgba(0,229,255,0.06)' }} />
 
                 {/* Ready indicator */}
                 <span className="absolute top-3 right-3 flex items-center gap-1.5">
@@ -624,10 +619,58 @@ export default function ScanPage() {
                   <div
                     className="rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-500"
                     style={{
-                      background: 'linear-gradient(135deg, rgba(156,77,255,0.15), rgba(255,193,7,0.08))',
+                      background: 'linear-gradient(135deg, rgba(0,229,255,0.18), rgba(108,59,255,0.12))',
                       width: '72px',
                       height: '72px',
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 15px rgba(156,77,255,0.1)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 18px rgba(0,229,255,0.12)',
+                    }}
+                  >
+                    <Key
+                      className="h-9 w-9 transition-all duration-500"
+                      style={{ color: '#00E5FF' }}
+                    />
+                  </div>
+                  <h3 className="font-bold text-xl text-white mb-1.5 tracking-wide">PAIRING CODE</h3>
+                  <p className="text-sm text-slate-400">Connect with 8-digit code</p>
+                </div>
+
+                {/* Bottom glow bar */}
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" style={{ background: 'linear-gradient(90deg, #00E5FF, #6C3BFF)' }} />
+              </button>
+
+              {/* QR Code Card */}
+              <button
+                onClick={() => { setMethod('qr'); generateQR() }}
+                disabled={apiOnline === false}
+                className="group relative overflow-hidden glass-card rounded-2xl p-7 text-left transition-all duration-500 hover:scale-[1.03] active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed card-float animate-card-float"
+                style={{
+                  border: '1px solid rgba(108,59,255,0.18)',
+                  boxShadow: '0 0 30px rgba(108,59,255,0.08), 0 0 60px rgba(108,59,255,0.04), inset 0 1px 0 rgba(255,255,255,0.06)',
+                  animationDelay: '0.15s',
+                }}
+              >
+                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(135deg, rgba(108,59,255,0.1), rgba(255,193,7,0.06))' }} />
+
+                {/* Ambient glow on hover */}
+                <div className="absolute -inset-1 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" style={{ boxShadow: '0 0 40px rgba(108,59,255,0.12), 0 0 80px rgba(108,59,255,0.06)' }} />
+
+                {/* Ready indicator */}
+                <span className="absolute top-3 right-3 flex items-center gap-1.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: '#25D366' }} />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: '#25D366' }} />
+                  </span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#25D366' }}>Ready</span>
+                </span>
+
+                <div className="relative z-10">
+                  <div
+                    className="rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-500"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(108,59,255,0.18), rgba(255,193,7,0.1))',
+                      width: '72px',
+                      height: '72px',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 18px rgba(108,59,255,0.12)',
                     }}
                   >
                     <QrCode
@@ -636,10 +679,10 @@ export default function ScanPage() {
                     />
                   </div>
                   <h3 className="font-bold text-xl text-white mb-1.5 tracking-wide">QR CODE</h3>
-                  <p className="text-sm text-gray-400">Scan QR with your device</p>
+                  <p className="text-sm text-slate-400">Scan QR with your device</p>
                 </div>
 
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" style={{ background: 'linear-gradient(90deg, #9C4DFF, #FFC107)' }} />
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" style={{ background: 'linear-gradient(90deg, #6C3BFF, #FFC107)' }} />
               </button>
             </div>
           )}
@@ -647,35 +690,34 @@ export default function ScanPage() {
           {/* ======== PAIRING CODE PANEL ======== */}
           {method === 'pairing' && (
             <div className="max-w-md mx-auto space-y-4 animate-fade-in">
-              <button onClick={() => { setMethod(null); resetPairing() }} className="text-sm text-gray-400 hover:text-white flex items-center gap-1 transition-colors group">
+              <button onClick={() => { setMethod(null); resetPairing() }} className="text-sm text-slate-400 hover:text-white flex items-center gap-1 transition-colors group">
                 <span className="group-hover:-translate-x-1 transition-transform">&larr;</span> Back to Scanner
               </button>
 
               {step === 'input' && (
-                <div className="glass-card rounded-2xl p-6 space-y-5" style={{ border: '1px solid rgba(0,229,255,0.15)', boxShadow: '0 0 25px rgba(0,229,255,0.05)' }}>
+                <div className="glass-card rounded-2xl p-6 space-y-5" style={{ border: '1px solid rgba(0,229,255,0.15)', boxShadow: '0 0 25px rgba(0,229,255,0.06)' }}>
                   <div className="flex items-center gap-3">
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{ background: 'linear-gradient(135deg, rgba(0,229,255,0.15), rgba(156,77,255,0.1))' }}
+                      style={{ background: 'linear-gradient(135deg, rgba(0,229,255,0.18), rgba(108,59,255,0.12))' }}
                     >
                       <Phone className="h-6 w-6" style={{ color: '#00E5FF' }} />
                     </div>
                     <div>
                       <h3 className="font-bold text-white text-lg">Pairing Code</h3>
-                      <p className="text-xs text-gray-400">Enter your WhatsApp phone number</p>
+                      <p className="text-xs text-slate-400">Enter your WhatsApp phone number</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">+</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">+</span>
                       <input
                         type="text"
                         placeholder="254712345678 (country code + number)"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
                         onKeyDown={(e) => e.key === 'Enter' && generatePairingCode()}
-                        className="w-full pl-7 pr-3 py-3.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none transition-all"
-                        style={{ focus: { borderColor: 'rgba(0,229,255,0.5)' } }}
+                        className="w-full pl-7 pr-3 py-3.5 rounded-xl bg-black/30 border border-white/12 text-white placeholder-slate-500 text-sm focus:outline-none transition-all"
                       />
                     </div>
                     <button
@@ -683,7 +725,7 @@ export default function ScanPage() {
                       disabled={loading || !phone || phone.length < 10}
                       className="px-5 py-3.5 rounded-xl text-white font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shrink-0 hover:scale-[1.02] active:scale-[0.98]"
                       style={{
-                        background: 'linear-gradient(135deg, #00E5FF, #9C4DFF)',
+                        background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
                         boxShadow: '0 4px 15px rgba(0,229,255,0.3)',
                       }}
                     >
@@ -697,18 +739,18 @@ export default function ScanPage() {
                       {error}
                     </p>
                   )}
-                  <p className="text-xs text-gray-500">Enter your number with country code, no + sign. Kenya: 2547..., US: 1..., India: 91...</p>
+                  <p className="text-xs text-slate-500">Enter your number with country code, no + sign. Kenya: 2547..., US: 1..., India: 91...</p>
                   <div className="grid grid-cols-3 gap-3 pt-2">
                     {['Enter Phone', 'Get Code', 'Enter in WhatsApp'].map((label, i) => (
-                      <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-white/5 glass-card">
+                      <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-xl glass-card">
                         <div
                           className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold"
                           style={{
-                            background: 'linear-gradient(135deg, #00E5FF, #9C4DFF)',
+                            background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
                             boxShadow: '0 2px 8px rgba(0,229,255,0.3)',
                           }}
                         >{i + 1}</div>
-                        <span className="text-xs font-medium text-gray-300">{label}</span>
+                        <span className="text-xs font-medium text-slate-300">{label}</span>
                       </div>
                     ))}
                   </div>
@@ -720,20 +762,20 @@ export default function ScanPage() {
                   <div className="relative">
                     <Loader2 className="h-14 w-14 animate-spin" style={{ color: '#00E5FF' }} />
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <Zap className="h-6 w-6" style={{ color: '#060B1A' }} />
+                      <Zap className="h-6 w-6" style={{ color: '#081C3A' }} />
                     </div>
                   </div>
-                  <p className="text-sm text-gray-300 font-medium">Generating pairing code for +{phone}...</p>
+                  <p className="text-sm text-slate-300 font-medium">Generating pairing code for +{phone}...</p>
                   {whatsappReady ? (
                     <>
                       <p className="text-xs" style={{ color: '#25D366' }}>WhatsApp service is ready</p>
-                      <p className="text-xs text-gray-500">Generating your pairing code...</p>
+                      <p className="text-xs text-slate-500">Generating your pairing code...</p>
                     </>
                   ) : (
                     <>
-                      <p className="text-xs text-gray-500">Step 1: Warming up WhatsApp service...</p>
-                      <p className="text-xs text-gray-500">Step 2: Completing security handshake...</p>
-                      <p className="text-xs text-gray-500">Step 3: Generating your pairing code...</p>
+                      <p className="text-xs text-slate-500">Step 1: Warming up WhatsApp service...</p>
+                      <p className="text-xs text-slate-500">Step 2: Completing security handshake...</p>
+                      <p className="text-xs text-slate-500">Step 3: Generating your pairing code...</p>
                       <p className="text-xs" style={{ color: '#FFC107', opacity: 0.8 }}>First request may take up to 30 seconds. Please be patient.</p>
                     </>
                   )}
@@ -755,19 +797,19 @@ export default function ScanPage() {
                     <span>Listening for WhatsApp connection...</span>
                   </div>
 
-                  <div className="bg-black/50 rounded-xl p-6 text-center space-y-2" style={{ border: '1px solid rgba(0,229,255,0.1)' }}>
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500 font-medium">Pairing Code</p>
+                  <div className="bg-black/30 rounded-xl p-6 text-center space-y-2" style={{ border: '1px solid rgba(0,229,255,0.1)' }}>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-medium">Pairing Code</p>
                     <p
                       className="text-4xl font-mono font-bold tracking-[0.3em]"
                       style={{
                         color: '#00E5FF',
-                        textShadow: '0 0 20px rgba(0,229,255,0.4), 0 0 40px rgba(156,77,255,0.2)',
+                        textShadow: '0 0 20px rgba(0,229,255,0.4), 0 0 40px rgba(108,59,255,0.2)',
                       }}
                     >
                       {pairingCode}
                     </p>
                   </div>
-                  <button onClick={copyCode} className="w-full py-2.5 rounded-xl border border-white/10 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all hover:scale-[1.01] active:scale-[0.99]">
+                  <button onClick={copyCode} className="w-full py-2.5 rounded-xl border border-white/12 text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all hover:scale-[1.01] active:scale-[0.99]">
                     {copied ? <CheckCircle2 className="h-4 w-4" style={{ color: '#25D366' }} /> : <Copy className="h-4 w-4" />}
                     {copied ? 'Copied!' : 'Copy Code'}
                   </button>
@@ -775,7 +817,7 @@ export default function ScanPage() {
                     <p className="text-sm font-medium flex items-center gap-2">
                       <Smartphone className="h-4 w-4" style={{ color: '#00E5FF' }} /> Follow these steps:
                     </p>
-                    <ol className="space-y-2 text-sm text-gray-300">
+                    <ol className="space-y-2 text-sm text-slate-300">
                       {[
                         'Open WhatsApp on your phone',
                         'Go to Settings &gt; Linked Devices',
@@ -809,13 +851,13 @@ export default function ScanPage() {
                 <div className="glass-card rounded-2xl border p-8 flex flex-col items-center gap-4 animate-fade-in" style={{ borderColor: 'rgba(0,229,255,0.15)' }}>
                   <div className="relative">
                     <Loader2 className="h-14 w-14 animate-spin" style={{ color: '#9C4DFF' }} />
-                    <Wifi className="h-5 w-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ color: '#060B1A' }} />
+                    <Wifi className="h-5 w-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ color: '#081C3A' }} />
                   </div>
-                  <p className="text-sm text-gray-300 text-center">
+                  <p className="text-sm text-slate-300 text-center">
                     Waiting for WhatsApp to confirm...<br />
                     Enter code <b style={{ color: '#00E5FF' }}>{pairingCode}</b> on your phone.
                   </p>
-                  <p className="text-xs text-gray-500">Auto-checking every 3 seconds (attempt {pollCount})</p>
+                  <p className="text-xs text-slate-500">Auto-checking every 3 seconds (attempt {pollCount})</p>
                 </div>
               )}
 
@@ -826,40 +868,40 @@ export default function ScanPage() {
           {/* ======== QR CODE PANEL ======== */}
           {method === 'qr' && (
             <div className="max-w-md mx-auto space-y-4 animate-fade-in">
-              <button onClick={() => { setMethod(null); resetPairing() }} className="text-sm text-gray-400 hover:text-white flex items-center gap-1 transition-colors group">
+              <button onClick={() => { setMethod(null); resetPairing() }} className="text-sm text-slate-400 hover:text-white flex items-center gap-1 transition-colors group">
                 <span className="group-hover:-translate-x-1 transition-transform">&larr;</span> Back to Scanner
               </button>
 
-              <div className="glass-card rounded-2xl p-6 space-y-5" style={{ border: '1px solid rgba(156,77,255,0.15)', boxShadow: '0 0 25px rgba(156,77,255,0.05)' }}>
+              <div className="glass-card rounded-2xl p-6 space-y-5" style={{ border: '1px solid rgba(108,59,255,0.15)', boxShadow: '0 0 25px rgba(108,59,255,0.06)' }}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{ background: 'linear-gradient(135deg, rgba(156,77,255,0.15), rgba(255,193,7,0.08))' }}
+                      style={{ background: 'linear-gradient(135deg, rgba(108,59,255,0.18), rgba(255,193,7,0.1))' }}
                     >
                       <QrCode className="h-6 w-6" style={{ color: '#9C4DFF' }} />
                     </div>
                     <div>
                       <h3 className="font-bold text-white text-lg">QR Code</h3>
-                      <p className="text-xs text-gray-400">Scan with WhatsApp</p>
+                      <p className="text-xs text-slate-400">Scan with WhatsApp</p>
                     </div>
                   </div>
                   <button
                     onClick={generateQR}
                     disabled={qrRefreshing}
-                    className="p-2.5 rounded-xl border border-white/10 hover:bg-white/5 transition-all hover:scale-105 active:scale-95"
+                    className="p-2.5 rounded-xl border border-white/12 hover:bg-white/5 transition-all hover:scale-105 active:scale-95"
                   >
-                    {qrRefreshing ? <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#9C4DFF' }} /> : <RefreshCw className="h-4 w-4 text-gray-400" />}
+                    {qrRefreshing ? <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#9C4DFF' }} /> : <RefreshCw className="h-4 w-4 text-slate-400" />}
                   </button>
                 </div>
 
                 {qrCode ? (
                   <div className="flex flex-col items-center gap-4">
-                    <div className="bg-white rounded-xl p-3" style={{ boxShadow: '0 0 20px rgba(156,77,255,0.1)' }}>
+                    <div className="bg-white rounded-xl p-3" style={{ boxShadow: '0 0 20px rgba(108,59,255,0.12)' }}>
                       <img src={qrCode} alt="WhatsApp QR Code" className="w-64 h-64" />
                     </div>
                     {step === 'waiting' && (
-                      <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2" style={{ color: '#9C4DFF', background: 'rgba(156,77,255,0.08)', border: '1px solid rgba(156,77,255,0.15)' }}>
+                      <div className="flex items-center gap-2 text-xs rounded-lg px-3 py-2" style={{ color: '#9C4DFF', background: 'rgba(108,59,255,0.08)', border: '1px solid rgba(108,59,255,0.15)' }}>
                         <Loader2 className="h-3 w-3 animate-spin" />
                         <span>Waiting for scan... (attempt {pollCount})</span>
                       </div>
@@ -868,7 +910,7 @@ export default function ScanPage() {
                 ) : (
                   <div className="flex flex-col items-center gap-4 py-8">
                     <Loader2 className="h-12 w-12 animate-spin" style={{ color: '#9C4DFF' }} />
-                    <p className="text-sm text-gray-400">Generating QR code...</p>
+                    <p className="text-sm text-slate-400">Generating QR code...</p>
                   </div>
                 )}
 
@@ -883,7 +925,7 @@ export default function ScanPage() {
                   <p className="text-sm font-medium flex items-center gap-2">
                     <Smartphone className="h-4 w-4" style={{ color: '#9C4DFF' }} /> How to scan:
                   </p>
-                  <ol className="space-y-1 text-sm text-gray-300 list-decimal list-inside">
+                  <ol className="space-y-1 text-sm text-slate-300 list-decimal list-inside">
                     <li>Open WhatsApp on your phone</li>
                     <li>Go to Settings &gt; Linked Devices</li>
                     <li>Tap &quot;Link a Device&quot;</li>
@@ -902,55 +944,58 @@ export default function ScanPage() {
               <div
                 className="glass-card p-5 rounded-xl text-center transition-all duration-300 hover:scale-[1.03] group cursor-default"
                 style={{
-                  border: '1px solid rgba(0,229,255,0.1)',
-                  background: 'linear-gradient(135deg, rgba(0,229,255,0.05), rgba(6,11,26,0.5))',
+                  border: '1px solid rgba(0,229,255,0.12)',
+                  background: 'linear-gradient(135deg, rgba(0,229,255,0.06), rgba(8,28,58,0.6))',
+                  boxShadow: '0 0 15px rgba(0,229,255,0.04)',
                 }}
               >
                 <div className="transition-transform duration-300 group-hover:scale-110">
                   <Shield className="h-7 w-7 mx-auto mb-2.5" style={{ color: '#00E5FF' }} />
                 </div>
-                <p className="text-xs font-medium text-gray-300">End-to-End Encrypted</p>
+                <p className="text-xs font-medium text-slate-300">End-to-End Encrypted</p>
               </div>
               <div
                 className="glass-card p-5 rounded-xl text-center transition-all duration-300 hover:scale-[1.03] group cursor-default"
                 style={{
-                  border: '1px solid rgba(255,193,7,0.1)',
-                  background: 'linear-gradient(135deg, rgba(255,193,7,0.05), rgba(6,11,26,0.5))',
+                  border: '1px solid rgba(255,193,7,0.12)',
+                  background: 'linear-gradient(135deg, rgba(255,193,7,0.06), rgba(8,28,58,0.6))',
+                  boxShadow: '0 0 15px rgba(255,193,7,0.04)',
                 }}
               >
                 <div className="transition-transform duration-300 group-hover:scale-110">
                   <Zap className="h-7 w-7 mx-auto mb-2.5" style={{ color: '#FFC107' }} />
                 </div>
-                <p className="text-xs font-medium text-gray-300">Instant Session</p>
+                <p className="text-xs font-medium text-slate-300">Instant Session</p>
               </div>
               <div
                 className="glass-card p-5 rounded-xl text-center transition-all duration-300 hover:scale-[1.03] group cursor-default"
                 style={{
-                  border: '1px solid rgba(37,211,102,0.1)',
-                  background: 'linear-gradient(135deg, rgba(37,211,102,0.05), rgba(6,11,26,0.5))',
+                  border: '1px solid rgba(37,211,102,0.12)',
+                  background: 'linear-gradient(135deg, rgba(37,211,102,0.06), rgba(8,28,58,0.6))',
+                  boxShadow: '0 0 15px rgba(37,211,102,0.04)',
                 }}
               >
                 <div className="transition-transform duration-300 group-hover:scale-110">
                   <Wifi className="h-7 w-7 mx-auto mb-2.5" style={{ color: '#25D366' }} />
                 </div>
-                <p className="text-xs font-medium text-gray-300">Multi-Device</p>
+                <p className="text-xs font-medium text-slate-300">Multi-Device</p>
               </div>
             </div>
           )}
 
           {/* Footer */}
-          <footer className="text-center pt-6 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="flex items-center justify-center gap-2 text-xs text-gray-500 flex-wrap">
+          <footer className="text-center pt-6 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-500 flex-wrap">
               <Image src="/caltex-profile.png" alt="" width={16} height={16} className="rounded-full" />
               <span>CALTEX MD v3.0</span>
-              <span className="text-gray-700">|</span>
+              <span className="text-slate-700">|</span>
               <span>Powered by Baileys</span>
-              <span className="text-gray-700">|</span>
+              <span className="text-slate-700">|</span>
               <span style={{ color: apiOnline ? '#25D366' : '#ef4444' }}>
                 API {apiOnline ? 'Online' : 'Offline'}
               </span>
             </div>
-            <p className="text-[10px] text-gray-600">
+            <p className="text-[10px] text-slate-600">
               &copy; {new Date().getFullYear()} CALTEX MD — Built with &#9760; by Caltex Wayne
             </p>
           </footer>
@@ -965,10 +1010,10 @@ export default function ScanPage() {
             opacity: 0;
           }
           10% {
-            opacity: 0.3;
+            opacity: 0.25;
           }
           90% {
-            opacity: 0.1;
+            opacity: 0.08;
           }
           100% {
             transform: translateY(-10vh) translateX(20px);
@@ -994,10 +1039,21 @@ export default function ScanPage() {
 
         @keyframes logo-pulse {
           0%, 100% {
-            box-shadow: 0 0 25px rgba(0,229,255,0.3), 0 0 50px rgba(156,77,255,0.15);
+            box-shadow: 0 0 25px rgba(0,229,255,0.35), 0 0 50px rgba(108,59,255,0.15);
           }
           50% {
-            box-shadow: 0 0 35px rgba(0,229,255,0.5), 0 0 70px rgba(156,77,255,0.25);
+            box-shadow: 0 0 35px rgba(0,229,255,0.55), 0 0 70px rgba(108,59,255,0.25);
+          }
+        }
+
+        @keyframes logo-glow {
+          0%, 100% {
+            transform: scale(1);
+            opacity: 0.6;
+          }
+          50% {
+            transform: scale(1.15);
+            opacity: 1;
           }
         }
 
@@ -1006,32 +1062,112 @@ export default function ScanPage() {
           50% { transform: translateY(-4px); }
         }
 
+        @keyframes aurora-move {
+          0% { transform: translateX(-30%) rotate(0deg); }
+          50% { transform: translateX(30%) rotate(5deg); }
+          100% { transform: translateX(-30%) rotate(0deg); }
+        }
+
+        @keyframes wave-drift {
+          0% { transform: translateX(0); }
+          50% { transform: translateX(-25%); }
+          100% { transform: translateX(0); }
+        }
+
         .animated-bg {
-          background: linear-gradient(-45deg, #060B1A, #0a1628, #0f0a1a, #060B1A, #0d0a20);
-          background-size: 400% 400%;
-          animation: gradient-shift 25s ease infinite;
+          background: linear-gradient(-45deg, #081C3A, #0D2B52, #123A6F, #1A4D8F, #123A6F, #0D2B52);
+          background-size: 600% 600%;
+          animation: gradient-shift 30s ease infinite;
+        }
+
+        /* Subtle touches of purple and cyan in the gradient */
+        .animated-bg::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(ellipse at 20% 30%, rgba(108,59,255,0.06) 0%, transparent 50%),
+            radial-gradient(ellipse at 80% 70%, rgba(0,229,255,0.04) 0%, transparent 50%),
+            radial-gradient(ellipse at 50% 50%, rgba(108,59,255,0.03) 0%, transparent 60%);
+          pointer-events: none;
         }
 
         .glass-card {
-          background: rgba(255, 255, 255, 0.03);
+          background: rgba(4,18,42,0.55);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
+        }
+
+        /* Aurora glow behind Welcome */
+        .aurora-glow {
+          background:
+            radial-gradient(ellipse 80% 50% at 50% 50%, rgba(0,229,255,0.04) 0%, transparent 50%),
+            radial-gradient(ellipse 60% 40% at 30% 60%, rgba(108,59,255,0.05) 0%, transparent 50%),
+            radial-gradient(ellipse 60% 40% at 70% 40%, rgba(26,77,143,0.06) 0%, transparent 50%);
+          animation: aurora-move 15s ease-in-out infinite;
         }
 
         .animate-fade-in {
           animation: fade-in 0.6s ease-out both;
         }
 
-        .animate-float {
-          animation: float 3s ease-in-out infinite;
-        }
-
         .animate-logo-pulse {
           animation: logo-pulse 3s ease-in-out infinite;
         }
 
+        .animate-logo-glow {
+          animation: logo-glow 4s ease-in-out infinite;
+        }
+
         .animate-card-float {
           animation: card-float 4s ease-in-out infinite;
+        }
+
+        /* Wave effects */
+        .wave-container {
+          height: 120px;
+          overflow: hidden;
+          z-index: 1;
+        }
+
+        .wave-top {
+          top: 0;
+        }
+
+        .wave-bottom {
+          bottom: 0;
+        }
+
+        .wave-line {
+          position: absolute;
+          width: 200%;
+          height: 2px;
+          border-radius: 50%;
+          filter: blur(1px);
+        }
+
+        .wave-top .wave-line-1 {
+          top: 60px;
+          background: linear-gradient(90deg, transparent, rgba(0,229,255,0.08), rgba(108,59,255,0.06), transparent);
+          animation: wave-drift 20s ease-in-out infinite;
+        }
+
+        .wave-top .wave-line-2 {
+          top: 75px;
+          background: linear-gradient(90deg, transparent, rgba(108,59,255,0.06), rgba(0,229,255,0.05), transparent);
+          animation: wave-drift 25s ease-in-out infinite reverse;
+        }
+
+        .wave-bottom .wave-line-1 {
+          bottom: 40px;
+          background: linear-gradient(90deg, transparent, rgba(0,229,255,0.06), rgba(108,59,255,0.04), transparent);
+          animation: wave-drift 22s ease-in-out infinite;
+        }
+
+        .wave-bottom .wave-line-2 {
+          bottom: 55px;
+          background: linear-gradient(90deg, transparent, rgba(108,59,255,0.05), rgba(0,229,255,0.04), transparent);
+          animation: wave-drift 28s ease-in-out infinite reverse;
         }
 
         /* Marquee */

@@ -74,14 +74,14 @@ function LoginGate() {
     <div
       className="min-h-screen flex items-center justify-center p-4"
       style={{
-        background: '#060B1A',
-        backgroundImage: 'radial-gradient(ellipse at 20% 50%, rgba(0,229,255,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 50%, rgba(156,77,255,0.06) 0%, transparent 50%)',
+        background: '#0D2B52',
+        backgroundImage: 'radial-gradient(ellipse at 20% 50%, rgba(0,229,255,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 50%, rgba(108,59,255,0.06) 0%, transparent 50%)',
       }}
     >
       <Card
         className="w-full max-w-sm animate-fade-in"
         style={{
-          background: 'rgba(255,255,255,0.03)',
+          background: 'rgba(4,18,42,0.6)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           border: '1px solid rgba(0,229,255,0.1)',
@@ -167,7 +167,7 @@ function DashboardLayout() {
   const ActivePanel = panelMap[activePanel] || OverviewPanel
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#060B1A' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: '#0D2B52' }}>
       <DashboardSidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <DashboardHeader />
@@ -199,7 +199,7 @@ export default function Home() {
     return (
       <div
         className="min-h-screen flex flex-col items-center justify-center gap-3"
-        style={{ background: '#060B1A' }}
+        style={{ background: '#0D2B52' }}
       >
         <div
           className="w-14 h-14 rounded-full overflow-hidden animate-logo-pulse"

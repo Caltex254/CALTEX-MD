@@ -48,7 +48,7 @@ export function DashboardHeader() {
     <header
       className="h-16 flex items-center justify-between px-4 gap-4"
       style={{
-        background: 'rgba(6,11,26,0.9)',
+        background: 'rgba(8,28,58,0.9)',
         borderBottom: '1px solid rgba(0,229,255,0.08)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
@@ -163,7 +163,7 @@ export function DashboardHeader() {
           <DropdownMenuContent
             align="end"
             style={{
-              background: 'rgba(6,11,26,0.95)',
+              background: 'rgba(8,28,58,0.95)',
               border: '1px solid rgba(0,229,255,0.1)',
               boxShadow: '0 0 20px rgba(0,229,255,0.1)',
             }}

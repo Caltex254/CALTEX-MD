@@ -57,7 +57,7 @@ export function DashboardSidebar() {
           'lg:relative lg:z-0'
         )}
         style={{
-          background: 'rgba(6,11,26,0.95)',
+          background: 'rgba(8,28,58,0.95)',
           borderRight: '1px solid rgba(0,229,255,0.08)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
