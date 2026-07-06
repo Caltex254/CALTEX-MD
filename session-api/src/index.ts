@@ -1,5 +1,5 @@
 // ============================================================================
-// CALTEX Session API - Main Entry Point (v2.0 — Production-Grade)
+// CALTEX Session API - Main Entry Point (v3.0 — Production-Grade)
 //
 // OPTIMIZATIONS:
 // 1. WhatsApp singleton initialized on server startup (no lazy init)
@@ -7,6 +7,8 @@
 // 3. Auto-reconnect with exponential backoff
 // 4. Warmup endpoint for pre-connection
 // 5. Fast start — ready within seconds of deployment
+// 6. Health endpoint responds immediately (even during WhatsApp init)
+// 7. Enhanced startup logging for diagnostics
 // ============================================================================
 
 import express from 'express';
@@ -78,16 +80,20 @@ app.use('/', router);
 // Root endpoint
 app.get('/', (_req, res) => {
   const waState = whatsappManager.getState();
+  const socketHealth = whatsappManager.verifySocketHealth();
+  
   res.json({
     success: true,
     data: {
       service: 'CALTEX Session API',
-      version: '2.0.0',
+      version: '3.0.0',
       description: 'Production-grade WhatsApp session generation service for CALTEX MD',
       whatsapp: {
         ready: waState.isReady,
         status: waState.sessionStatus,
         version: waState.baileysVersion,
+        socketHealthy: socketHealth.healthy,
+        socketHealthReason: socketHealth.reason,
       },
       endpoints: {
         health: 'GET /health',
@@ -126,17 +132,24 @@ const server = app.listen(config.port, () => {
     env: config.nodeEnv,
     corsOrigins: config.corsOrigins,
     sessionExpiryMinutes: config.sessionExpiryMs / 60000,
-  }, '🚀 CALTEX Session API v2.0 started');
+    nodeVersion: process.version,
+    platform: process.platform,
+  }, '🚀 CALTEX Session API v3.0 started — health endpoint ready');
 
   // ============================================================
   // CRITICAL: Initialize WhatsApp connection ON SERVER START
   // This ensures the socket is ready BEFORE any user request
   // ============================================================
   log.info('⚡ Initializing WhatsApp connection on startup...');
+  
   whatsappManager.initialize().then(() => {
-    log.info('WhatsApp initialization initiated — connection in progress');
+    log.info('✅ WhatsApp initialization initiated — connection in progress');
+    // Log socket state after init
+    setTimeout(() => {
+      whatsappManager.logSocketState();
+    }, 5000);
   }).catch((err) => {
-    log.error({ err }, 'WhatsApp initialization failed on startup — will auto-reconnect');
+    log.error({ err }, '❌ WhatsApp initialization failed on startup — will auto-reconnect');
   });
 
   // ============================================================
@@ -150,19 +163,19 @@ const server = app.listen(config.port, () => {
 // Graceful Shutdown
 // ---------------------------------------------------------------------------
 function shutdown(signal: string) {
-  log.info({ signal }, 'Shutting down...');
+  log.info({ signal }, '🛑 Shutting down...');
 
   whatsappManager.shutdown().then(() => {
     sessionStore.stopCleanup();
     server.close(() => {
-      log.info('Server closed');
+      log.info('✅ Server closed gracefully');
       process.exit(0);
     });
   });
 
   // Force exit after 10s
   setTimeout(() => {
-    log.warn('Forcing exit after timeout');
+    log.warn('⚠️ Forcing exit after timeout');
     process.exit(1);
   }, 10000);
 }

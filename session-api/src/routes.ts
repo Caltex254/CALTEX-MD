@@ -32,34 +32,41 @@ function apiKeyMiddleware(req: Request, res: Response, next: Function) {
 router.use(apiKeyMiddleware);
 
 // ---------------------------------------------------------------------------
-// GET /health — Health Check
+// GET /health — Health Check (v6.0: Enhanced diagnostics)
 // ---------------------------------------------------------------------------
 router.get('/health', (_req: Request, res: Response) => {
   const sessions = sessionStore.list();
   const active = sessions.filter(s => s.status === 'waiting_qr' || s.status === 'waiting_pairing' || s.status === 'waiting_connect');
   const connected = sessions.filter(s => s.status === 'connected');
   const waState = whatsappManager.getState();
+  const socketHealth = whatsappManager.verifySocketHealth();
 
   res.json({
     success: true,
     data: {
       status: 'healthy',
       service: 'CALTEX Session API',
-      version: '2.0.0',
+      version: '3.0.0',
       uptime: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
       whatsapp: {
         ready: waState.isReady,
         status: waState.sessionStatus,
         baileysVersion: waState.baileysVersion,
         lastConnectedAt: waState.lastConnectedAt,
         reconnectAttempts: waState.reconnectAttempts,
+        isConnecting: waState.isConnecting,
+        socketHealthy: socketHealth.healthy,
+        socketHealthReason: socketHealth.reason,
+        pairingInProgress: waState.pairingInProgress,
       },
       sessions: {
         total: sessions.length,
         active: active.length,
         connected: connected.length,
       },
-      timestamp: new Date().toISOString(),
+      // Frontend wake-up indicator
+      frontendReady: waState.isReady || waState.isConnecting,
     },
   });
 });

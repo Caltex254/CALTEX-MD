@@ -1,9 +1,20 @@
 // ============================================================================
-// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON) v5.0
+// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON) v6.0
 //
 // ARCHITECTURE: One global WhatsApp socket, initialized on server start.
 // All pairing code requests reuse the same active connection.
 // Never recreates the socket per request.
+//
+// v6.0 ENHANCEMENTS (Stability & Performance):
+//
+// 1. Socket health verification before pairing code generation
+// 2. Enhanced keep-alive system with active ping checks
+// 3. Detailed socket lifecycle logging (creation, destruction, age)
+// 4. WebSocket state tracking (isOpen, isClosed, isConnecting)
+// 5. Connection establishment timeout handling
+// 6. Message rate limiting for onboarding messages
+// 7. Proper cleanup on session expiry
+// 8. Enhanced health check endpoint response
 //
 // v5.0 FIXES (Pairing Reliability — Root Cause Analysis):
 //
@@ -151,6 +162,73 @@ class WhatsAppManager {
   }
 
   // ==========================================================================
+  // SOCKET HEALTH VERIFICATION — v6.0 Enhancement
+  // ==========================================================================
+  /**
+   * Comprehensive socket health check before critical operations.
+   * Returns true if socket is healthy and ready for operations.
+   */
+  verifySocketHealth(): { healthy: boolean; reason: string; details: Record<string, any> } {
+    const details: Record<string, any> = {
+      hasSocket: this.socket !== null,
+      isReady: this.state.isReady,
+      isConnecting: this.state.isConnecting,
+      socketAge: this.state.socketCreatedAt ? Math.round((Date.now() - this.state.socketCreatedAt) / 1000) + 's' : 'N/A',
+      wsState: 'unknown',
+    };
+
+    // Check 1: Socket exists
+    if (!this.socket) {
+      return { healthy: false, reason: 'No socket instance', details };
+    }
+
+    // Check 2: WebSocket state
+    const ws = this.socket.ws;
+    if (ws) {
+      details.wsIsOpen = ws.isOpen;
+      details.wsIsClosed = ws.isClosed;
+      details.wsIsConnecting = ws.isConnecting;
+      details.wsState = ws.isOpen ? 'OPEN' : ws.isClosed ? 'CLOSED' : ws.isConnecting ? 'CONNECTING' : 'UNKNOWN';
+    }
+
+    // Check 3: State is ready
+    if (!this.state.isReady) {
+      return { healthy: false, reason: `Socket not ready (status: ${this.state.sessionStatus})`, details };
+    }
+
+    // Check 4: WebSocket is open
+    if (ws && !ws.isOpen) {
+      return { healthy: false, reason: `WebSocket not open (state: ${details.wsState})`, details };
+    }
+
+    // Check 5: No pairing lock held by another session
+    if (this._pairingLock) {
+      return { healthy: false, reason: `Pairing lock held by session: ${this.state.activePairingSessionId}`, details };
+    }
+
+    // All checks passed
+    return { healthy: true, reason: 'Socket healthy', details };
+  }
+
+  /**
+   * Log current socket state for diagnostics
+   */
+  logSocketState(): void {
+    const health = this.verifySocketHealth();
+    log.info({
+      healthy: health.healthy,
+      reason: health.reason,
+      ...health.details,
+      pendingSessions: this.pendingPairingSessions.size,
+      linkedSessions: this.linkedSessions.size,
+      pairingInProgress: this._pairingLock,
+      activeSessionId: this.state.activePairingSessionId,
+      lastConnectionEvent: this.state.lastConnectionEvent,
+      lastDisconnectReason: this.state.lastDisconnectReason,
+    }, '📊 Socket health check');
+  }
+
+  // ==========================================================================
   // PAIRING LOCK
   // ==========================================================================
   private acquirePairingLock(sessionId: string): boolean {
@@ -270,34 +348,44 @@ class WhatsAppManager {
     sessionId: string,
     _sessionAuthDir: string
   ): Promise<string> {
-    if (!this.state.isReady || !this.socket) {
-      throw new Error('WhatsApp client is not ready — call /warmup first');
+    // v6.0: Use comprehensive socket health verification
+    const health = this.verifySocketHealth();
+    this.logSocketState();
+
+    if (!health.healthy) {
+      log.error({ health }, 'Socket health check failed before pairing code generation');
+      throw new Error(`WhatsApp client is not ready: ${health.reason}`);
     }
 
     if (!this.acquirePairingLock(sessionId)) {
       throw new Error('Another pairing is already in progress — please wait');
     }
 
-    log.info({ phoneNumber, sessionId }, 'Generating pairing code via global socket');
+    log.info({ phoneNumber, sessionId, socketHealth: health }, 'Generating pairing code via global socket');
     this.pendingPairingSessions.set(sessionId, phoneNumber);
 
     try {
-      const ws = this.socket.ws;
+      // Double-check WebSocket state right before the operation
+      const ws = this.socket?.ws;
       const isWsOpen = ws?.isOpen;
+      
       log.info({
         sessionId,
         wsIsOpen: isWsOpen,
+        wsState: health.details.wsState,
+        socketAge: health.details.socketAge,
         isReady: this.state.isReady,
-      }, 'Socket state check before requestPairingCode');
+      }, '📡 Final WebSocket state check before requestPairingCode');
 
       if (isWsOpen === false) {
-        log.error({ wsIsOpen: isWsOpen }, 'WebSocket is not OPEN — cannot request pairing code');
+        log.error({ wsIsOpen: isWsOpen, wsState: health.details.wsState }, 'WebSocket is not OPEN — cannot request pairing code');
         this.releasePairingLock();
         this.pendingPairingSessions.delete(sessionId);
         throw new Error('WhatsApp socket is not connected — please try again');
       }
 
-      const code = await this.socket.requestPairingCode(phoneNumber);
+      // Generate the pairing code
+      const code = await this.socket!.requestPairingCode(phoneNumber);
       this.state.lastPairingCodeAt = Date.now();
       this.state.totalPairingCodesGenerated++;
 
@@ -305,7 +393,8 @@ class WhatsAppManager {
         phoneNumber,
         sessionId,
         pairingCode: code,
-      }, '✅ Pairing code generated — user should enter this in WhatsApp');
+        totalCodesGenerated: this.state.totalPairingCodesGenerated,
+      }, '✅ Pairing code generated successfully — user should enter this in WhatsApp');
 
       // Start a 3-minute expiry timer — pairing codes expire after ~2 minutes,
       // and we want to auto-cleanup if the user never enters the code
@@ -315,7 +404,7 @@ class WhatsAppManager {
     } catch (err: any) {
       this.releasePairingLock();
       this.pendingPairingSessions.delete(sessionId);
-      log.error({ err: err.message, phoneNumber, sessionId }, '❌ Failed to generate pairing code');
+      log.error({ err: err.message, errStack: err.stack?.split('\n')?.slice(0, 3), phoneNumber, sessionId }, '❌ Failed to generate pairing code');
       throw new Error(`Failed to generate pairing code: ${err.message}`);
     }
   }

@@ -20,10 +20,12 @@ import {
   ExternalLink,
   BookOpen,
   PartyPopper,
+  Rocket,
+  Clock,
 } from 'lucide-react'
 import Image from 'next/image'
 
-type Step = 'input' | 'generating' | 'code' | 'waiting' | 'connected'
+type Step = 'warming' | 'input' | 'generating' | 'code' | 'waiting' | 'connected'
 
 // ============================================================================
 // Marquee Banner Component
@@ -123,6 +125,170 @@ function WaveEffect({ position }: { position: 'top' | 'bottom' }) {
 }
 
 // ============================================================================
+// Warmup Loading Screen Component
+// ============================================================================
+function WarmupLoadingScreen({ 
+  progress, 
+  retryCount, 
+  onRetry,
+  isRetrying 
+}: { 
+  progress: number
+  retryCount: number
+  onRetry: () => void
+  isRetrying: boolean
+}) {
+  return (
+    <div className="max-w-md mx-auto animate-fade-in">
+      <div
+        className="glass-card rounded-2xl p-8 space-y-6 relative overflow-hidden"
+        style={{
+          border: '1px solid rgba(0,229,255,0.2)',
+          boxShadow: '0 0 40px rgba(0,229,255,0.1), 0 0 80px rgba(108,59,255,0.05)',
+        }}
+      >
+        {/* Animated rocket glow */}
+        <div className="absolute inset-0 pointer-events-none rocket-glow-anim" />
+
+        {/* Rocket icon */}
+        <div className="flex justify-center relative z-10">
+          <div
+            className="relative rounded-full flex items-center justify-center animate-rocket-float"
+            style={{
+              width: '80px',
+              height: '80px',
+              background: 'linear-gradient(135deg, rgba(0,229,255,0.2), rgba(108,59,255,0.15))',
+              boxShadow: '0 0 30px rgba(0,229,255,0.3), 0 0 60px rgba(108,59,255,0.15)',
+              border: '2px solid rgba(0,229,255,0.3)',
+            }}
+          >
+            <Rocket className="h-10 w-10 animate-pulse" style={{ color: '#00E5FF' }} />
+            {/* Exhaust effect */}
+            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col gap-1">
+              <div className="w-2 h-2 rounded-full animate-exhaust" style={{ background: '#00E5FF', opacity: 0.6 }} />
+              <div className="w-1.5 h-1.5 rounded-full animate-exhaust" style={{ background: '#6C3BFF', opacity: 0.4, animationDelay: '0.2s' }} />
+              <div className="w-1 h-1 rounded-full animate-exhaust" style={{ background: '#FFC107', opacity: 0.3, animationDelay: '0.4s' }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="text-center relative z-10">
+          <h3
+            className="text-xl font-bold mb-2"
+            style={{
+              background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Preparing CALTEX MD Session Service
+          </h3>
+          <p className="text-sm text-slate-400">
+            Please wait while the secure session server starts
+          </p>
+        </div>
+
+        {/* Progress bar */}
+        <div className="relative z-10 space-y-2">
+          <div
+            className="h-2.5 rounded-full overflow-hidden"
+            style={{
+              background: 'rgba(0,0,0,0.3)',
+              border: '1px solid rgba(0,229,255,0.15)',
+            }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-300 ease-out progress-bar-shimmer"
+              style={{
+                width: `${progress}%`,
+                background: 'linear-gradient(90deg, #00E5FF, #6C3BFF, #FFC107)',
+                boxShadow: '0 0 10px rgba(0,229,255,0.4)',
+              }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-slate-500">
+            <span>{Math.round(progress)}% complete</span>
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Est. wait: 30-60 seconds
+            </span>
+          </div>
+        </div>
+
+        {/* Status messages */}
+        <div className="relative z-10 space-y-2">
+          {progress < 20 && (
+            <p className="text-xs text-center text-slate-400 animate-pulse">
+              Connecting to Render cloud infrastructure...
+            </p>
+          )}
+          {progress >= 20 && progress < 40 && (
+            <p className="text-xs text-center text-slate-400 animate-pulse">
+              Initializing secure WebSocket connection...
+            </p>
+          )}
+          {progress >= 40 && progress < 60 && (
+            <p className="text-xs text-center text-slate-400 animate-pulse">
+              Loading WhatsApp authentication modules...
+            </p>
+          )}
+          {progress >= 60 && progress < 80 && (
+            <p className="text-xs text-center text-slate-400 animate-pulse">
+              Establishing handshake with WhatsApp servers...
+            </p>
+          )}
+          {progress >= 80 && progress < 100 && (
+            <p className="text-xs text-center" style={{ color: '#00E5FF' }}>
+              Almost ready! Finalizing connection...
+            </p>
+          )}
+        </div>
+
+        {/* Retry button */}
+        {retryCount > 0 && !isRetrying && (
+          <button
+            onClick={onRetry}
+            className="relative z-10 w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, rgba(0,229,255,0.2), rgba(108,59,255,0.15))',
+              border: '1px solid rgba(0,229,255,0.2)',
+            }}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Retry Connection
+          </button>
+        )}
+
+        {/* Retry count indicator */}
+        {retryCount > 0 && (
+          <p className="text-xs text-center text-slate-500 relative z-10">
+            Auto-retry #{retryCount} in progress...
+          </p>
+        )}
+
+        {/* Render info */}
+        <div
+          className="relative z-10 rounded-xl p-3"
+          style={{
+            background: 'rgba(255,193,7,0.06)',
+            border: '1px solid rgba(255,193,7,0.12)',
+          }}
+        >
+          <p className="text-xs flex items-start gap-2" style={{ color: '#FFC107' }}>
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>
+              Render free tier services sleep after inactivity. The API automatically wakes when you visit this page.
+              No need to refresh — we&apos;ll keep trying for you.
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
 // Main Scan Page
 // ============================================================================
 export default function ScanPage() {
@@ -138,14 +304,18 @@ export default function ScanPage() {
   const [apiLatency, setApiLatency] = useState<number | null>(null)
   const [qrCode, setQrCode] = useState<string>('')
   const [qrRefreshing, setQrRefreshing] = useState(false)
-  const [step, setStep] = useState<Step>('input')
+  const [step, setStep] = useState<Step>('warming')
   const [sessionData, setSessionData] = useState<string>('')
   const [caltexSessionId, setCaltexSessionId] = useState<string>('')
   const [showGuide, setShowGuide] = useState(false)
   const [showSuccessAnim, setShowSuccessAnim] = useState(false)
   const [pollCount, setPollCount] = useState(0)
   const [pageLoaded, setPageLoaded] = useState(false)
+  const [warmupProgress, setWarmupProgress] = useState(0)
+  const [warmupRetryCount, setWarmupRetryCount] = useState(0)
+  const [isRetryingWarmup, setIsRetryingWarmup] = useState(false)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const warmupRetryRef = useRef<NodeJS.Timeout | null>(null)
 
   // Page load animation
   useEffect(() => {
@@ -153,50 +323,149 @@ export default function ScanPage() {
     return () => clearTimeout(t)
   }, [])
 
-  // Check API health on load + measure latency
-  const checkApiHealth = useCallback(async () => {
+  // ============================================================================
+  // WARMUP SYSTEM — Auto-ping /health on page load
+  // ============================================================================
+  const checkHealthAndWarmup = useCallback(async () => {
     try {
       const start = Date.now()
       const res = await fetch('/api/scan/status')
-      const data = await res.json()
       const latency = Date.now() - start
-      setApiOnline(data.data?.sessionApiOnline !== false)
+      
+      if (!res.ok) {
+        throw new Error('API not responding')
+      }
+      
+      const data = await res.json()
+      
+      // API is online
+      setApiOnline(true)
       setApiLatency(latency)
-    } catch {
+      setWarmupProgress(100)
+      
+      // Clear any retry timer
+      if (warmupRetryRef.current) {
+        clearTimeout(warmupRetryRef.current)
+        warmupRetryRef.current = null
+      }
+      
+      // Check WhatsApp status
+      if (data.data?.whatsapp?.isReady) {
+        setWhatsappReady(true)
+        setStep('input')
+      } else if (data.data?.whatsapp?.isConnecting) {
+        setWhatsappReady(false)
+        // Keep polling for WhatsApp ready
+        setTimeout(() => checkWhatsAppReady(), 3000)
+      } else {
+        // Trigger warmup
+        triggerWarmup()
+      }
+      
+      return true
+    } catch (err) {
       setApiOnline(false)
       setApiLatency(null)
+      return false
     }
   }, [])
 
-  // Warmup WhatsApp connection
-  const warmupWhatsApp = useCallback(async () => {
+  const triggerWarmup = useCallback(async () => {
+    try {
+      setIsRetryingWarmup(true)
+      const res = await fetch('/api/scan/warmup')
+      const data = await res.json()
+      
+      if (data.data?.status === 'READY') {
+        setWhatsappReady(true)
+        setStep('input')
+        setWarmupProgress(100)
+      } else {
+        // Keep polling
+        setTimeout(() => checkWhatsAppReady(), 5000)
+      }
+    } catch (err) {
+      // Will retry via the retry mechanism
+    } finally {
+      setIsRetryingWarmup(false)
+    }
+  }, [])
+
+  const checkWhatsAppReady = useCallback(async () => {
     try {
       const res = await fetch('/api/scan/warmup')
       const data = await res.json()
+      
       if (data.data?.status === 'READY') {
         setWhatsappReady(true)
-      } else {
-        setWhatsappReady(false)
-        setTimeout(() => warmupWhatsApp(), 3000)
+        setStep('input')
+        setWarmupProgress(100)
+        return
       }
-    } catch {
-      setWhatsappReady(false)
-      setTimeout(() => warmupWhatsApp(), 5000)
+      
+      // Update progress based on status
+      if (data.data?.whatsapp?.isConnecting) {
+        setWarmupProgress(Math.min(80, warmupProgress + 10))
+      }
+      
+      // Keep polling
+      setTimeout(() => checkWhatsAppReady(), 5000)
+    } catch (err) {
+      setTimeout(() => checkWhatsAppReady(), 5000)
     }
-  }, [])
+  }, [warmupProgress])
 
+  const manualRetryWarmup = useCallback(() => {
+    setWarmupRetryCount(prev => prev + 1)
+    setIsRetryingWarmup(true)
+    checkHealthAndWarmup()
+  }, [checkHealthAndWarmup])
+
+  // Initial warmup on page load
   useEffect(() => {
-    checkApiHealth()
-    const interval = setInterval(checkApiHealth, 30000)
-    return () => clearInterval(interval)
-  }, [checkApiHealth])
+    // Start warmup progress animation
+    const progressInterval = setInterval(() => {
+      if (warmupProgress < 90 && apiOnline === null) {
+        setWarmupProgress(prev => Math.min(90, prev + 2))
+      }
+    }, 1000)
 
-  // Auto-warmup as soon as API is confirmed online
+    // Start health check
+    checkHealthAndWarmup()
+
+    // Auto-retry mechanism — every 5 seconds if API is still offline
+    warmupRetryRef.current = setInterval(() => {
+      if (apiOnline === false || apiOnline === null) {
+        setWarmupRetryCount(prev => prev + 1)
+        checkHealthAndWarmup()
+      }
+    }, 5000)
+
+    return () => {
+      clearInterval(progressInterval)
+      if (warmupRetryRef.current) {
+        clearInterval(warmupRetryRef.current)
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Continuous health check when online
   useEffect(() => {
     if (apiOnline === true) {
-      warmupWhatsApp()
+      const interval = setInterval(() => {
+        fetch('/api/scan/status')
+          .then(res => res.json())
+          .then(data => {
+            setApiOnline(true)
+            if (data.data?.whatsapp?.isReady) {
+              setWhatsappReady(true)
+            }
+          })
+          .catch(() => setApiOnline(false))
+      }, 30000)
+      return () => clearInterval(interval)
     }
-  }, [apiOnline, warmupWhatsApp])
+  }, [apiOnline])
 
   // Fetch session data after connection (fallback)
   const fetchSessionData = useCallback(async (sid: string) => {
@@ -215,8 +484,6 @@ export default function ScanPage() {
   }, [])
 
   // Start polling for connection status
-  // The backend /session/:id endpoint returns sessionString
-  // when status is 'connected', so we can get it immediately.
   const startPolling = useCallback((sid: string) => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
@@ -233,18 +500,14 @@ export default function ScanPage() {
             clearInterval(pollingRef.current)
             pollingRef.current = null
           }
-          // Use sessionString from the polling response directly
           if (data.data.sessionString) {
             setSessionData(data.data.sessionString)
           } else {
-            // Fallback: fetch session data separately
             fetchSessionData(sid)
           }
-          // Extract CALTEX Session ID from polling response
           if (data.data.caltexSessionId) {
             setCaltexSessionId(data.data.caltexSessionId)
           }
-          // Trigger success animation
           setShowSuccessAnim(true)
           setStep('connected')
         } else if (data.success && data.data?.status === 'failed') {
@@ -255,7 +518,6 @@ export default function ScanPage() {
           setError('Connection failed. The pairing code may have expired. Please try again.')
           setStep('input')
         }
-        // For waiting_connect, waiting_pairing, waiting_qr: keep polling
       } catch {
         // keep polling
       }
@@ -295,8 +557,8 @@ export default function ScanPage() {
     setStep('generating')
 
     try {
-      // Auto-warmup
-      try {
+      // Ensure warmup
+      if (!whatsappReady) {
         const warmupRes = await fetch('/api/scan/warmup')
         const warmupData = await warmupRes.json()
         if (warmupData.data?.status === 'WARMING_UP') {
@@ -313,7 +575,7 @@ export default function ScanPage() {
         } else if (warmupData.data?.status === 'READY') {
           setWhatsappReady(true)
         }
-      } catch {}
+      }
 
       const res = await fetch('/api/scan/pairing-code', {
         method: 'POST',
@@ -725,7 +987,12 @@ export default function ScanPage() {
                   {apiLatency}ms
                 </span>
               )}
-              {apiOnline === null ? (
+              {step === 'warming' ? (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-400/10 px-3 py-1.5 rounded-full">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Warming...
+                </span>
+              ) : apiOnline === null ? (
                 <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-400/10 px-3 py-1.5 rounded-full">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Checking...
@@ -813,24 +1080,18 @@ export default function ScanPage() {
             </p>
           </div>
 
-          {/* API Offline Banner */}
-          {apiOnline === false && !method && (
-            <div className="max-w-lg mx-auto glass-card rounded-2xl border border-red-500/30 p-5 space-y-3 animate-fade-in" style={{ boxShadow: '0 0 20px rgba(239,68,68,0.1)' }}>
-              <div className="flex items-center gap-3">
-                <CloudOff className="h-5 w-5 text-red-400" />
-                <div>
-                  <h3 className="font-bold text-white text-sm">Session API Offline</h3>
-                  <p className="text-xs text-slate-400">The session generation service is waking up</p>
-                </div>
-              </div>
-              <p className="text-sm text-slate-300">
-                Render free tier services sleep after inactivity. The API will be back online in about 30-60 seconds. Please wait and refresh.
-              </p>
-            </div>
+          {/* ======== WARMUP LOADING SCREEN ======== */}
+          {step === 'warming' && (
+            <WarmupLoadingScreen 
+              progress={warmupProgress}
+              retryCount={warmupRetryCount}
+              onRetry={manualRetryWarmup}
+              isRetrying={isRetryingWarmup}
+            />
           )}
 
           {/* Method Cards */}
-          {!method && (
+          {step === 'input' && !method && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-lg mx-auto animate-fade-in">
               {/* Pairing Code Card */}
               <button
@@ -1181,7 +1442,7 @@ export default function ScanPage() {
           )}
 
           {/* Features Section */}
-          {!method && (
+          {step === 'input' && !method && (
             <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto animate-fade-in">
               <div
                 className="glass-card p-5 rounded-xl text-center transition-all duration-300 hover:scale-[1.03] group cursor-default"
@@ -1316,6 +1577,32 @@ export default function ScanPage() {
           100% { transform: translateX(0); }
         }
 
+        @keyframes rocket-float {
+          0%, 100% { transform: translateY(0) rotate(-5deg); }
+          50% { transform: translateY(-10px) rotate(-5deg); }
+        }
+
+        @keyframes exhaust {
+          0%, 100% { opacity: 0.3; transform: translateY(0); }
+          50% { opacity: 0.6; transform: translateY(4px); }
+        }
+
+        @keyframes rocket-glow {
+          0%, 100% {
+            opacity: 0.3;
+            background: radial-gradient(ellipse at center 60%, rgba(0,229,255,0.1) 0%, rgba(108,59,255,0.05) 30%, transparent 70%);
+          }
+          50% {
+            opacity: 0.5;
+            background: radial-gradient(ellipse at center 60%, rgba(0,229,255,0.15) 0%, rgba(108,59,255,0.08) 30%, transparent 70%);
+          }
+        }
+
+        @keyframes progress-shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+
         .animated-bg {
           background: linear-gradient(-45deg, #081C3A, #0D2B52, #123A6F, #1A4D8F, #123A6F, #0D2B52);
           background-size: 600% 600%;
@@ -1363,6 +1650,23 @@ export default function ScanPage() {
 
         .animate-card-float {
           animation: card-float 4s ease-in-out infinite;
+        }
+
+        .animate-rocket-float {
+          animation: rocket-float 3s ease-in-out infinite;
+        }
+
+        .animate-exhaust {
+          animation: exhaust 1.5s ease-in-out infinite;
+        }
+
+        .rocket-glow-anim {
+          animation: rocket-glow 4s ease-in-out infinite;
+        }
+
+        .progress-bar-shimmer {
+          animation: progress-shimmer 2s linear infinite;
+          background-size: 200% 100%;
         }
 
         /* Wave effects */
