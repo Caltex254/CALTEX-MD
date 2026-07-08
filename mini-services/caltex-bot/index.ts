@@ -281,7 +281,7 @@ class CaltexBot {
 
         // Return the latest WhatsApp QR code as a PNG image
         if (url === '/api/qr-image' && method === 'GET') {
-          const sessionId = (parsedUrl.query.sessionId as string) ?? DEFAULT_SESSION_ID;
+          const sessionId = new URL(url, 'http://localhost').searchParams.get('sessionId') ?? DEFAULT_SESSION_ID;
           const entry = this.lastQR.get(sessionId);
           if (!entry) {
             res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -329,7 +329,7 @@ class CaltexBot {
 
         // Return the latest WhatsApp QR code as JSON (raw QR string)
         if (url === '/api/qr-data' && method === 'GET') {
-          const sessionId = (parsedUrl.query.sessionId as string) ?? DEFAULT_SESSION_ID;
+          const sessionId = new URL(url, 'http://localhost').searchParams.get('sessionId') ?? DEFAULT_SESSION_ID;
           const entry = this.lastQR.get(sessionId);
           if (!entry) {
             res.writeHead(503, { 'Content-Type': 'application/json' });
