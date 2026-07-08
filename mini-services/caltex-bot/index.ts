@@ -28,6 +28,7 @@ class CaltexBot {
   private scheduler: Scheduler;
   private apiClient: APIClient;
   private httpServer: ReturnType<typeof createServer>;
+  private lastQR: Map<string, { qr: string; ts: number }> = new Map();
   private startTime: number;
   private totalMessagesProcessed = 0;
   private totalCommandsExecuted = 0;
@@ -87,6 +88,7 @@ class CaltexBot {
 
     this.connectionManager.on('qr.code', (qr: string, sessionId: string) => {
       logger.info({ sessionId }, 'QR code generated - scan with WhatsApp');
+      this.lastQR.set(sessionId, { qr, ts: Date.now() });
       this.apiClient.reportQRCode(sessionId, qr);
     });
 
@@ -269,6 +271,79 @@ class CaltexBot {
           res.end(JSON.stringify({
             message: 'QR code is displayed in the console. Check bot logs.',
             hint: 'Scan with WhatsApp > Linked Devices > Link a device',
+            endpoints: {
+              qrImage: '/api/qr-image',
+              qrData: '/api/qr-data',
+            },
+          }));
+          return;
+        }
+
+        // Return the latest WhatsApp QR code as a PNG image
+        if (url === '/api/qr-image' && method === 'GET') {
+          const sessionId = (parsedUrl.query.sessionId as string) ?? DEFAULT_SESSION_ID;
+          const entry = this.lastQR.get(sessionId);
+          if (!entry) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              error: 'No QR code available yet. QR is generated ~5s after connect.',
+              hint: 'POST /api/connect to trigger a new QR code, then retry this endpoint.',
+              sessionId,
+            }));
+            return;
+          }
+          // entry.qr is the raw QR string from Baileys; render to PNG via qrcode-terminal? No —
+          // we need the data URL. Use the 'qrcode' npm package instead (already a dep via qrcode-terminal).
+          // Fallback: build a tiny HTML page that uses an inline QR library.
+          const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>CALTEX MD - WhatsApp QR</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+  body { margin:0; background:#0b0f17; color:#e6e6e6; font-family:-apple-system,system-ui,sans-serif; display:flex; flex-direction:column; align-items:center; padding:24px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .meta { color:#8b95a7; font-size:12px; margin-bottom:16px; }
+  #qr { background:#fff; padding:16px; border-radius:12px; }
+  .hint { margin-top:16px; font-size:13px; line-height:1.6; max-width:480px; text-align:center; }
+  code { background:#1a1f2e; padding:2px 6px; border-radius:4px; }
+</style></head>
+<body>
+  <h1>CALTEX MD — WhatsApp QR</h1>
+  <div class="meta">sessionId: ${sessionId} • generated: ${new Date(entry.ts).toISOString()}</div>
+  <canvas id="qr"></canvas>
+  <div class="hint">
+    Open WhatsApp on your phone → <b>Settings → Linked Devices → Link a Device</b><br>
+    Point your camera at the QR code on the left.<br><br>
+    <button onclick="location.reload()" style="padding:8px 16px;background:#22c55e;color:#fff;border:0;border-radius:6px;cursor:pointer;font-weight:600;">Refresh QR</button>
+  </div>
+  <script>
+    QRCode.toCanvas(document.getElementById('qr'), ${JSON.stringify(entry.qr)}, { width: 256, margin: 1 }, function (err) {
+      if (err) document.body.innerHTML = '<pre style="color:#f87171">QR render error: ' + err.message + '</pre>';
+    });
+  </script>
+</body></html>`;
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(html);
+          return;
+        }
+
+        // Return the latest WhatsApp QR code as JSON (raw QR string)
+        if (url === '/api/qr-data' && method === 'GET') {
+          const sessionId = (parsedUrl.query.sessionId as string) ?? DEFAULT_SESSION_ID;
+          const entry = this.lastQR.get(sessionId);
+          if (!entry) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              error: 'No QR code available yet. Try POST /api/connect first, wait 5s, retry.',
+              sessionId,
+            }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            data: { qr: entry.qr, sessionId, generatedAt: entry.ts, ageMs: Date.now() - entry.ts },
           }));
           return;
         }
