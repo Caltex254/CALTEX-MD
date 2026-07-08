@@ -44,4 +44,7 @@ export const config = {
 
   // Auto-warmup on pairing code request (wait up to this many ms for ready)
   autoWarmupTimeoutMs: parseInt(process.env.AUTO_WARMUP_TIMEOUT_MS || '15000', 10), // 15s
+
+  // v7.0: Connection timeout increased to 120s for post-pairing restart
+  connectTimeoutMs: parseInt(process.env.CONNECT_TIMEOUT_MS || '120000', 10), // 120s
 };

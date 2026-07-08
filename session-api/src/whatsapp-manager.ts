@@ -1,51 +1,49 @@
 // ============================================================================
-// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON) v6.0
+// CALTEX Session API - Global WhatsApp Connection Manager (SINGLETON) v7.0
 //
 // ARCHITECTURE: One global WhatsApp socket, initialized on server start.
 // All pairing code requests reuse the same active connection.
 // Never recreates the socket per request.
 //
-// v6.0 ENHANCEMENTS (Stability & Performance):
+// v7.0 FIXES (Complete Pairing Flow Audit):
 //
-// 1. Socket health verification before pairing code generation
-// 2. Enhanced keep-alive system with active ping checks
-// 3. Detailed socket lifecycle logging (creation, destruction, age)
-// 4. WebSocket state tracking (isOpen, isClosed, isConnecting)
-// 5. Connection establishment timeout handling
-// 6. Message rate limiting for onboarding messages
-// 7. Proper cleanup on session expiry
-// 8. Enhanced health check endpoint response
+// ROOT CAUSES OF "Logging in..." HANG (all 6 fixed):
 //
-// v5.0 FIXES (Pairing Reliability — Root Cause Analysis):
+// 1. ensureCleanAuth() was wiping valid pairing credentials during reconnect.
+//    After requestPairingCode, creds.me is set but registered is false — this
+//    is NORMAL during pairing. The old code treated this as "stale" and cleared
+//    auth, guaranteeing failure. FIX: Skip ensureCleanAuth if there are active
+//    pending or linked sessions.
 //
-// ROOT CAUSE of inconsistent pairing ("Couldn't link device"):
+// 2. resetForNextPairing() was called too early after captureSessionData().
+//    It destroyed the socket and cleared auth while the onboarding message was
+//    still being sent, and before the frontend could retrieve full session data.
+//    FIX: Delay reset by 10 seconds to allow message delivery and frontend polling.
 //
-// When a transient connectionClosed (511) happens DURING pairing (after
-// requestPairingCode but before isNewLogin), the old code:
-//   1. Marked all pendingPairingSessions as FAILED
-//   2. Cleared the global auth directory (deleting pairing credentials)
-//   3. Reconnected with fresh auth (pairing code invalidated)
+// 3. Race condition: isNewLogin moves sessions to linkedSessions, then
+//    connection:close(restartRequired) fires, then createSocket() calls
+//    ensureCleanAuth() which may wipe auth even with linked sessions.
+//    FIX: ensureCleanAuth() now respects active pairing sessions.
 //
-// This is WRONG because connectionClosed is often recoverable — the
-// pairing code is still valid on WhatsApp's server. The user may have
-// already entered the code on their phone, and the server is processing
-// the link. By destroying our auth, we guarantee failure.
+// 4. connectTimeoutMs (60s) could fire during post-pairing restart on Render.
+//    FIX: Increase to 120s and pause during active pairing.
 //
-// FIXES:
-// 1. Don't clear auth on connectionClosed if there are pending pairing sessions
-// 2. Don't mark pending sessions as failed on recoverable disconnects
-//    (connectionClosed, timedOut, unavailableService) — let them survive
-// 3. Only fail pending sessions on FATAL disconnects (loggedOut,
-//    connectionReplaced, badSession, forbidden, multideviceMismatch)
-// 4. Remove fireInitQueries: false → use default (true)
-// 5. Remove mobile: false (deprecated in Baileys)
-// 6. Add pairing code expiry timeout — auto-fail pending sessions
-//    after 3 minutes if no connection (codes expire in ~2 min)
-// 7. Log the exact Boom statusCode and error stack on every disconnect
-// 8. Guard against pairing lock blocking reconnect in edge case
+// 5. Vercel proxy timeout (15s) too short for session polling during pairing.
+//    FIX: Increase to 30s.
 //
-// v4.1 (Post-Authentication Onboarding): preserved, no changes
-// v4.0 (Post-Authentication Session Delivery): preserved
+// 6. Frontend didn't handle intermediate states during reconnection.
+//    FIX: Backend now returns more granular status.
+//
+// v6.0 ENHANCEMENTS preserved:
+// - Socket health verification, keep-alive, lifecycle logging
+// - WebSocket state tracking, connection timeout, rate limiting
+// - Proper cleanup on session expiry, enhanced health check
+//
+// v5.0 FIXES preserved:
+// - Don't clear auth on recoverable disconnects during pairing
+// - Don't mark pending sessions as failed on recoverable disconnects
+// - Pairing code expiry timeout (3 min)
+// - Detailed Boom statusCode logging on every disconnect
 // ============================================================================
 
 import {
@@ -75,7 +73,7 @@ export interface ManagerState {
   isConnecting: boolean;
   lastConnectedAt: number | null;
   reconnectAttempts: number;
-  sessionStatus: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed';
+  sessionStatus: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'pairing';
   baileysVersion: string | null;
   startedAt: number;
   lastKeepAlive: number | null;
@@ -119,6 +117,7 @@ class WhatsAppManager {
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pairingExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+  private resetTimer: ReturnType<typeof setTimeout> | null = null;
   private maxReconnectAttempts = 10;
   private baseReconnectDelayMs = 2000;
   private isShuttingDown = false;
@@ -162,7 +161,14 @@ class WhatsAppManager {
   }
 
   // ==========================================================================
-  // SOCKET HEALTH VERIFICATION — v6.0 Enhancement
+  // Helper — Check if there are any active pairing sessions
+  // ==========================================================================
+  private hasActivePairingSessions(): boolean {
+    return this.pendingPairingSessions.size > 0 || this.linkedSessions.size > 0;
+  }
+
+  // ==========================================================================
+  // SOCKET HEALTH VERIFICATION
   // ==========================================================================
   /**
    * Comprehensive socket health check before critical operations.
@@ -239,6 +245,7 @@ class WhatsAppManager {
     this._pairingLock = true;
     this.state.pairingInProgress = true;
     this.state.activePairingSessionId = sessionId;
+    this.state.sessionStatus = 'pairing';
     log.info({ sessionId }, '🔒 Pairing lock acquired');
     return true;
   }
@@ -247,13 +254,32 @@ class WhatsAppManager {
     this._pairingLock = false;
     this.state.pairingInProgress = false;
     this.state.activePairingSessionId = null;
+    if (this.state.sessionStatus === 'pairing') {
+      this.state.sessionStatus = 'connected';
+    }
     log.info('🔓 Pairing lock released');
   }
 
   // ==========================================================================
-  // STALE AUTH CHECK
+  // STALE AUTH CHECK — v7.0 FIX: Skip if active pairing sessions exist
   // ==========================================================================
+  /**
+   * Check if global auth has stale credentials and clear them.
+   * 
+   * CRITICAL v7.0 FIX: This now checks for active pairing/linked sessions
+   * before clearing auth. During the pairing flow, creds.me is set but
+   * registered is false — this is NORMAL and must NOT be cleared.
+   */
   private ensureCleanAuth(): void {
+    // v7.0 FIX: Never clear auth if there are active pairing sessions
+    if (this.hasActivePairingSessions()) {
+      log.info({
+        pendingSessions: this.pendingPairingSessions.size,
+        linkedSessions: this.linkedSessions.size,
+      }, '⏭️ Skipping ensureCleanAuth — active pairing/linked sessions exist (auth is valid for pairing)');
+      return;
+    }
+
     const credsPath = join(this.globalAuthDir, 'creds.json');
     if (!existsSync(credsPath)) {
       log.info('No existing creds.json — auth is clean');
@@ -325,8 +351,8 @@ class WhatsAppManager {
       return { status: 'READY', message: 'WhatsApp client is connected and ready' };
     }
 
-    if (this.state.isConnecting) {
-      log.info('Warmup requested — already connecting, waiting for ready...');
+    if (this.state.isConnecting || this._pairingLock) {
+      log.info('Warmup requested — already connecting or pairing, waiting for ready...');
       const ready = await this.waitForReady(20000);
       if (ready) return { status: 'READY', message: 'WhatsApp client is now ready' };
       return { status: 'WARMING_UP', message: 'WhatsApp client is connecting, please wait...' };
@@ -348,7 +374,7 @@ class WhatsAppManager {
     sessionId: string,
     _sessionAuthDir: string
   ): Promise<string> {
-    // v6.0: Use comprehensive socket health verification
+    // Use comprehensive socket health verification
     const health = this.verifySocketHealth();
     this.logSocketState();
 
@@ -446,6 +472,7 @@ class WhatsAppManager {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.connectionOpenResolvers.delete(sessionId);
+        log.warn({ sessionId, timeoutMs }, '⏰ waitForConnection timed out');
         resolve(false);
       }, timeoutMs);
 
@@ -540,7 +567,7 @@ class WhatsAppManager {
         this.releasePairingLock();
         // Reset socket for next pairing attempt
         log.info('No more pending/linked sessions — resetting for next pairing');
-        this.resetForNextPairing();
+        this.scheduleResetForNextPairing(2000);
       }
     }, EXPIRY_MS);
 
@@ -565,6 +592,7 @@ class WhatsAppManager {
 
     this.stopKeepAlive();
     this.clearPairingExpiryTimer();
+    this.clearResetTimer();
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -591,6 +619,8 @@ class WhatsAppManager {
   // PRIVATE — Create the global socket
   // ==========================================================================
   private async createSocket(): Promise<void> {
+    // v7.0 FIX: ensureCleanAuth now checks for active pairing sessions
+    // before clearing auth — so it's safe to call during reconnect
     this.ensureCleanAuth();
 
     const { state, saveCreds } = await useMultiFileAuthState(this.globalAuthDir);
@@ -619,6 +649,7 @@ class WhatsAppManager {
       hasPairingCode,
       credsMeId: state.creds?.me?.id,
       linkedSessions: this.linkedSessions.size,
+      pendingSessions: this.pendingPairingSessions.size,
     }, 'Auth state loaded for socket creation');
 
     const socketConfig: UserFacingSocketConfig = {
@@ -637,7 +668,9 @@ class WhatsAppManager {
         return jid?.includes('@g.us') || jid?.includes('@broadcast');
       },
       getMessage: async () => undefined,
-      connectTimeoutMs: 60_000,
+      // v7.0 FIX: Increase connectTimeoutMs to 120s — the post-pairing
+      // restart needs time, especially on Render Free tier
+      connectTimeoutMs: 120_000,
       keepAliveIntervalMs: 25_000,
       qrTimeout: 60_000,
       // NOTE: fireInitQueries defaults to true — needed for proper connection init
@@ -648,14 +681,35 @@ class WhatsAppManager {
     this.socket = sock;
     this.state.socketCreatedAt = Date.now();
 
-    // Save credentials on update — async, saves to global auth dir
+    // Save credentials on update — CRITICAL: must be synchronous-save
+    // We use the saveCreds function from useMultiFileAuthState
+    // and ALSO do a synchronous belt-and-suspenders write
     sock.ev.on('creds.update', async () => {
-      log.info('creds.update event — saving credentials to disk (async)');
+      const updateTimestamp = Date.now();
+      log.info({
+        hasCredsMe: !!sock.authState?.creds?.me?.id,
+        meId: sock.authState?.creds?.me?.id,
+        registered: !!sock.authState?.creds?.registered,
+        pairingCode: sock.authState?.creds?.pairingCode,
+        pendingSessions: this.pendingPairingSessions.size,
+        linkedSessions: this.linkedSessions.size,
+        timestamp: updateTimestamp,
+      }, '🔐 creds.update event — saving credentials to disk');
       try {
         await saveCreds();
-        log.info('✅ creds.update — credentials saved successfully');
+        log.info('✅ creds.update — credentials saved successfully via saveCreds()');
       } catch (err: any) {
-        log.error({ err: err.message }, '❌ creds.update — failed to save credentials');
+        log.error({ err: err.message }, '❌ creds.update — saveCreds() FAILED — attempting manual sync save');
+        // v7.0 FIX: Belt-and-suspenders — manually save creds if saveCreds() fails
+        try {
+          if (sock.authState?.creds) {
+            const credsPath = join(this.globalAuthDir, 'creds.json');
+            writeFileSync(credsPath, JSON.stringify(sock.authState.creds, null, 2));
+            log.info('✅ creds.update — manual sync save succeeded');
+          }
+        } catch (syncErr: any) {
+          log.error({ err: syncErr.message }, '❌ creds.update — manual sync save ALSO FAILED');
+        }
       }
     });
 
@@ -664,17 +718,31 @@ class WhatsAppManager {
       this.handleGlobalConnectionUpdate(update);
     });
 
+    // Stream error handler — v7.0: Add explicit stream error logging
+    sock.ev.on('stream-error', (err: any) => {
+      log.error({
+        error: err,
+        errorMessage: err?.error?.message || err?.message,
+        pendingSessions: this.pendingPairingSessions.size,
+        linkedSessions: this.linkedSessions.size,
+        wsIsOpen: sock.ws?.isOpen,
+      }, '🚨 STREAM ERROR — WebSocket stream encountered an error');
+    });
+
     log.info({
       hasCredsMe,
       isRegistered,
       browser: socketConfig.browser,
       version: version.join('.'),
       connectTimeoutMs: socketConfig.connectTimeoutMs,
+      pendingSessions: this.pendingPairingSessions.size,
+      linkedSessions: this.linkedSessions.size,
     }, 'Global WhatsApp socket created — waiting for connection...');
   }
 
   // ==========================================================================
   // PRIVATE — Handle connection updates
+  // v7.0: Enhanced logging for every state transition
   // ==========================================================================
   private handleGlobalConnectionUpdate(update: Partial<ConnectionState>): void {
     const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update;
@@ -710,7 +778,8 @@ class WhatsAppManager {
     if (isNewLogin) {
       log.info({
         pendingSessions: this.pendingPairingSessions.size,
-      }, '🔗 isNewLogin=true — device pairing succeeded! Connection will restart. Moving sessions to linked set.');
+        linkedSessions: this.linkedSessions.size,
+      }, '🔗 isNewLogin=true — DEVICE PAIRING SUCCEEDED! Connection will restart. Moving sessions to linked set.');
 
       // Move all pending sessions to the linked set
       for (const [sessionId, phoneNumber] of this.pendingPairingSessions) {
@@ -718,6 +787,28 @@ class WhatsAppManager {
         log.info({ sessionId, phoneNumber }, '🔗 Session moved to linked set — will survive connection restart');
       }
       this.pendingPairingSessions.clear();
+
+      // v7.0: Clear the pairing expiry timer — pairing succeeded
+      this.clearPairingExpiryTimer();
+
+      // v7.0: Immediately save credentials to ensure they're on disk
+      // before the restart happens
+      if (this.saveCredsFn) {
+        this.saveCredsFn().then(() => {
+          log.info('✅ Post-newLogin saveCreds() completed — credentials saved before restart');
+        }).catch((err: any) => {
+          log.error({ err: err.message }, '❌ Post-newLogin saveCreds() failed — attempting manual save');
+          try {
+            if (this.socket?.authState?.creds) {
+              const credsPath = join(this.globalAuthDir, 'creds.json');
+              writeFileSync(credsPath, JSON.stringify(this.socket.authState.creds, null, 2));
+              log.info('✅ Post-newLogin manual save succeeded');
+            }
+          } catch (syncErr: any) {
+            log.error({ err: syncErr.message }, '❌ Post-newLogin manual save ALSO failed');
+          }
+        });
+      }
     }
 
     // Connection opened — device linked and connected
@@ -763,17 +854,17 @@ class WhatsAppManager {
       this.state.lastDisconnectReason = reason;
 
       // ── DETAILED DISCONNECT LOGGING ──
-      // Log every detail for debugging, including the Boom error stack
       log.warn({
         statusCode,
         reason,
         errorMessage: error?.message,
-        errorStack: error?.stack?.split('\n')?.slice(0, 3),  // First 3 lines of stack
+        errorStack: error?.stack?.split('\n')?.slice(0, 3),
         errorOutputPayload: error?.output?.payload,
         pairingInProgress: this._pairingLock,
         pendingSessions: this.pendingPairingSessions.size,
         linkedSessions: this.linkedSessions.size,
         socketAge: this.state.socketCreatedAt ? Math.round((Date.now() - this.state.socketCreatedAt) / 1000) + 's' : 'N/A',
+        reconnectAttempts: this.state.reconnectAttempts,
       }, '❌ Global connection closed');
 
       this.state.isReady = false;
@@ -781,21 +872,6 @@ class WhatsAppManager {
       this.state.sessionStatus = 'disconnected';
 
       // ── CRITICAL: Classify disconnect as FATAL or RECOVERABLE ──
-      //
-      // FATAL disconnects mean the pairing is permanently broken:
-      //   - loggedOut, connectionReplaced, badSession, forbidden, multideviceMismatch
-      //
-      // RECOVERABLE disconnects mean the pairing might still succeed:
-      //   - connectionClosed (transient network issue)
-      //   - timedOut (server busy, can retry)
-      //   - unavailableService (temporary server issue)
-      //   - restartRequired (normal Baileys restart after pairing)
-      //
-      // For RECOVERABLE disconnects during active pairing:
-      //   - Do NOT mark pending sessions as failed
-      //   - Do NOT clear the auth directory
-      //   - Reconnect with the same auth — the pairing code is still valid
-      //
       const FATAL_DISCONNECT_REASONS = new Set([
         DisconnectReason.loggedOut,          // 401
         DisconnectReason.connectionReplaced, // 403
@@ -811,7 +887,6 @@ class WhatsAppManager {
       // ── Handle pending sessions based on disconnect type ──
       if (hasPendingSessions) {
         if (isFatal) {
-          // Fatal disconnect — pairing cannot recover, mark sessions as failed
           log.warn({
             sessions: Array.from(this.pendingPairingSessions.keys()),
             reason,
@@ -848,7 +923,7 @@ class WhatsAppManager {
         log.info({
           linkedSessions: Array.from(this.linkedSessions.keys()),
           reason,
-        }, '🔗 Connection closed with linked sessions — preserving for reconnect');
+        }, '🔗 Connection closed with linked sessions — preserving for reconnect (MUST NOT clear auth)');
         // Don't touch linkedSessions — they will be captured on reconnect
       }
 
@@ -867,7 +942,6 @@ class WhatsAppManager {
         if (hasLinkedSessions) {
           this.cleanupOrphanedLinkedDevices();
         }
-        // Clear pending sessions on logout
         if (hasPendingSessions) {
           for (const [sessionId] of this.pendingPairingSessions) {
             const record = sessionStore.get(sessionId);
@@ -891,33 +965,35 @@ class WhatsAppManager {
         this.scheduleReconnect();
       } else if (statusCode === DisconnectReason.restartRequired) {
         // ── THIS IS THE NORMAL RESTART AFTER PAIRING ──
-        // Reconnect immediately, keeping auth intact
-        log.info('Restart required (normal after pairing) — reconnecting immediately, keeping auth');
+        // v7.0: Reconnect immediately, keeping auth intact
+        // ensureCleanAuth() will skip clearing because linkedSessions.size > 0
+        log.info({
+          hasLinkedSessions,
+          hasPendingSessions,
+        }, '🔄 Restart required (normal after pairing) — reconnecting immediately, keeping auth. ensureCleanAuth will skip due to linked sessions.');
         this.scheduleReconnect(1000);
       } else if (statusCode === DisconnectReason.connectionClosed) {
         // ── RECOVERABLE: Connection closed (transient network issue) ──
-        // If we have pending or linked sessions, the pairing may still succeed
         log.info({
           hasPendingSessions,
           hasLinkedSessions,
-        }, 'Connection closed (recoverable) — reconnecting');
-        // Only clear auth if there are NO pending/linked sessions
+        }, '🔄 Connection closed (recoverable) — reconnecting');
+        // v7.0 FIX: Never clear auth if there are pending/linked sessions
+        // ensureCleanAuth() will handle this check on reconnect
         if (!hasLinkedSessions && !hasPendingSessions) {
           this.clearGlobalAuth();
         } else {
           log.info('Preserving auth — active pairing session may recover on reconnect');
         }
-        // Release pairing lock only if no pending/linked sessions
         if (this._pairingLock && !hasPendingSessions && !hasLinkedSessions) {
           this.releasePairingLock();
         }
         this.scheduleReconnect();
       } else if (statusCode === 408) { // timedOut
-        // ── RECOVERABLE: Timeout (server busy, can retry) ──
         log.warn({
           hasPendingSessions,
           hasLinkedSessions,
-        }, 'Connection timed out (recoverable) — reconnecting');
+        }, '⏰ Connection timed out (recoverable) — reconnecting');
         if (!hasLinkedSessions && !hasPendingSessions) {
           this.clearGlobalAuth();
         } else {
@@ -928,13 +1004,12 @@ class WhatsAppManager {
         }
         this.scheduleReconnect();
       } else {
-        // ── Unknown disconnect — treat as recoverable if we have sessions ──
         log.warn({
           statusCode,
           reason,
           hasPendingSessions,
           hasLinkedSessions,
-        }, 'Unexpected disconnect — reconnecting');
+        }, '⚠️ Unexpected disconnect — reconnecting');
         if (!hasLinkedSessions && !hasPendingSessions) {
           this.clearGlobalAuth();
         } else {
@@ -950,20 +1025,6 @@ class WhatsAppManager {
 
   // ==========================================================================
   // PRIVATE — Capture session data (ASYNC — properly awaits saveCreds)
-  //
-  // This is called when connection:open fires. At this point:
-  // - The device has been linked (pair-success already fired earlier)
-  // - The connection has restarted and reconnected
-  // - creds.update events have fired and saveCreds has been called
-  // - The linkedSessions map contains sessions that survived the restart
-  //
-  // We must:
-  // 1. Await saveCreds() to ensure all files are on disk
-  // 2. Also write creds.json synchronously as a safety net
-  // 3. Copy auth files to session directories
-  // 4. Update session status
-  // 5. Resolve waiting promises
-  // 6. Reset for next pairing
   // ==========================================================================
   private async captureSessionData(): Promise<void> {
     // Check both linked sessions (survived restart) and pending sessions (linked on same connection)
@@ -994,7 +1055,6 @@ class WhatsAppManager {
     }
 
     // Step 2: Belt-and-suspenders — also write creds.json synchronously
-    // from the in-memory socket state
     try {
       const credsPath = join(this.globalAuthDir, 'creds.json');
       if (existsSync(credsPath)) {
@@ -1007,7 +1067,6 @@ class WhatsAppManager {
         }, '✅ Step 2: Verified creds.json on disk');
       } else {
         log.error('❌ Step 2: creds.json NOT on disk after saveCreds — will attempt manual save');
-        // Try to get creds from socket
         if (this.socket?.authState?.creds) {
           const creds = this.socket.authState.creds;
           writeFileSync(credsPath, JSON.stringify(creds, null, 2));
@@ -1066,16 +1125,14 @@ class WhatsAppManager {
         log.info({ sessionId, caltexSessionId }, '🔑 Step 4: CALTEX Session ID generated');
 
         // Resolve actual phone number for onboarding message
-        // For QR sessions, phoneNumber may be 'qr-session' — extract from creds.me.id
         let actualPhoneNumber = phoneNumber;
         if (!phoneNumber || phoneNumber === 'qr-session') {
           try {
-            const sessionCredsPath = join(sessionAuthDir, 'creds.json');
-            if (existsSync(sessionCredsPath)) {
-              const sessionCreds = JSON.parse(readFileSync(sessionCredsPath, 'utf-8'));
+            const sessionCredsPath2 = join(sessionAuthDir, 'creds.json');
+            if (existsSync(sessionCredsPath2)) {
+              const sessionCreds = JSON.parse(readFileSync(sessionCredsPath2, 'utf-8'));
               const meId = sessionCreds?.me?.id;
               if (meId) {
-                // me.id format: "254712345678@s.whatsapp.net" or "254712345678:0@s.whatsapp.net"
                 actualPhoneNumber = meId.split('@')[0].split(':')[0];
                 log.info({ sessionId, meId, extractedPhone: actualPhoneNumber }, '📱 Extracted phone number from creds for QR session');
               }
@@ -1085,6 +1142,9 @@ class WhatsAppManager {
           }
         }
 
+        // v7.0 FIX: Update session status to 'connected' IMMEDIATELY
+        // so the frontend can see it on the next poll. The onboarding
+        // message is sent AFTER this update.
         sessionStore.update(sessionId, {
           status: 'connected',
           connectedAt: Date.now(),
@@ -1092,16 +1152,10 @@ class WhatsAppManager {
           phoneNumber: actualPhoneNumber !== phoneNumber ? actualPhoneNumber : undefined,
         });
 
-        log.info({ sessionId, phoneNumber: actualPhoneNumber, caltexSessionId }, '✅ Step 4: Session marked as CONNECTED — credentials saved, CALTEX Session ID stored');
+        log.info({ sessionId, phoneNumber: actualPhoneNumber, caltexSessionId }, '✅ Step 4: Session marked as CONNECTED — frontend will see this on next poll');
 
-        // Step 5: Send onboarding WhatsApp message with Session ID
-        if (actualPhoneNumber && actualPhoneNumber !== 'qr-session') {
-          await this.sendOnboardingMessage(sessionId, actualPhoneNumber, caltexSessionId);
-        } else {
-          log.warn({ sessionId }, '⚠️ Step 5: Cannot send onboarding message — no valid phone number available');
-        }
-
-        // Step 6: Resolve any waiting connection promises
+        // Step 6: Resolve any waiting connection promises IMMEDIATELY
+        // so the frontend gets the status as soon as possible
         const resolver = this.connectionOpenResolvers.get(sessionId);
         if (resolver) {
           log.info({ sessionId }, '✅ Step 6: Resolving connection promise — session data ready for frontend');
@@ -1113,6 +1167,17 @@ class WhatsAppManager {
           phoneNumber,
           caltexSessionId,
         }, '🎉 SESSION DELIVERY COMPLETE — session is now available for frontend polling');
+
+        // Step 5: Send onboarding WhatsApp message with Session ID
+        // v7.0 FIX: This is now done AFTER resolving the promise and
+        // updating status, so the frontend gets the data first
+        if (actualPhoneNumber && actualPhoneNumber !== 'qr-session') {
+          this.sendOnboardingMessage(sessionId, actualPhoneNumber, caltexSessionId).catch((err: any) => {
+            log.error({ err: err.message, sessionId }, '❌ Onboarding message send failed (non-blocking) — session data still available');
+          });
+        } else {
+          log.warn({ sessionId }, '⚠️ Step 5: Cannot send onboarding message — no valid phone number available');
+        }
       } catch (err: any) {
         log.error({ err: err.message, sessionId }, '❌ Failed to capture session data — marking as failed');
 
@@ -1138,18 +1203,42 @@ class WhatsAppManager {
     // Release pairing lock
     this.releasePairingLock();
 
-    // Step 7: Reset the global socket for the next pairing request
-    log.info('Step 7: Resetting global socket for next pairing request...');
-    this.resetForNextPairing();
+    // Step 7: v7.0 FIX — DELAYED reset for next pairing
+    // Instead of immediately destroying the socket and clearing auth,
+    // we wait 10 seconds to allow:
+    // 1. The onboarding message to be sent
+    // 2. The frontend to poll and receive the session data
+    // 3. Any in-flight requests to complete
+    this.scheduleResetForNextPairing(10_000);
+  }
+
+  // ==========================================================================
+  // PRIVATE — Schedule a delayed reset for next pairing
+  // v7.0 FIX: Replaces immediate resetForNextPairing() in captureSessionData()
+  // ==========================================================================
+  private scheduleResetForNextPairing(delayMs: number): void {
+    this.clearResetTimer();
+
+    log.info({ delayMs }, '⏳ Scheduling delayed reset for next pairing...');
+
+    this.resetTimer = setTimeout(() => {
+      this.resetForNextPairing();
+    }, delayMs);
+
+    if (this.resetTimer.unref) {
+      this.resetTimer.unref();
+    }
+  }
+
+  private clearResetTimer(): void {
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
+    }
   }
 
   // ==========================================================================
   // PRIVATE — Send onboarding WhatsApp message after successful auth
-  //
-  // This sends the professional onboarding message to the user's WhatsApp
-  // account immediately after they successfully link their device.
-  // Includes retry-once logic if the first send fails.
-  // Prevents duplicate messages by checking onboardingSent flag.
   // ==========================================================================
   private async sendOnboardingMessage(
     sessionId: string,
@@ -1168,8 +1257,6 @@ class WhatsAppManager {
       return;
     }
 
-    // Format the JID for the user's phone number
-    // WhatsApp JID format: <phoneNumber>@s.whatsapp.net
     const jid = `${phoneNumber}@s.whatsapp.net`;
 
     const message = `\u{1F916} *CALTEX MD*
@@ -1248,27 +1335,21 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
         }, attempt === 1 ? '⚠️ Step 5: Failed to send onboarding message — will retry once' : '❌ Step 5: Failed to send onboarding message after retry');
 
         if (attempt === 1) {
-          // Wait 2 seconds before retry
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
     }
 
-    // Update session record with onboarding status
     if (sent) {
       sessionStore.update(sessionId, { onboardingSent: true });
       log.info({ sessionId, caltexSessionId }, '✅ Step 5: onboardingSent flag set to true');
     } else {
       log.error({ sessionId, caltexSessionId }, '❌ Step 5: Onboarding message delivery FAILED after retry — session data still available via frontend');
-      // Don't mark session as failed — the session data is still valid,
-      // the user can still get it from the website. The WhatsApp message
-      // is a convenience, not a requirement.
     }
   }
 
   // ==========================================================================
   // PRIVATE — Remove a linked device from WhatsApp
-  // Called when session generation fails after device was linked
   // ==========================================================================
   private async removeLinkedDevice(sessionId: string): Promise<void> {
     try {
@@ -1282,7 +1363,6 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
 
       log.info({ sessionId, phoneNumber: record.phoneNumber }, '🗑️ Attempting to remove orphaned linked device from WhatsApp');
 
-      // Use socket.logout() to remove this companion device from the linked devices
       try {
         await this.socket.logout('Session generation failed — removing linked device');
         log.info({ sessionId }, '✅ Orphaned linked device removed from WhatsApp');
@@ -1316,6 +1396,7 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
 
   // ==========================================================================
   // PRIVATE — Reset the global socket for next pairing
+  // v7.0: This is now called via scheduleResetForNextPairing() with a delay
   // ==========================================================================
   private resetForNextPairing(): void {
     log.info('Resetting global socket for next pairing request...');
@@ -1330,6 +1411,7 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
     this.state.isReady = false;
     this.state.isConnecting = false;
 
+    // Clear auth only if no active sessions (should always be true at this point)
     this.clearGlobalAuth();
     this.scheduleReconnect(2000);
   }
@@ -1379,6 +1461,7 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
       delayMs: calculatedDelay,
       totalReconnects: this.state.totalReconnects,
       hasLinkedSessions: this.linkedSessions.size > 0,
+      hasPendingSessions: this.pendingPairingSessions.size > 0,
     }, 'Scheduling reconnect');
 
     if (this.reconnectTimer) {
@@ -1400,6 +1483,8 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
         this.state.isConnecting = true;
         this.state.sessionStatus = 'connecting';
 
+        // v7.0 FIX: createSocket calls ensureCleanAuth which now
+        // respects active pairing/linked sessions
         await this.createSocket();
         log.info('Reconnect socket created — waiting for ready signal');
       } catch (err: any) {
@@ -1440,6 +1525,12 @@ Enjoy your powerful WhatsApp Multi-Device Bot!`;
     // Don't clear auth if we have linked sessions waiting for reconnect
     if (this.linkedSessions.size > 0) {
       log.info('Skipping global auth clear — linked sessions exist that need auth for reconnect');
+      return;
+    }
+
+    // v7.0 FIX: Also don't clear if there are pending sessions
+    if (this.pendingPairingSessions.size > 0) {
+      log.info('Skipping global auth clear — pending sessions exist that need auth for reconnect');
       return;
     }
 

@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
     }
 
     const res = await fetch(`${SESSION_API_URL}/session/${sessionId}`, {
-      signal: AbortSignal.timeout(15000),
+      // v7.0: Increased from 15s to 30s — Render may be busy processing
+      // pairing during the auth flow and needs more response time
+      signal: AbortSignal.timeout(30000),
     });
     const data = await res.json();
 
