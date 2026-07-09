@@ -7,55 +7,30 @@
 # WhatsApp's WebSocket servers.
 # =============================================================================
 
-FROM node:20-alpine AS base
+FROM node:20-alpine
 
 LABEL maintainer="Caltex MD Team"
 LABEL description="CALTEX MD WhatsApp Bot Service (Node.js)"
 LABEL version="2.0.0"
-LABEL org.opencontainers.image.title="Caltex MD Bot"
-LABEL org.opencontainers.image.description="WhatsApp Bot Service powered by Baileys (Node.js runtime)"
 
 WORKDIR /app
 
-# ---- Dependencies Stage ----
-FROM base AS deps
-
-# Copy package.json (ignore bun.lock — we use npm now)
+# Copy package.json first for better caching
 COPY mini-services/caltex-bot/package.json ./
 
-# Install ALL dependencies. We do NOT set NODE_ENV=production here because
-# tsx (the TypeScript runner) is required at runtime and would be skipped
-# by npm if NODE_ENV=production. tsx is in dependencies now, but we keep
-# --include=dev for safety.
-RUN npm install --no-audit --no-fund --include=dev
+# Install ALL dependencies (tsx is in dependencies, not devDependencies)
+RUN npm install --no-audit --no-fund
 
-# ---- Production Stage ----
-FROM base AS runner
+# Copy bot application code (entire directory)
+COPY mini-services/caltex-bot/ ./
 
+# Create necessary directories
+RUN mkdir -p /app/sessions /app/media /app/logs /app/auth_info_baileys
+
+# Set environment
 ENV NODE_ENV=production
 ENV BOT_PORT=3031
 ENV HOSTNAME=0.0.0.0
-
-# Create non-root user
-RUN addgroup --system --gid 1001 botjs && \
-    adduser --system --uid 1001 botuser
-
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package.json ./package.json
-
-# Copy bot application code
-COPY mini-services/caltex-bot/index.ts ./index.ts
-COPY mini-services/caltex-bot/tsconfig.json ./tsconfig.json
-COPY mini-services/caltex-bot/src ./src
-COPY mini-services/caltex-bot/scheduled-messages.json ./scheduled-messages.json
-
-# Create necessary directories
-RUN mkdir -p /app/sessions /app/media /app/logs /app/auth_info_baileys && \
-    chown -R botuser:botjs /app
-
-# Switch to non-root user
-USER botuser
 
 # Expose bot API port
 EXPOSE 3031
@@ -64,5 +39,5 @@ EXPOSE 3031
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3031/health || exit 1
 
-# Start the bot using tsx (Node.js TypeScript runner)
-CMD ["npx", "tsx", "index.ts"]
+# Start the bot using tsx directly (not npx, which may fail for non-root users)
+CMD ["./node_modules/.bin/tsx", "index.ts"]
