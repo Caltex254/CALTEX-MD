@@ -62,6 +62,7 @@ import { config } from './config';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { sessionStore } from './session-store';
+import { uploadSessionToGithub, isGithubStorageConfigured } from './github-storage';
 
 const log = createLogger('whatsapp-manager');
 
@@ -1167,6 +1168,34 @@ class WhatsAppManager {
           phoneNumber,
           caltexSessionId,
         }, '🎉 SESSION DELIVERY COMPLETE — session is now available for frontend polling');
+
+        // ── Step 4.5: Persist credentials to GitHub (free-tier survival) ──
+        // Upload the session auth files to a private GitHub repo so the
+        // bot service can fetch them later using the caltexSessionId,
+        // even after this session-api service restarts (free tier has
+        // no persistent disk).
+        if (isGithubStorageConfigured()) {
+          try {
+            log.info({ caltexSessionId, sessionAuthDir }, '☁️  Step 4.5: Uploading session credentials to GitHub...');
+            const uploadResult = await uploadSessionToGithub(caltexSessionId, sessionAuthDir, {
+              phoneNumber: actualPhoneNumber,
+              baileysVersion: this.state.baileysVersion || undefined,
+            });
+            log.info({
+              caltexSessionId,
+              fileCount: uploadResult.fileCount,
+              commitSha: uploadResult.commitSha,
+            }, '✅ Step 4.5: Session credentials uploaded to GitHub — bot can now auto-connect using this CALTEX ID');
+          } catch (uploadErr: any) {
+            log.error({
+              caltexSessionId,
+              err: uploadErr.message,
+            }, '❌ Step 4.5: Failed to upload session to GitHub — session will NOT be restorable on bot restart');
+            // Non-fatal — the session is still usable while session-api is running
+          }
+        } else {
+          log.warn('⚠️  Step 4.5: GitHub storage not configured — set GITHUB_TOKEN, GITHUB_REPO_OWNER, GITHUB_REPO_NAME env vars to enable credential persistence');
+        }
 
         // Step 5: Send onboarding WhatsApp message with Session ID
         // v7.0 FIX: This is now done AFTER resolving the promise and
