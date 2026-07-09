@@ -15,7 +15,8 @@ import { Scheduler } from './src/scheduler';
 import { APIClient } from './src/api-client';
 
 const PORT = 3031;
-const DEFAULT_SESSION_ID = 'caltex-md';
+// Use BOT_SESSION_ID env var if set (e.g. CALTEX-ECPY-C3DK), else fall back to 'caltex-md'
+const DEFAULT_SESSION_ID = process.env.BOT_SESSION_ID || 'caltex-md';
 
 class CaltexBot {
   private sessionManager: SessionManager;
