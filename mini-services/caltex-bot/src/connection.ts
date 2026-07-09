@@ -196,6 +196,13 @@ export class ConnectionManager extends EventEmitter {
         this.connectionStates.set(sessionId, update);
         this.emit('connection.open', sessionId);
         this.emit('connection.update', update, sessionId);
+
+        // Send "BOT CONNECTED SUCCESSFULLY" WhatsApp message
+        // Only fires after connection.open AND auth is confirmed inside the method.
+        // Non-blocking - failure to send doesn't affect the connection.
+        this.sendConnectionSuccessMessage(sessionId).catch((err: any) => {
+          this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, 'Success message send failed (non-blocking)');
+        });
       } else {
         this.connectionStates.set(sessionId, update);
         this.emit('connection.update', update, sessionId);
@@ -504,6 +511,75 @@ export class ConnectionManager extends EventEmitter {
       return await sock.profilePictureUrl(jid, 'image');
     } catch {
       return undefined;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Send "BOT CONNECTED SUCCESSFULLY" message to the linked WhatsApp account.
+  // Only called AFTER connection.open fires AND creds.registered is confirmed.
+  // ---------------------------------------------------------------------------
+  async sendConnectionSuccessMessage(sessionId: string): Promise<void> {
+    try {
+      const sock = this.sockets.get(sessionId);
+      if (!sock) {
+        this.globalLogger.warn({ sessionId }, 'Cannot send success message - socket not found');
+        return;
+      }
+
+      // Verify authentication is confirmed
+      const creds = sock.authState?.creds;
+      if (!creds || !creds.registered || !creds.me) {
+        this.globalLogger.warn({
+          sessionId,
+          registered: !!creds?.registered,
+          hasMe: !!creds?.me,
+        }, 'Cannot send success message - authentication not confirmed');
+        return;
+      }
+
+      // Extract phone number from creds.me.id (format: 254104906247:17@s.whatsapp.net)
+      const meId: string = creds.me.id || '';
+      const phoneNumber = meId.split('@')[0].split(':')[0];
+      if (!phoneNumber) {
+        this.globalLogger.warn({ sessionId, meId }, 'Cannot send success message - could not extract phone number');
+        return;
+      }
+
+      const jid = `${phoneNumber}@s.whatsapp.net`;
+      const caltexSessionId = process.env.BOT_SESSION_ID || sessionId;
+
+      const message = `🤖 *CALTEX MD*
+
+━━━━━━━━━━━━━━━━━━
+
+✅ *BOT CONNECTED SUCCESSFULLY*
+
+Congratulations! 🎉
+
+Your CALTEX MD bot has been deployed successfully and is now online.
+
+📱 Connected Number:
+${phoneNumber}
+
+🆔 Session ID:
+${caltexSessionId}
+
+🟢 Status:
+ONLINE
+
+Your bot is now ready to receive commands.
+
+Thank you for using CALTEX MD ❤️
+
+━━━━━━━━━━━━━━━━━━`;
+
+      // Small delay to ensure socket is fully ready for sending
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      await sock.sendMessage(jid, { text: message });
+      this.globalLogger.info({ sessionId, phoneNumber, jid }, 'WhatsApp success message sent to linked account');
+    } catch (err: any) {
+      this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, 'Failed to send WhatsApp success message (non-blocking)');
     }
   }
 }
