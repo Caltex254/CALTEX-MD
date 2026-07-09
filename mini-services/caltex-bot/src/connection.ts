@@ -136,7 +136,9 @@ export class ConnectionManager extends EventEmitter {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
       },
-      printQRInTerminal: printQR,
+      // printQRInTerminal removed — deprecated in Baileys.
+      // QR codes are handled via the connection.update event -> qr.code event
+      // and exposed via the /api/qr-image HTTP endpoint.
       browser: Browsers.appropriate(browser),
       syncFullHistory,
       markOnlineOnConnect,
