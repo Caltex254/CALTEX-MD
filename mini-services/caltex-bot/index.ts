@@ -4,6 +4,8 @@
 // ============================================================================
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { existsSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { SessionManager } from './src/session-manager';
 import { ConnectionManager, logger } from './src/connection';
 import { AntiFeatures } from './src/anti-features';
@@ -277,6 +279,44 @@ class CaltexBot {
               qrData: '/api/qr-data',
             },
           }));
+          return;
+        }
+
+        // Debug endpoint: shows env vars, auth folder contents, and GitHub fetch status
+        if (url === '/api/debug-session' && method === 'GET') {
+          const sessionId = process.env.BOT_SESSION_ID || 'caltex-md';
+          const authFolder = join(process.cwd(), 'auth_info_baileys', sessionId);
+          const debug: any = {
+            timestamp: Date.now(),
+            env: {
+              BOT_SESSION_ID: process.env.BOT_SESSION_ID || '(not set)',
+              GITHUB_TOKEN: process.env.GITHUB_TOKEN ? '***set***' : '(not set)',
+              GITHUB_REPO_OWNER: process.env.GITHUB_REPO_OWNER || '(not set)',
+              GITHUB_REPO_NAME: process.env.GITHUB_REPO_NAME || '(not set)',
+              NODE_ENV: process.env.NODE_ENV,
+            },
+            session: {
+              expectedSessionId: sessionId,
+              authFolder,
+              authFolderExists: existsSync(authFolder),
+              filesInAuthFolder: [] as string[],
+              hasCredsJson: false,
+            },
+            lastQR: {
+              size: this.lastQR.size,
+              sessions: Array.from(this.lastQR.keys()),
+            },
+          };
+          try {
+            if (existsSync(authFolder)) {
+              debug.session.filesInAuthFolder = readdirSync(authFolder);
+              debug.session.hasCredsJson = existsSync(join(authFolder, 'creds.json'));
+            }
+          } catch (e: any) {
+            debug.session.error = e.message;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(debug, null, 2));
           return;
         }
 
