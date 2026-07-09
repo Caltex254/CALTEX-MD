@@ -13,10 +13,8 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": ".",
-    "types": ["bun-types"],
-    "lib": ["ES2022"],
-    "allowImportingTsExtensions": true,
-    "noEmit": true
+        "lib": ["ES2022"],
+        "noEmit": true
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist", "auth_info_baileys"]
