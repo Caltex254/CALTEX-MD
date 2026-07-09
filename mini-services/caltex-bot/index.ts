@@ -755,6 +755,42 @@ class CaltexBot {
   }
 
   async start(): Promise<void> {
+    // ── STARTUP VALIDATION: fail fast with clear errors ──
+    logger.info('='.repeat(50));
+    logger.info('  CALTEX MD WhatsApp Bot - Starting...');
+    logger.info('='.repeat(50));
+
+    logger.info({ value: process.env.BOT_SESSION_ID || '(not set)' }, '[STARTUP] Reading BOT_SESSION_ID env var...');
+    const sessionId = process.env.BOT_SESSION_ID;
+    if (!sessionId) {
+      logger.error('[STARTUP] FATAL: BOT_SESSION_ID env var is not set. The bot cannot restore credentials without it.');
+      logger.error('[STARTUP] Set BOT_SESSION_ID to your CALTEX-XXXX-XXXX session id (from the /scan page) and redeploy.');
+      logger.error('[STARTUP] Exiting with code 1.');
+      process.exit(1);
+    }
+    if (!/^CALTEX-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
+      logger.error({ value: sessionId }, '[STARTUP] FATAL: BOT_SESSION_ID does not match expected format CALTEX-XXXX-XXXX.');
+      logger.error('[STARTUP] Exiting with code 1.');
+      process.exit(1);
+    }
+    logger.info({ sessionId }, '[STARTUP] BOT_SESSION_ID is valid');
+
+    logger.info({
+      token: process.env.GITHUB_TOKEN ? '***set***' : '(not set)',
+      owner: process.env.GITHUB_REPO_OWNER || '(not set)',
+      repo: process.env.GITHUB_REPO_NAME || '(not set)',
+    }, '[STARTUP] Checking GitHub credential storage env vars...');
+    if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO_OWNER || !process.env.GITHUB_REPO_NAME) {
+      logger.error('[STARTUP] FATAL: GitHub env vars missing. Cannot restore WhatsApp credentials.');
+      logger.error('[STARTUP] Required: GITHUB_TOKEN, GITHUB_REPO_OWNER, GITHUB_REPO_NAME');
+      logger.error('[STARTUP] Exiting with code 1.');
+      process.exit(1);
+    }
+    logger.info('[STARTUP] GitHub credential storage is configured');
+
+    logger.info({ url: process.env.API_URL || '(not set)' }, '[STARTUP] Session API URL (for reporting status)...');
+    logger.info({ nodeVersion: process.version }, '[STARTUP] Runtime: Node.js');
+
     // Start HTTP server
     await new Promise<void>((resolve) => {
       this.httpServer.listen(PORT, () => {
