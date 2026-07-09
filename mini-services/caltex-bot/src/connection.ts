@@ -80,15 +80,19 @@ export class ConnectionManager extends EventEmitter {
 
     const authFolder = this.getAuthFolder(sessionId);
 
-    // ── Free-tier persistence: restore credentials from GitHub if needed ──
-    // If BOT_SESSION_ID env var is set (e.g. CALTEX-ECPY-C3DK) and the local
-    // auth folder is empty (no creds.json), fetch credentials from the
-    // private GitHub repo. This lets the bot auto-connect on Render free
-    // tier even after restarts wipe the local filesystem.
+    // ── STARTUP LOG: credential loading ──
     const caltexSessionId = process.env.BOT_SESSION_ID;
     const credsFile = join(authFolder, 'creds.json');
+    this.globalLogger.info({
+      sessionId,
+      caltexSessionId: caltexSessionId || '(not set)',
+      authFolder,
+      credsFileExists: existsSync(credsFile),
+    }, '[LIFECYCLE] Loading credentials...');
+
+    // ── Free-tier persistence: restore credentials from GitHub if needed ──
     if (caltexSessionId && !existsSync(credsFile) && isGithubStorageConfigured()) {
-      this.globalLogger.info({ sessionId, caltexSessionId, authFolder }, '☁️  Local creds missing — attempting restore from GitHub');
+      this.globalLogger.info({ sessionId, caltexSessionId, authFolder }, '[LIFECYCLE] Local creds missing - downloading from GitHub...');
       try {
         const result = await downloadSessionFromGithub(caltexSessionId, authFolder);
         this.globalLogger.info({
@@ -96,22 +100,35 @@ export class ConnectionManager extends EventEmitter {
           caltexSessionId,
           fileCount: result.fileCount,
           phoneNumber: result.phoneNumber,
-        }, '✅ Credentials restored from GitHub — bot will connect as linked device (no QR needed)');
+        }, '[LIFECYCLE] Credentials downloaded from GitHub - bot will connect as linked device');
       } catch (restoreErr: any) {
-        this.globalLogger.warn({
+        this.globalLogger.error({
           sessionId,
           caltexSessionId,
           err: restoreErr.message,
-        }, '⚠️  Could not restore credentials from GitHub — will fall back to fresh QR pairing');
+        }, '[LIFECYCLE] FAILED to restore credentials from GitHub - bot will fall back to QR pairing');
       }
     } else if (caltexSessionId && existsSync(credsFile)) {
-      this.globalLogger.info({ sessionId, caltexSessionId }, '✅ Local credentials already present — skipping GitHub restore');
+      this.globalLogger.info({ sessionId, caltexSessionId }, '[LIFECYCLE] Local credentials found - skipping GitHub restore');
+    } else if (!caltexSessionId) {
+      this.globalLogger.warn({ sessionId }, '[LIFECYCLE] BOT_SESSION_ID not set - cannot restore from GitHub, will use QR pairing');
     }
 
+    // ── STARTUP LOG: initializing Baileys auth state ──
+    this.globalLogger.info({ authFolder }, '[LIFECYCLE] Initializing Baileys auth state from folder...');
     const { state, saveCreds } = await initAuthState(authFolder);
-    const { version } = await fetchLatestBaileysVersion();
+    this.globalLogger.info({
+      hasCreds: !!state?.creds,
+      registered: !!state?.creds?.registered,
+      hasMe: !!state?.creds?.me,
+      meId: state?.creds?.me?.id,
+    }, '[LIFECYCLE] Baileys auth state loaded');
 
-    this.globalLogger.info({ sessionId, version }, 'Creating WhatsApp connection');
+    // ── STARTUP LOG: fetching Baileys version ──
+    const { version } = await fetchLatestBaileysVersion();
+    this.globalLogger.info({ version: version.join('.') }, '[LIFECYCLE] Fetched latest Baileys WhatsApp version');
+
+    this.globalLogger.info({ sessionId, version: version.join('.'), printQR, browser }, '[LIFECYCLE] Creating Baileys WebSocket socket (Node.js ws implementation)...');
 
     const socketConfig: UserFacingSocketConfig = {
       version,
@@ -144,10 +161,19 @@ export class ConnectionManager extends EventEmitter {
 
     // --- Connection Update Handler ---
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+      const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update;
+
+      this.globalLogger.info({
+        sessionId,
+        connection: connection || null,
+        hasQr: !!qr,
+        hasLastDisconnect: !!lastDisconnect,
+        isNewLogin: !!isNewLogin,
+        receivedPendingNotifications: !!receivedPendingNotifications,
+      }, '[LIFECYCLE] connection.update event received');
 
       if (qr) {
-        this.globalLogger.info({ sessionId }, 'QR code received');
+        this.globalLogger.info({ sessionId, qrLength: qr.length }, '[LIFECYCLE] QR code received - scan with WhatsApp to pair');
         if (printQR) {
           qrcode.generate(qr, { small: true });
         }
@@ -160,6 +186,12 @@ export class ConnectionManager extends EventEmitter {
           lastDisconnect?.error?.output?.payload?.statusCode ??
           0;
         const reason = lastDisconnect?.error?.message ?? 'Unknown reason';
+        this.globalLogger.warn({
+          sessionId,
+          statusCode,
+          reason,
+          errorOutput: lastDisconnect?.error?.output,
+        }, '[LIFECYCLE] connection.close - WhatsApp disconnected, see statusCode/reason for details');
         const shouldReconnect =
           statusCode !== DisconnectReason.loggedOut &&
           autoReconnect &&
@@ -192,7 +224,13 @@ export class ConnectionManager extends EventEmitter {
         }
       } else if (connection === 'open') {
         this.reconnectAttempts.set(sessionId, 0);
-        this.globalLogger.info({ sessionId }, 'Connection opened');
+        const openCreds = sock.authState?.creds;
+        this.globalLogger.info({
+          sessionId,
+          registered: !!openCreds?.registered,
+          meId: openCreds?.me?.id,
+          platform: openCreds?.platform,
+        }, '[LIFECYCLE] connection.open - WhatsApp connection established, device is now an active linked device');
         this.connectionStates.set(sessionId, update);
         this.emit('connection.open', sessionId);
         this.emit('connection.update', update, sessionId);
@@ -211,6 +249,7 @@ export class ConnectionManager extends EventEmitter {
 
     // --- Credentials Update ---
     sock.ev.on('creds.update', (creds) => {
+      this.globalLogger.debug({ sessionId, hasMe: !!creds?.me, registered: !!creds?.registered }, '[LIFECYCLE] creds.update - saving credentials');
       saveCreds();
       this.emit('creds.update', creds, sessionId);
     });
