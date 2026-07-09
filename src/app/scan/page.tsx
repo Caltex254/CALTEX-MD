@@ -299,6 +299,7 @@ export default function ScanPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [copySuccess, setCopySuccess] = useState(false)
   const [apiOnline, setApiOnline] = useState<boolean | null>(null)
   const [whatsappReady, setWhatsappReady] = useState<boolean | null>(null)
   const [apiLatency, setApiLatency] = useState<number | null>(null)
@@ -631,10 +632,31 @@ export default function ScanPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const copySessionId = () => {
-    navigator.clipboard.writeText(caltexSessionId)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const copySessionId = async () => {
+    const text = caltexSessionId.trim()
+    if (!text) return
+    try {
+      // Try modern Clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        // Fallback for older browsers / non-HTTPS
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      setCopied(true)
+      setCopySuccess(true)
+      setTimeout(() => { setCopied(false); setCopySuccess(false) }, 3000)
+    } catch (err) {
+      console.error('Copy failed:', err)
+    }
   }
 
   const downloadSession = () => {
@@ -758,9 +780,9 @@ export default function ScanPage() {
                 )}
               </button>
             </div>
-            {copied && (
-              <p className="text-xs animate-fade-in" style={{ color: '#25D366' }}>
-                ✓ Session ID copied to clipboard!
+            {copySuccess && (
+              <p className="text-sm font-medium animate-fade-in flex items-center gap-1.5" style={{ color: '#25D366' }}>
+                ✅ Session ID copied successfully.
               </p>
             )}
           </div>
@@ -771,32 +793,52 @@ export default function ScanPage() {
           </div>
         )}
 
-        {/* Action buttons row */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={copySessionId}
-            disabled={!caltexSessionId}
-            className="py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-            style={{
-              background: 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
-              boxShadow: '0 4px 15px rgba(0,229,255,0.3)',
-            }}
-          >
-            {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied!' : 'Copy Session ID'}
-          </button>
-          <button
-            onClick={() => setShowGuide(!showGuide)}
-            className="py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            style={{
-              background: 'linear-gradient(135deg, #6C3BFF, #FFC107)',
-              boxShadow: '0 4px 15px rgba(108,59,255,0.3)',
-            }}
-          >
-            <BookOpen className="h-4 w-4" />
-            {showGuide ? 'Hide Guide' : 'Deployment Guide'}
-          </button>
-        </div>
+        {/* Large Copy Session ID button — full width, directly below the card */}
+        <button
+          onClick={copySessionId}
+          disabled={!caltexSessionId}
+          className="w-full py-4 rounded-xl text-white font-bold text-base flex items-center justify-center gap-2.5 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            background: copySuccess
+              ? 'linear-gradient(135deg, #25D366, #00E5FF)'
+              : 'linear-gradient(135deg, #00E5FF, #6C3BFF)',
+            boxShadow: copySuccess
+              ? '0 4px 20px rgba(37,211,102,0.4)'
+              : '0 4px 20px rgba(0,229,255,0.35)',
+          }}
+        >
+          {copySuccess ? (
+            <>
+              <CheckCircle2 className="h-5 w-5" />
+              ✅ Session ID copied successfully.
+            </>
+          ) : (
+            <>
+              <Copy className="h-5 w-5" />
+              📋 Copy Session ID
+            </>
+          )}
+        </button>
+
+        {/* Confirmation message (also shown below button for clarity) */}
+        {copySuccess && (
+          <p className="text-center text-sm font-medium animate-fade-in" style={{ color: '#25D366' }}>
+            ✅ Session ID copied successfully.
+          </p>
+        )}
+
+        {/* Deployment Guide button — secondary, below the copy button */}
+        <button
+          onClick={() => setShowGuide(!showGuide)}
+          className="w-full py-3 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99]"
+          style={{
+            background: 'linear-gradient(135deg, #6C3BFF, #FFC107)',
+            boxShadow: '0 4px 15px rgba(108,59,255,0.3)',
+          }}
+        >
+          <BookOpen className="h-4 w-4" />
+          {showGuide ? 'Hide Guide' : 'Deployment Guide'}
+        </button>
 
         {/* Secondary actions */}
         <div className="grid grid-cols-2 gap-3">
