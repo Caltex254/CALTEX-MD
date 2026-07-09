@@ -22,6 +22,7 @@ import qrcode from 'qrcode-terminal';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { SessionManager } from './session-manager';
+import { downloadSessionFromGithub, isGithubStorageConfigured } from './github-storage';
 import type { ConnectionConfig, BotEvents } from './types';
 
 const logger = pino({
@@ -78,6 +79,35 @@ export class ConnectionManager extends EventEmitter {
     this.reconnectAttempts.set(sessionId, 0);
 
     const authFolder = this.getAuthFolder(sessionId);
+
+    // ── Free-tier persistence: restore credentials from GitHub if needed ──
+    // If BOT_SESSION_ID env var is set (e.g. CALTEX-ECPY-C3DK) and the local
+    // auth folder is empty (no creds.json), fetch credentials from the
+    // private GitHub repo. This lets the bot auto-connect on Render free
+    // tier even after restarts wipe the local filesystem.
+    const caltexSessionId = process.env.BOT_SESSION_ID;
+    const credsFile = join(authFolder, 'creds.json');
+    if (caltexSessionId && !existsSync(credsFile) && isGithubStorageConfigured()) {
+      this.globalLogger.info({ sessionId, caltexSessionId, authFolder }, '☁️  Local creds missing — attempting restore from GitHub');
+      try {
+        const result = await downloadSessionFromGithub(caltexSessionId, authFolder);
+        this.globalLogger.info({
+          sessionId,
+          caltexSessionId,
+          fileCount: result.fileCount,
+          phoneNumber: result.phoneNumber,
+        }, '✅ Credentials restored from GitHub — bot will connect as linked device (no QR needed)');
+      } catch (restoreErr: any) {
+        this.globalLogger.warn({
+          sessionId,
+          caltexSessionId,
+          err: restoreErr.message,
+        }, '⚠️  Could not restore credentials from GitHub — will fall back to fresh QR pairing');
+      }
+    } else if (caltexSessionId && existsSync(credsFile)) {
+      this.globalLogger.info({ sessionId, caltexSessionId }, '✅ Local credentials already present — skipping GitHub restore');
+    }
+
     const { state, saveCreds } = await initAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
 
