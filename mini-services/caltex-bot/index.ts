@@ -664,7 +664,10 @@ class CaltexBot {
             return;
           }
           try {
-            const result = await this.connectionManager.sendMessage(sessionId, jid, content);
+            // Baileys expects an object like { text: "..." }, not a raw string.
+            // If content is a string, wrap it. If it's already an object, pass through.
+            const messagePayload = typeof content === 'string' ? { text: content } : content;
+            const result = await this.connectionManager.sendMessage(sessionId, jid, messagePayload);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, result }));
           } catch (err) {
