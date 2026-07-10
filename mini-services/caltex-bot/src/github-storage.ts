@@ -113,11 +113,15 @@ export async function uploadSessionToGithub(
   };
   if (existingSha) body.sha = existingSha;
 
+  const uploadController = new AbortController();
+  const uploadTimeout = setTimeout(() => uploadController.abort(), 15000);
   const resp = await fetch(`${repoApiBase()}/contents/${path}`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(body),
+    signal: uploadController.signal,
   });
+  clearTimeout(uploadTimeout);
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -144,9 +148,13 @@ export async function downloadSessionFromGithub(
   }
 
   const path = `sessions/${caltexSessionId}.json`;
+  const downloadController = new AbortController();
+  const downloadTimeout = setTimeout(() => downloadController.abort(), 15000);
   const resp = await fetch(`${repoApiBase()}/contents/${path}?ref=${GH_BRANCH}`, {
     headers: authHeaders(),
+    signal: downloadController.signal,
   });
+  clearTimeout(downloadTimeout);
 
   if (resp.status === 404) {
     throw new Error(`Session ${caltexSessionId} not found in GitHub repo`);
