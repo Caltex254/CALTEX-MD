@@ -324,6 +324,58 @@ class CaltexBot {
           return;
         }
 
+        // Test endpoint: runs each connection step with explicit logging
+        if (url === '/api/test-connect' && method === 'GET') {
+          const sessionId = process.env.BOT_SESSION_ID || 'caltex-md';
+          const steps: any[] = [];
+          const log = (step: string, status: string, data?: any) => {
+            const entry = { step, status, timestamp: Date.now(), ...(data ? { data } : {}) };
+            steps.push(entry);
+            logger.info(entry, '[TEST-CONNECT]');
+          };
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ message: 'Test started. Check logs for [TEST-CONNECT] entries.', sessionId }));
+
+          // Run steps asynchronously
+          (async () => {
+            try {
+              log('1-env-check', 'start');
+              log('1-env-check', 'done', {
+                BOT_SESSION_ID: process.env.BOT_SESSION_ID || '(not set)',
+                GITHUB_TOKEN: process.env.GITHUB_TOKEN ? 'set' : 'not set',
+                GITHUB_REPO_OWNER: process.env.GITHUB_REPO_OWNER,
+                GITHUB_REPO_NAME: process.env.GITHUB_REPO_NAME,
+              });
+
+              log('2-session-manager-create', 'start');
+              await this.sessionManager.createSession(sessionId);
+              log('2-session-manager-create', 'done');
+
+              log('3-connection-create', 'start');
+              const sock = await this.connectionManager.createConnection({
+                sessionId,
+                printQR: false,
+                browser: 'CALTEX MD',
+                autoReconnect: true,
+                maxReconnectAttempts: 3,
+                reconnectBaseDelay: 2000,
+              });
+              log('3-connection-create', 'done', { hasSocket: !!sock });
+
+              log('4-wait-connection-open', 'start', { note: 'waiting up to 30s for connection.open' });
+              // The connection.update handler in connection.ts will log when connection opens
+              // We just wait and let it happen
+              await new Promise(resolve => setTimeout(resolve, 30000));
+              const isConnected = this.connectionManager.isConnected(sessionId);
+              log('4-wait-connection-open', 'done', { connected: isConnected });
+            } catch (err: any) {
+              log('error', 'failed', { message: err?.message ?? String(err), stack: err?.stack });
+            }
+          })();
+          return;
+        }
+
         // Return the latest WhatsApp QR code as a PNG image
         if (url === '/api/qr-image' && method === 'GET') {
           const sessionId = new URL(url, 'http://localhost').searchParams.get('sessionId') ?? DEFAULT_SESSION_ID;
