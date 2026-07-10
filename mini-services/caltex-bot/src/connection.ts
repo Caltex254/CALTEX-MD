@@ -124,9 +124,19 @@ export class ConnectionManager extends EventEmitter {
       meId: state?.creds?.me?.id,
     }, '[LIFECYCLE] Baileys auth state loaded');
 
-    // ── STARTUP LOG: fetching Baileys version ──
-    const { version } = await fetchLatestBaileysVersion();
-    this.globalLogger.info({ version: version.join('.') }, '[LIFECYCLE] Fetched latest Baileys WhatsApp version');
+    // ── STARTUP LOG: fetching Baileys version (with timeout) ──
+    let version: [number, number, number] = [2, 3000, 0]; // fallback
+    try {
+      const versionPromise = fetchLatestBaileysVersion();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout after 10s')), 10000)
+      );
+      const result = await Promise.race([versionPromise, timeoutPromise]);
+      version = result.version;
+      this.globalLogger.info({ version: version.join('.') }, '[LIFECYCLE] Fetched latest Baileys WhatsApp version');
+    } catch (versionErr: any) {
+      this.globalLogger.warn({ err: versionErr?.message ?? String(versionErr), fallback: version.join('.') }, '[LIFECYCLE] Using fallback Baileys version (fetch failed or timed out)');
+    }
 
     this.globalLogger.info({ sessionId, version: version.join('.'), printQR, browser }, '[LIFECYCLE] Creating Baileys WebSocket socket (Node.js ws implementation)...');
 
