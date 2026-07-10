@@ -1,0 +1,150 @@
+{
+  "_comment": "CALTEX MD Bot - Pterodactyl Egg Configuration",
+  "name": "CALTEX MD WhatsApp Bot",
+  "author": "Caltex254",
+  "description": "CALTEX MD - Powerful WhatsApp Multi-Device Bot with AI, Plugin System, Web Dashboard & REST API. Uses Node.js + tsx runtime with Baileys for WhatsApp connection.",
+  "features": [
+    "EULA"
+  ],
+  "docker_images": {
+    "Node 20": "ghcr.io/pterodactyl/yolks:node_20"
+  },
+  "file_denylist": [],
+  "startup": "if [ ! -d node_modules ]; then npm install --no-audit --no-fund; fi && npx tsx index.ts",
+  "config": {
+    "files": {
+      "package.json": {
+        "parser": "json",
+        "find": {
+          "scripts.start": "tsx index.ts"
+        }
+      }
+    },
+    "startup": {
+      "done": "HTTP server listening on port",
+      "userInteraction": []
+    },
+    "logs": {
+      "custom": false,
+      "location": "bot.log"
+    },
+    "stop": "^^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\n# CALTEX MD Bot - Pterodactyl Installation Script\n# The bot files are uploaded directly by the user, no installation needed.\n# Dependencies are installed at startup via npm install.\n\napt update\napt install -y git\n\n# If package.json doesn't exist, clone the repo\nif [ ! -f /mnt/server/package.json ]; then\n    echo \"Cloning CALTEX-MD repository...\"\n    git clone --depth 1 https://github.com/Caltex254/CALTEX-MD.git /tmp/caltex\n    cp -r /tmp/caltex/mini-services/caltex-bot/* /mnt/server/\n    cp -r /tmp/caltex/mini-services/caltex-bot/.* /mnt/server/ 2>/dev/null || true\n    rm -rf /tmp/caltex\nfi\n\necho \"Installation complete. Bot files are ready.\"\necho \"Dependencies will be installed on first startup via npm install.\"",
+      "container": "debian:bullseye-slim",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Bot Session ID",
+      "description": "Your CALTEX-XXXX-XXXX session ID from the pairing dashboard. Required for auto-connecting without QR code.",
+      "env_variable": "BOT_SESSION_ID",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "Bot Owner Phone",
+      "description": "Phone number of the bot owner (international format, no + or spaces). Example: 254104906247",
+      "env_variable": "BOT_OWNER",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "GitHub Token",
+      "description": "GitHub personal access token for credential storage (used to restore WhatsApp session across restarts).",
+      "env_variable": "GITHUB_TOKEN",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "GitHub Repo Owner",
+      "description": "GitHub username or org that owns the caltex-sessions repo.",
+      "env_variable": "GITHUB_REPO_OWNER",
+      "default_value": "Caltex254",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "GitHub Repo Name",
+      "description": "Name of the private GitHub repo where WhatsApp credentials are stored.",
+      "env_variable": "GITHUB_REPO_NAME",
+      "default_value": "caltex-sessions",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "Bot Name",
+      "description": "Display name for the bot.",
+      "env_variable": "BOT_NAME",
+      "default_value": "CALTEX MD",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "Command Prefix",
+      "description": "Prefix for bot commands. Use '.' for .menu, .ping etc.",
+      "env_variable": "BOT_PREFIX",
+      "default_value": ".",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "Auto Read Messages",
+      "description": "Automatically mark incoming messages as read.",
+      "env_variable": "AUTO_READ",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|boolean"
+    },
+    {
+      "name": "Auto Typing",
+      "description": "Show typing indicator when processing messages.",
+      "env_variable": "AUTO_TYPING",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|boolean"
+    },
+    {
+      "name": "Anti Link",
+      "description": "Delete messages containing links in groups.",
+      "env_variable": "ANTI_LINK",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|boolean"
+    },
+    {
+      "name": "Node Environment",
+      "description": "Node.js environment mode.",
+      "env_variable": "NODE_ENV",
+      "default_value": "production",
+      "user_viewable": true,
+      "user_editable": false,
+      "rules": "required|string"
+    },
+    {
+      "name": "Log Level",
+      "description": "Logging level (debug, info, warn, error).",
+      "env_variable": "LOG_LEVEL",
+      "default_value": "info",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    }
+  ]
+}
