@@ -16,7 +16,11 @@ import { MessageHandler } from './src/message-handler';
 import { Scheduler } from './src/scheduler';
 import { APIClient } from './src/api-client';
 
-const PORT = 3031;
+// Read port from env vars for platform compatibility:
+// - Render: PORT is set automatically
+// - Pterodactyl: SERVER_PORT is set by the panel
+// - Local dev: defaults to 3031
+const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '3031', 10);
 // Use BOT_SESSION_ID env var if set (e.g. CALTEX-ECPY-C3DK), else fall back to 'caltex-md'
 const DEFAULT_SESSION_ID = process.env.BOT_SESSION_ID || 'caltex-md';
 
