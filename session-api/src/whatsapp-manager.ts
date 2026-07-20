@@ -261,6 +261,41 @@ class WhatsAppManager {
     log.info('🔓 Pairing lock released');
   }
 
+  // Public method to manually release a stuck pairing lock (called via admin API)
+  releasePairingLockManual(): void {
+    log.info('🔓 Manual pairing lock release');
+    this.clearPairingExpiryTimer();
+    this.pendingPairingSessions.clear();
+    this.releasePairingLock();
+  }
+
+  // Force reset the WhatsApp socket (called via admin API)
+  forceReset(): void {
+    log.info('🔄 Force resetting WhatsApp socket...');
+    this.clearPairingExpiryTimer();
+    this.pendingPairingSessions.clear();
+    this.releasePairingLock();
+
+    if (this.socket) {
+      try {
+        this.socket.end(undefined);
+      } catch (err: any) {
+        log.warn({ err: err.message }, 'Error ending socket during force reset');
+      }
+      this.socket = null;
+    }
+
+    this.state.isReady = false;
+    this.state.isConnecting = false;
+    this.state.sessionStatus = 'disconnected';
+    this.state.activePairingSessionId = null;
+    this._pairingLock = false;
+
+    // Schedule reconnect after 2 seconds
+    this.scheduleReconnect(2000);
+    log.info('Force reset complete — socket will reconnect in 2s');
+  }
+
   // ==========================================================================
   // STALE AUTH CHECK — v7.0 FIX: Skip if active pairing sessions exist
   // ==========================================================================
@@ -547,7 +582,7 @@ class WhatsAppManager {
   private startPairingExpiryTimer(sessionId: string): void {
     this.clearPairingExpiryTimer();
 
-    const EXPIRY_MS = 180_000; // 3 minutes (pairing codes expire in ~2 min)
+    const EXPIRY_MS = 120_000; // 2 minutes (matches WhatsApp's actual pairing code expiry)
 
     log.info({ sessionId, expiryMs: EXPIRY_MS }, '⏱️ Starting pairing code expiry timer');
 
