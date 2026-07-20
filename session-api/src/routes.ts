@@ -145,6 +145,64 @@ router.get('/status', (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /release-pairing-lock — Manually release a stuck pairing lock
+// ---------------------------------------------------------------------------
+router.post('/release-pairing-lock', (_req: Request, res: Response) => {
+  try {
+    const state = whatsappManager.getState();
+    const activeSession = state.activePairingSessionId;
+    log.info({ activePairingSessionId: activeSession }, 'Manual release of pairing lock requested');
+
+    // Force release the lock
+    whatsappManager.releasePairingLockManual();
+
+    // Mark any pending sessions as failed
+    const sessions = sessionStore.list();
+    let cleared = 0;
+    for (const s of sessions) {
+      if (s.status === 'waiting_pairing' || s.status === 'waiting_connect') {
+        sessionStore.update(s.id, { status: 'failed' });
+        cleared++;
+      }
+    }
+
+    log.info({ cleared, activePairingSessionId: activeSession }, 'Pairing lock released, pending sessions cleared');
+
+    res.json({
+      success: true,
+      data: {
+        released: true,
+        previousActiveSessionId: activeSession,
+        clearedPendingSessions: cleared,
+        message: 'Pairing lock released. You can now generate a new pairing code.',
+      },
+    });
+  } catch (err: any) {
+    log.error({ err: err.message }, 'Failed to release pairing lock');
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /force-reset — Force reset the WhatsApp socket (use if stuck)
+// ---------------------------------------------------------------------------
+router.post('/force-reset', (_req: Request, res: Response) => {
+  try {
+    log.info('Force reset requested — destroying WhatsApp socket and reconnecting');
+    whatsappManager.forceReset();
+    res.json({
+      success: true,
+      data: {
+        message: 'WhatsApp socket force-reset. A new connection will be established automatically.',
+      },
+    });
+  } catch (err: any) {
+    log.error({ err: err.message }, 'Failed to force reset');
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /pairing-code — Generate Pairing Code (using global socket)
 // ---------------------------------------------------------------------------
 router.post('/pairing-code', async (req: Request, res: Response) => {
