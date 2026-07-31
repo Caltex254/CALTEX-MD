@@ -1,11 +1,10 @@
 {
-  "_comment": "CALTEX MD Bot - Pterodactyl Egg Configuration. Supports three connection modes: (A) auto-connect with local creds, (B) GitHub credential restore (legacy), (C) interactive pairing code flow on Pterodactyl (new — no Render/Vercel needed).",
+  "_comment": "CALTEX MD Bot - Pterodactyl Egg Configuration. Node.js 20 + tsx + Baileys. Supports three connection modes: (A) auto-connect with local creds, (B) GitHub credential restore (legacy), (C) interactive pairing code flow on Pterodactyl (default on first start). NOT a Java/Minecraft egg — do NOT use server.jar.",
   "name": "CALTEX MD WhatsApp Bot",
   "author": "Caltex254",
-  "description": "CALTEX MD - Powerful WhatsApp Multi-Device Bot with AI, Plugin System, Web Dashboard & REST API. Uses Node.js + tsx runtime with Baileys for WhatsApp connection. Supports interactive phone-number pairing directly on Pterodactyl — no separate Render session API or Vercel dashboard required.",
-  "features": [
-    "EULA"
-  ],
+  "description": "CALTEX MD - Powerful WhatsApp Multi-Device Bot with AI, Plugin System, Web Dashboard & REST API. Uses Node.js 20 + tsx runtime with Baileys for WhatsApp connection. Supports interactive phone-number pairing directly on Pterodactyl — no separate Render session API or Vercel dashboard required. This is a Node.js egg, NOT a Java/Minecraft egg.",
+  "version": "1.2.0",
+  "features": [],
   "docker_images": {
     "Node 20": "ghcr.io/pterodactyl/yolks:node_20"
   },
@@ -32,7 +31,7 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# CALTEX MD Bot - Pterodactyl Installation Script\n# The bot files are uploaded directly by the user, no installation needed.\n# Dependencies are installed at startup via npm install.\n\napt update\napt install -y git\n\n# If package.json doesn't exist, clone the repo\nif [ ! -f /mnt/server/package.json ]; then\n    echo \"Cloning CALTEX-MD repository...\"\n    git clone --depth 1 https://github.com/Caltex254/CALTEX-MD.git /tmp/caltex\n    # Copy the bot service files (the actual WhatsApp bot)\n    cp -r /tmp/caltex/mini-services/caltex-bot/* /mnt/server/\n    cp -r /tmp/caltex/mini-services/caltex-bot/.* /mnt/server/ 2>/dev/null || true\n    # Also copy the Pterodactyl startup script from repo root\n    cp /tmp/caltex/pterodactyl-start.sh /mnt/server/pterodactyl-start.sh 2>/dev/null || true\n    chmod +x /mnt/server/pterodactyl-start.sh 2>/dev/null || true\n    rm -rf /tmp/caltex\nfi\n\necho \"Installation complete. Bot files are ready.\"\necho \"Dependencies will be installed on first startup via npm install.\"",
+      "script": "#!/bin/bash\n# CALTEX MD Bot - Pterodactyl Installation Script\n# The bot files are normally uploaded directly by the user. This script is a\n# fallback: if package.json is missing, it clones the repo and copies ONLY the\n# bot service (mini-services/caltex-bot/) to /mnt/server/.\n#\n# The bot is Node.js + TypeScript. NO Java, NO Minecraft, NO server.jar.\n\nset -e\n\napt-get update -y\napt-get install -y git ca-certificates\n\n# If package.json doesn't exist, clone the repo and copy the bot service files.\nif [ ! -f /mnt/server/package.json ]; then\n    echo \"[install] package.json not found — cloning CALTEX-MD repository...\"\n    rm -rf /tmp/caltex\n    git clone --depth 1 https://github.com/Caltex254/CALTEX-MD.git /tmp/caltex\n\n    # Copy the bot service files (the actual WhatsApp bot) into /mnt/server/\n    # Use 'cp -a .' to include hidden files (e.g. .env.example) but exclude\n    # '.' and '..' entries that the '.*' glob would otherwise match.\n    mkdir -p /mnt/server\n    cp -a /tmp/caltex/mini-services/caltex-bot/. /mnt/server/\n\n    # Also copy the Pterodactyl startup script from the repo root.\n    cp /tmp/caltex/pterodactyl-start.sh /mnt/server/pterodactyl-start.sh\n    chmod +x /mnt/server/pterodactyl-start.sh\n\n    # Clean up.\n    rm -rf /tmp/caltex\n    echo \"[install] Bot files copied to /mnt/server/\"\nelse\n    echo \"[install] package.json already exists — skipping clone.\"\nfi\n\n# Make sure the startup script is executable (in case it was uploaded without +x).\nchmod +x /mnt/server/pterodactyl-start.sh 2>/dev/null || true\n\n# Pre-create the auth_info_baileys directory so the bot can persist credentials.\nmkdir -p /mnt/server/auth_info_baileys\n\necho \"[install] Installation complete.\"\necho \"[install] Bot files are at /mnt/server/ (this becomes /home/container inside the container).\"\necho \"[install] Dependencies will be installed on first startup via 'npm install' (run by pterodactyl-start.sh).\"\necho \"[install] Required env var: BOT_OWNER (your WhatsApp phone number, e.g. 254712345678).\"",
       "container": "debian:bullseye-slim",
       "entrypoint": "bash"
     }

@@ -2,6 +2,33 @@
 
 This guide explains how to deploy the CALTEX MD WhatsApp bot on a Pterodactyl panel. The bot supports **three connection modes** and will auto-detect the right one at startup.
 
+---
+
+## ⚠️ FIX: "Error: Unable to access jarfile server.jar"
+
+If your Pterodactyl console shows anything like this:
+
+```
+openjdk version "25.0.3"
+java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar server.jar
+Error: Unable to access jarfile server.jar
+```
+
+…then **your server was created with the WRONG egg** (a Java/Minecraft egg). CALTEX MD is a **Node.js + TypeScript + Baileys** bot — it does NOT use Java, does NOT use `server.jar`, and does NOT use a Minecraft egg.
+
+**To fix this you MUST recreate the server with the correct egg.** Pterodactyl does not let you swap eggs on an existing server, so follow the full Quick Start below. In particular:
+
+1. Import the CALTEX MD egg (`egg-caltex-bot.json` from this repo) into your panel.
+2. Create a NEW server using that egg (do NOT reuse the Minecraft server).
+3. Make sure the Docker image is `ghcr.io/pterodactyl/yolks:node_20`.
+4. Make sure the startup command is `bash pterodactyl-start.sh`.
+5. Set `BOT_OWNER` to your phone number.
+6. Start the server.
+
+The startup logs you SHOULD see are listed in the "What successful startup logs look like" section at the bottom of this guide.
+
+---
+
 ## Quick Start (Recommended)
 
 The simplest deployment: just set `BOT_OWNER` to your phone number and start the server. The bot will generate a pairing code on first start — no separate session API or dashboard needed.
@@ -240,3 +267,95 @@ To update to a new version:
 5. Start the server — dependencies will auto-install
 
 Your existing WhatsApp session (in `auth_info_baileys/`) will be preserved, so you won't need to re-pair.
+
+---
+
+## What successful startup logs look like
+
+When everything is configured correctly, your Pterodactyl console should print something like this on **first start** (no existing credentials):
+
+```
+==========================================
+  CALTEX MD Bot - Pterodactyl Startup
+==========================================
+[...] Container working directory: /home/container
+[...] Node version: v20.x.x
+[...] npm version:  10.x.x
+[...] SERVER_PORT: 12345
+[...] BOT_OWNER: ***set*** (value hidden for security)
+[...] BOT_SESSION_ID: (not set — will use interactive pairing)
+[...] GITHUB_TOKEN: (not set — optional)
+
+[...] node_modules not found — running 'npm install'...
+[...] Dependencies installed successfully.
+
+==========================================
+  Starting CALTEX MD Bot...
+  Runtime: Node.js v20.x.x + tsx
+  Entry:   index.ts
+==========================================
+
+[...] INFO (main): HTTP server listening on port 12345
+[...] INFO: ==================================================
+[...] INFO:   CALTEX MD WhatsApp Bot - Starting...
+[...] INFO: ==================================================
+[...] INFO: [STARTUP] Mode detection
+    sessionId: "caltex-md"
+    isCaltexId: false
+    hasLocalCreds: false
+    hasGithubEnv: false
+    hasBotOwner: true
+[...] INFO: HTTP server listening on port 12345
+[...] INFO: [STARTUP] No existing credentials found — entering interactive pairing mode.
+[...] INFO: [STARTUP] BOT_OWNER env var detected — using it as phone number for pairing
+[...] INFO: [PAIRING] Starting interactive pairing code flow...
+[...] INFO: [PAIRING] Fetched latest Baileys version
+[...] INFO: [PAIRING] Creating WhatsApp connection for pairing code flow
+[...] INFO: [PAIRING] connection.update event received
+[...] INFO: [PAIRING] QR event received — pairing code will be requested instead of QR display
+
+╔══════════════════════════════════════════════════════════════╗
+║          CALTEX MD — WHATSAPP PAIRING CODE                   ║
+║          Phone:  254712345678                                ║
+║          Code:   ABCD-1234                                   ║
+║   1. Open WhatsApp on your phone                             ║
+║   2. Go to Settings → Linked Devices                         ║
+║   3. Tap "Link a Device"                                     ║
+║   4. Tap "Link with phone number instead"                    ║
+║   5. Enter the code above: ABCD-1234                         ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+After you enter the code on your phone:
+
+```
+[...] INFO: [PAIRING] connection.open — WhatsApp paired successfully, bot is now an active linked device
+[...] INFO: WhatsApp success message sent to linked account
+```
+
+You'll also receive a WhatsApp message from yourself saying **"BOT CONNECTED SUCCESSFULLY"**.
+
+On **subsequent restarts** (credentials already saved locally), the log is much shorter:
+
+```
+[...] INFO: [STARTUP] Mode detection
+    hasLocalCreds: true
+[...] INFO: [STARTUP] Auto-connecting with existing credentials...
+[...] INFO: [LIFECYCLE] Local credentials found - skipping GitHub restore
+[...] INFO: [LIFECYCLE] connection.open — WhatsApp connection established
+```
+
+No pairing code is needed on restart — the bot reconnects automatically.
+
+### What FAILURE looks like (and how to fix it)
+
+| Console output | Meaning | Fix |
+|----------------|---------|-----|
+| `openjdk version ...` / `Error: Unable to access jarfile server.jar` | Wrong egg — Java/Minecraft egg selected | Recreate server with `egg-caltex-bot.json` (see top of this guide) |
+| `[FATAL] Node.js runtime not found in this container.` | Docker image is not Node.js | Change Docker image to `ghcr.io/pterodactyl/yolks:node_20` |
+| `[FATAL] BOT_OWNER is not set.` | Required env var missing | Set `BOT_OWNER` in the Startup tab |
+| `[FATAL] index.ts not found` | Bot files not uploaded | Upload contents of `mini-services/caltex-bot/` to `/home/container/` |
+| `[FATAL] @whiskeysockets/baileys is not installed.` | Dependency install failed | Stop server, delete `node_modules/`, start again |
+| `npm install` hangs or fails | Network issue or out of disk | Check disk space in Pterodactyl; check container egress |
+| No pairing code after 60s | WebSocket egress blocked | Check host firewall allows outgoing port 443 |
+

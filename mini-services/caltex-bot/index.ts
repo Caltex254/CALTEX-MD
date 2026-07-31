@@ -252,8 +252,13 @@ class CaltexBot {
       this.apiClient.reportCommand(data.command, data.sender, data.jid, data.success);
     });
 
-    this.messageHandler.on('message:processed', (data: any) => {
-      this.emit('stats:update', data);
+    // NOTE: 'message:processed' events from the MessageHandler are counted via
+    // totalMessagesProcessed above (in the messages.upsert handler). The previous
+    // code called this.emit('stats:update', ...) but CaltexBot does not extend
+    // EventEmitter and nothing listens for that event, so it has been removed
+    // to prevent a runtime TypeError on every incoming message.
+    this.messageHandler.on('message:processed', (_data: any) => {
+      // Intentionally a no-op — kept as an extension point for future features.
     });
 
     // Scheduler events

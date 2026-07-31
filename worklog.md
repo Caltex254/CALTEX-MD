@@ -320,3 +320,91 @@ Stage Summary:
 - All egg-defined env vars are now properly wired up (was previously: set but ignored)
 - Logs now go to both stdout (Pterodactyl console) and bot.log file
 - Backward compatible: legacy GitHub restore mode (Mode B) still works if BOT_SESSION_ID and GITHUB_TOKEN are set
+
+---
+Task ID: pterodactyl-fix-v2
+Agent: Super Z (main)
+Task: Fix CALTEX MD Pterodactyl deployment — server was crashing because it was using a Java/Minecraft egg (server.jar) instead of the Node.js 20 + Baileys bot egg.
+
+Work Log:
+- Audited the existing Pterodactyl deployment files:
+  - pterodactyl-start.sh (start script)
+  - egg-caltex-bot.json (Pterodactyl egg)
+  - mini-services/caltex-bot/package.json (bot deps)
+  - mini-services/caltex-bot/index.ts (entry point)
+  - mini-services/caltex-bot/src/connection.ts (Baileys connection)
+  - DEPLOYMENT-PTERODACTYL.md (docs)
+- Found and fixed CRITICAL bug #1: `set -e` in pterodactyl-start.sh was killing the script
+  the moment `npx tsx index.ts` crashed (non-zero exit), which completely broke the
+  auto-restart loop. Removed `set -e` and replaced with explicit `|| { ...; exit 1; }`
+  guards for setup steps. Verified auto-restart now works (tested with a fake crashing
+  index.ts — retries 1, 2, 3 fire correctly with 5s, 10s, 20s backoff).
+- Fixed bug #2: Phone number was being leaked in the startup log line
+  `BOT_OWNER: '***set***'254712345678` because of a bash parameter-expansion mistake
+  (`${VAR:+'***set***'}${VAR:-'...'}` concatenates both parts when VAR is set).
+  Replaced with explicit `if [ -n "$VAR" ]` checks that print only `***set***`
+  without leaking the value. Same fix applied to BOT_SESSION_ID and GITHUB_TOKEN.
+- Fixed bug #3: `this.emit('stats:update', data)` in index.ts threw a runtime
+  TypeError on every incoming WhatsApp message because CaltexBot does not extend
+  EventEmitter. Replaced with a no-op handler (the event had no listeners anyway).
+- Fixed egg issues:
+  - Removed `"features": ["EULA"]` (inappropriate for a WhatsApp bot — would
+    require an EULA variable that doesn't exist)
+  - Added `"version": "1.2.0"` (standard Pterodactyl egg field)
+  - Rewrote the install script to use `cp -a /tmp/caltex/mini-services/caltex-bot/. /mnt/server/`
+    instead of the buggy `cp -r ... *` + `cp -r ... .*` pattern (the `.*` glob
+    matches `.` and `..` which would copy parent directories)
+  - Added `apt-get install -y ca-certificates` for HTTPS git clone
+  - Pre-creates `auth_info_baileys/` directory at install time
+  - Added explicit "NO Java, NO Minecraft, NO server.jar" comments
+- Added sanity checks to pterodactyl-start.sh:
+  - Verifies `node` is available (fails loudly if Java image was used by mistake)
+  - Warns if `java` is present (wrong image)
+  - Verifies `index.ts` and `package.json` exist before running
+  - Verifies `@whiskeysockets/baileys` is installed
+  - Verifies `tsx` is in node_modules/.bin/
+- Verified the bot actually starts and reaches the pairing-code state:
+  - npm install (fresh): 144 packages installed in 3s ✓
+  - @whiskeysockets/baileys 6.7.23 present ✓
+  - tsx 4.19.x present ✓
+  - HTTP server starts on SERVER_PORT ✓
+  - Mode detection works (no creds → interactive pairing) ✓
+  - Baileys version fetched ✓
+  - QR event fires → pairing code generated ✓
+  - Pairing code banner displayed with phone number + code ✓
+  - Auto-restart loop fires on crash (was broken before) ✓
+  - Graceful shutdown on SIGTERM ✓
+- Updated DEPLOYMENT-PTERODACTYL.md:
+  - Added prominent "FIX: server.jar error" section at the very top
+  - Added "What successful startup logs look like" section at the bottom
+    with real log samples for first-start, post-pairing, and restart scenarios
+  - Added failure-mode table mapping console output → cause → fix
+
+Stage Summary:
+- All 14 verification points from the user's request pass:
+  1. ✓ package.json is correctly used (npm install via pterodactyl-start.sh)
+  2. ✓ Dependencies install with `npm install` (verified: 144 packages, 3s)
+  3. ✓ @whiskeysockets/baileys 6.7.23 installed
+  4. ✓ tsx 4.19.x installed
+  5. ✓ pterodactyl-start.sh starts the correct index.ts via `npx tsx index.ts`
+  6. ✓ BOT_OWNER is required (script exits with code 1 + clear FATAL message if missing)
+  7. ✓ BOT_SESSION_ID is supported (read in index.ts and connection.ts)
+  8. ✓ Local WhatsApp credentials persist in auth_info_baileys/<sessionId>/
+  9. ✓ Bot auto-reconnects after restart (Mode A — local creds auto-connect;
+     plus auto-restart loop in pterodactyl-start.sh with exponential backoff)
+  10. ✓ Bot listens on the Pterodactyl assigned port (SERVER_PORT env, falls
+      back to PORT or 3031)
+  11. ✓ No Bun runtime is used (npm install + npx tsx only)
+  12. ✓ No Java runtime is used (sanity check fails loudly if Java image detected)
+  13. ✓ No server.jar is referenced anywhere in the bot deployment
+  14. ✓ Startup logs clearly show: Node version, npm version, SERVER_PORT,
+      BOT_OWNER/BOT_SESSION_ID/GITHUB_TOKEN (masked), dependency install,
+      bot startup, HTTP server port, WhatsApp connection status, pairing code
+- SECURITY: no secrets are printed in logs (BOT_OWNER phone number is masked,
+  GITHUB_TOKEN is masked, WhatsApp creds are in auth_info_baileys/ which is
+  in .gitignore)
+- Files changed:
+  - pterodactyl-start.sh (rewrote — fixed set -e bug, security leak, added sanity checks)
+  - egg-caltex-bot.json (removed EULA, added version, fixed install script)
+  - mini-services/caltex-bot/index.ts (removed dead this.emit call that crashed on every message)
+  - DEPLOYMENT-PTERODACTYL.md (added Java/server.jar fix section + success logs section)
