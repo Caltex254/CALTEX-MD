@@ -16,10 +16,27 @@ import { GroupManager } from './group-manager';
 import type { BotConfig, CommandContext, CommandDefinition } from './types';
 
 const logger = pino({
-  level: 'info',
+  level: process.env.LOG_LEVEL || 'info',
+  // Multistream: write pretty logs to stdout (so Pterodactyl panel shows them
+  // and startup detection works) AND raw JSON to bot.log (for debugging).
   transport: {
-    target: 'pino/file',
-    options: { destination: join(process.cwd(), 'bot.log') },
+    targets: [
+      {
+        target: 'pino-pretty',
+        level: process.env.LOG_LEVEL || 'info',
+        options: {
+          colorize: true,
+          ignore: 'pid,hostname',
+          translateTime: 'SYS:standard',
+          singleLine: false,
+        },
+      },
+      {
+        target: 'pino/file',
+        level: process.env.LOG_LEVEL || 'info',
+        options: { destination: join(process.cwd(), 'bot.log'), mkdir: true },
+      },
+    ],
   },
 }).child({ module: 'message-handler' });
 
@@ -76,15 +93,75 @@ export class MessageHandler extends EventEmitter {
   }
 
   private loadConfig(): BotConfig {
+    // Start with defaults
+    let config: BotConfig = { ...DEFAULT_CONFIG };
+
+    // Override from bot-config.json if it exists
     if (existsSync(this.configPath)) {
       try {
         const data = JSON.parse(readFileSync(this.configPath, 'utf-8'));
-        return { ...DEFAULT_CONFIG, ...data };
+        config = { ...config, ...data };
       } catch (err) {
         logger.error({ err }, 'Failed to load bot config');
       }
     }
-    return { ...DEFAULT_CONFIG };
+
+    // ── Override with environment variables (highest priority) ──
+    // This is critical for Pterodactyl deployments where the egg sets these env vars
+    // but no bot-config.json exists on the server.
+
+    // BOT_PREFIX: command prefix (e.g. '.', '!', '/')
+    const envPrefix = process.env.BOT_PREFIX;
+    if (envPrefix) {
+      config.prefix = envPrefix;
+      logger.info({ prefix: envPrefix }, '[CONFIG] Loaded prefix from BOT_PREFIX env var');
+    }
+
+    // BOT_OWNER: phone number of the bot owner (international format, no + or spaces)
+    // Convert to JID format: 254104906247 → 254104906247@s.whatsapp.net
+    // Also support comma-separated list for multiple owners.
+    const envOwner = process.env.BOT_OWNER;
+    if (envOwner) {
+      const owners = envOwner
+        .split(',')
+        .map((s) => s.trim().replace(/[^0-9]/g, ''))
+        .filter((s) => s.length > 0)
+        .map((phone) => `${phone}@s.whatsapp.net`);
+      if (owners.length > 0) {
+        // Merge with existing ownerJids (avoid duplicates)
+        const merged = Array.from(new Set([...config.ownerJids, ...owners]));
+        config.ownerJids = merged;
+        logger.info({ ownerJids: merged }, '[CONFIG] Loaded owner JIDs from BOT_OWNER env var');
+      }
+    }
+
+    // AUTO_READ: mark incoming messages as read automatically
+    const envAutoRead = process.env.AUTO_READ;
+    if (envAutoRead !== undefined) {
+      config.autoRead = envAutoRead === 'true' || envAutoRead === '1';
+    }
+
+    // AUTO_TYPING: show typing indicator when processing messages
+    const envAutoTyping = process.env.AUTO_TYPING;
+    if (envAutoTyping !== undefined) {
+      config.autoTyping = envAutoTyping === 'true' || envAutoTyping === '1';
+    }
+
+    // ANTI_LINK: delete messages containing links in groups (delegated to AntiFeatures, but
+    // we expose a hint here for the dashboard config endpoint)
+    // Note: AntiFeatures has its own config loading — see anti-features.ts for the same env var wiring.
+
+    // Auto-reply and welcome/goodbye keep their config-file defaults — these are usually
+    // managed via the dashboard, not env vars.
+
+    logger.info({
+      prefix: config.prefix,
+      ownerCount: config.ownerJids.length,
+      autoRead: config.autoRead,
+      autoTyping: config.autoTyping,
+    }, '[CONFIG] Final bot config loaded');
+
+    return config;
   }
 
   saveConfig(): void {

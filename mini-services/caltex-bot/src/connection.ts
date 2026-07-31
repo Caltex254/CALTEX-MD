@@ -26,10 +26,27 @@ import { downloadSessionFromGithub, isGithubStorageConfigured } from './github-s
 import type { ConnectionConfig, BotEvents } from './types';
 
 const logger = pino({
-  level: 'info',
+  level: process.env.LOG_LEVEL || 'info',
+  // Multistream: write pretty logs to stdout (so Pterodactyl panel shows them
+  // and startup detection works) AND raw JSON to bot.log (for debugging).
   transport: {
-    target: 'pino/file',
-    options: { destination: join(process.cwd(), 'bot.log') },
+    targets: [
+      {
+        target: 'pino-pretty',
+        level: process.env.LOG_LEVEL || 'info',
+        options: {
+          colorize: true,
+          ignore: 'pid,hostname',
+          translateTime: 'SYS:standard',
+          singleLine: false,
+        },
+      },
+      {
+        target: 'pino/file',
+        level: process.env.LOG_LEVEL || 'info',
+        options: { destination: join(process.cwd(), 'bot.log'), mkdir: true },
+      },
+    ],
   },
 });
 
@@ -318,6 +335,16 @@ export class ConnectionManager extends EventEmitter {
   // ---------------------------------------------------------------------------
   // Connection with Pairing Code (alternative to QR)
   // ---------------------------------------------------------------------------
+  // This method is more robust than the previous version:
+  // 1. Adds a 10s timeout to fetchLatestBaileysVersion (was hanging on slow networks)
+  // 2. Does NOT request the pairing code immediately — instead it waits for the
+  //    'qr' event, which signals the socket is fully ready to accept pairing
+  //    code requests. Calling requestPairingCode() too early fails silently in
+  //    some Baileys versions.
+  // 3. Adds connectTimeoutMs (120s) — Pterodactyl containers can be slow.
+  // 4. Properly forwards all events (messages.upsert etc.) so the bot replies
+  //    to commands automatically after pairing succeeds.
+  // 5. Saves credentials locally via creds.update so subsequent restarts work.
   async createConnectionWithPairingCode(
     config: ConnectionConfig,
     phoneNumber: string
@@ -337,9 +364,22 @@ export class ConnectionManager extends EventEmitter {
 
     const authFolder = this.getAuthFolder(sessionId);
     const { state, saveCreds } = await initAuthState(authFolder);
-    const { version } = await fetchLatestBaileysVersion();
 
-    this.globalLogger.info({ sessionId, version, phoneNumber }, 'Creating WhatsApp connection with pairing code');
+    // fetchLatestBaileysVersion with 10s timeout (was hanging on Pterodactyl)
+    let version: [number, number, number] = [2, 3000, 0];
+    try {
+      const versionPromise = fetchLatestBaileysVersion();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout after 10s')), 10000)
+      );
+      const result = await Promise.race([versionPromise, timeoutPromise]);
+      version = result.version;
+      this.globalLogger.info({ version: version.join('.') }, '[PAIRING] Fetched latest Baileys version');
+    } catch (versionErr: any) {
+      this.globalLogger.warn({ err: versionErr?.message ?? String(versionErr), fallback: version.join('.') }, '[PAIRING] Using fallback Baileys version');
+    }
+
+    this.globalLogger.info({ sessionId, version: version.join('.'), phoneNumber }, '[PAIRING] Creating WhatsApp connection for pairing code flow');
 
     const socketConfig: UserFacingSocketConfig = {
       version,
@@ -347,10 +387,10 @@ export class ConnectionManager extends EventEmitter {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
       },
-      printQRInTerminal: false,
       browser: Browsers.appropriate(browser),
       syncFullHistory,
       markOnlineOnConnect,
+      connectTimeoutMs: 120_000, // 2 minutes — Pterodactyl can be slow to handshake
       logger: this.globalLogger.child({ sessionId }),
       generateHighQualityLinkPreview: true,
       shouldIgnoreJid: (jid: string) => {
@@ -369,22 +409,64 @@ export class ConnectionManager extends EventEmitter {
     const sock = makeWASocket(socketConfig);
     this.sockets.set(sessionId, sock);
 
-    // Request pairing code after socket is created
+    // We do NOT request the pairing code immediately — instead we wait for the
+    // 'qr' event (fired by Baileys when the socket is ready for authentication).
+    // Requesting too early can silently fail in some Baileys versions.
     let pairingCode = '';
-    try {
-      pairingCode = await sock.requestPairingCode(phoneNumber);
-      this.globalLogger.info({ sessionId, pairingCode }, 'Pairing code generated');
-      this.emit('pairing.code', pairingCode, sessionId, phoneNumber);
-    } catch (error: any) {
-      this.globalLogger.error({ sessionId, error: error.message }, 'Failed to generate pairing code');
-    }
+    let pairingCodeRequested = false;
+    const pairingCodePromise = new Promise<string>((resolve) => {
+      const onQr = async (_qr: string) => {
+        if (pairingCodeRequested) return;
+        pairingCodeRequested = true;
+        try {
+          // Small delay to ensure socket internals are ready
+          await new Promise((r) => setTimeout(r, 500));
+          const code = await sock.requestPairingCode(phoneNumber);
+          pairingCode = code;
+          this.globalLogger.info({ sessionId, pairingCode: code, phoneNumber }, '[PAIRING] Pairing code generated successfully');
+          this.emit('pairing.code', code, sessionId, phoneNumber);
+          resolve(code);
+        } catch (error: any) {
+          this.globalLogger.error({ sessionId, error: error.message }, '[PAIRING] Failed to generate pairing code on QR event');
+          // Retry once after 2s
+          setTimeout(async () => {
+            try {
+              const code = await sock.requestPairingCode(phoneNumber);
+              pairingCode = code;
+              this.globalLogger.info({ sessionId, pairingCode: code }, '[PAIRING] Pairing code generated on retry');
+              this.emit('pairing.code', code, sessionId, phoneNumber);
+              resolve(code);
+            } catch (err2: any) {
+              this.globalLogger.error({ sessionId, error: err2.message }, '[PAIRING] Pairing code retry also failed');
+              resolve('');
+            }
+          }, 2000);
+        }
+      };
+      sock.ev.on('connection.update', (update) => {
+        if (update.qr) onQr(update.qr);
+      });
+      // Also resolve early if connection opens without QR (means creds already exist)
+      sock.ev.on('connection.update', (update) => {
+        if (update.connection === 'open' && !pairingCode) resolve('');
+      });
+    });
 
-    // --- Connection Update Handler (same as createConnection) ---
+    // --- Connection Update Handler (full event forwarding, same as createConnection) ---
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+      const { connection, lastDisconnect, qr, isNewLogin } = update;
+
+      this.globalLogger.info({
+        sessionId,
+        connection: connection || null,
+        hasQr: !!qr,
+        isNewLogin: !!isNewLogin,
+      }, '[PAIRING] connection.update event received');
 
       if (qr) {
-        this.emit('qr.code', qr, sessionId);
+        // Suppress QR display — we're using pairing code instead.
+        // Do NOT emit qr.code event so the dashboard doesn't show a QR.
+        this.globalLogger.info({ sessionId }, '[PAIRING] QR event received — pairing code will be requested instead of QR display');
       }
 
       if (connection === 'close') {
@@ -398,7 +480,7 @@ export class ConnectionManager extends EventEmitter {
           autoReconnect &&
           !this.isShuttingDown;
 
-        this.globalLogger.warn({ sessionId, statusCode, reason, shouldReconnect }, 'Connection closed');
+        this.globalLogger.warn({ sessionId, statusCode, reason, shouldReconnect }, '[PAIRING] Connection closed');
         this.connectionStates.set(sessionId, update);
         this.emit('connection.close', statusCode, reason, sessionId);
         this.emit('connection.update', update, sessionId);
@@ -406,26 +488,38 @@ export class ConnectionManager extends EventEmitter {
         if (shouldReconnect) {
           const attempts = (this.reconnectAttempts.get(sessionId) ?? 0) + 1;
           this.reconnectAttempts.set(sessionId, attempts);
-
           if (attempts <= maxReconnectAttempts) {
             const delay = reconnectBaseDelay * Math.pow(2, attempts - 1) + Math.random() * 1000;
-            this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay) }, 'Reconnecting');
+            this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay) }, '[PAIRING] Reconnecting with exponential backoff');
             const timer = setTimeout(() => {
               this.reconnectTimers.delete(sessionId);
+              // On reconnect, use regular createConnection (creds are now saved locally)
               this.createConnection(config);
             }, delay);
             this.reconnectTimers.set(sessionId, timer);
+          } else {
+            this.globalLogger.error({ sessionId, attempts }, '[PAIRING] Max reconnect attempts reached');
           }
         } else if (statusCode === DisconnectReason.loggedOut) {
-          this.globalLogger.info({ sessionId }, 'Logged out, clearing session');
+          this.globalLogger.info({ sessionId }, '[PAIRING] Logged out, clearing session');
           await this.sessionManager.deleteSession(sessionId);
         }
       } else if (connection === 'open') {
         this.reconnectAttempts.set(sessionId, 0);
-        this.globalLogger.info({ sessionId }, 'Pairing code connection opened');
+        const openCreds = sock.authState?.creds;
+        this.globalLogger.info({
+          sessionId,
+          registered: !!openCreds?.registered,
+          meId: openCreds?.me?.id,
+          platform: openCreds?.platform,
+        }, '[PAIRING] connection.open — WhatsApp paired successfully, bot is now an active linked device');
         this.connectionStates.set(sessionId, update);
         this.emit('connection.open', sessionId);
         this.emit('connection.update', update, sessionId);
+        // Send "BOT CONNECTED SUCCESSFULLY" WhatsApp message
+        this.sendConnectionSuccessMessage(sessionId).catch((err: any) => {
+          this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, '[PAIRING] Success message send failed (non-blocking)');
+        });
       } else {
         this.connectionStates.set(sessionId, update);
         this.emit('connection.update', update, sessionId);
@@ -433,11 +527,13 @@ export class ConnectionManager extends EventEmitter {
     });
 
     // --- Credentials Update ---
-    sock.ev.on('creds.update', () => {
+    sock.ev.on('creds.update', (creds) => {
+      this.globalLogger.debug({ sessionId, hasMe: !!creds?.me, registered: !!creds?.registered }, '[PAIRING] creds.update — saving credentials locally');
       saveCreds();
+      this.emit('creds.update', creds, sessionId);
     });
 
-    // --- Forward events ---
+    // --- Forward all Baileys events through EventEmitter ---
     const eventMap: Record<string, string> = {
       'messages.upsert': 'messages.upsert',
       'messages.delete': 'messages.delete',
@@ -461,6 +557,16 @@ export class ConnectionManager extends EventEmitter {
         this.emit(botEvent, data, sessionId);
       });
     }
+
+    // Wait for pairing code to be generated (resolves on QR event)
+    // Don't wait forever — give it 60s to get a QR from Baileys.
+    const timeoutPromise = new Promise<string>((resolve) =>
+      setTimeout(() => {
+        this.globalLogger.warn({ sessionId }, '[PAIRING] Timed out waiting for pairing code generation — socket may have connected without QR');
+        resolve('');
+      }, 60_000)
+    );
+    pairingCode = await Promise.race([pairingCodePromise, timeoutPromise]);
 
     return { sock, pairingCode };
   }

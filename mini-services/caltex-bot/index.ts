@@ -6,6 +6,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
+import * as readline from 'readline';
 import { SessionManager } from './src/session-manager';
 import { ConnectionManager, logger } from './src/connection';
 import { AntiFeatures } from './src/anti-features';
@@ -23,6 +24,77 @@ import { APIClient } from './src/api-client';
 const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '3031', 10);
 // Use BOT_SESSION_ID env var if set (e.g. CALTEX-ECPY-C3DK), else fall back to 'caltex-md'
 const DEFAULT_SESSION_ID = process.env.BOT_SESSION_ID || 'caltex-md';
+
+// ---------------------------------------------------------------------------
+// Helpers for interactive pairing flow on Pterodactyl
+// ---------------------------------------------------------------------------
+
+// Check if local credentials already exist (so we can auto-connect without prompting)
+function localCredsExist(sessionId: string): boolean {
+  const authFolder = join(process.cwd(), 'auth_info_baileys', sessionId);
+  const credsFile = join(authFolder, 'creds.json');
+  return existsSync(credsFile);
+}
+
+// Prompt the user for input via stdin (used on Pterodactyl when BOT_OWNER env is not set)
+function promptUser(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+// Normalize a phone number to digits-only format (e.g. "254712345678")
+function normalizePhoneNumber(input: string): string | null {
+  let phone = input.trim().replace(/[^0-9]/g, '');
+  if (!phone) return null;
+  // Handle common cases: +254712345678 → 254712345678, 0712345678 → 254712345678 (if starts with 0)
+  if (phone.startsWith('00')) phone = phone.slice(2);
+  if (phone.startsWith('0')) phone = '254' + phone.slice(1); // Kenya default — adjust if needed
+  if (phone.length < 10) return null;
+  return phone;
+}
+
+// Pretty-print the pairing code so the user can easily read it in the Pterodactyl console
+function printPairingCodeBanner(code: string, phoneNumber: string): void {
+  // Box is 64 chars wide total: ║ + 62 inner + ║
+  const INNER_WIDTH = 62;
+  const padLine = (text: string) => {
+    // text already includes leading spaces; pad the rest with spaces on the right
+    if (text.length >= INNER_WIDTH) return text.slice(0, INNER_WIDTH);
+    return text + ' '.repeat(INNER_WIDTH - text.length);
+  };
+  const banner = [
+    '',
+    '╔══════════════════════════════════════════════════════════════╗',
+    '║                                                              ║',
+    '║          CALTEX MD — WHATSAPP PAIRING CODE                   ║',
+    '║                                                              ║',
+    `║          Phone:  ${phoneNumber.padEnd(INNER_WIDTH - 10 - 8)}║`,
+    '║                                                              ║',
+    `║          Code:   ${code.padEnd(INNER_WIDTH - 10 - 8)}║`,
+    '║                                                              ║',
+    '║   1. Open WhatsApp on your phone                             ║',
+    '║   2. Go to Settings → Linked Devices                         ║',
+    '║   3. Tap "Link a Device"                                     ║',
+    '║   4. Tap "Link with phone number instead"                    ║',
+    `║   5. Enter the code above: ${code.padEnd(INNER_WIDTH - 28)}║`,
+    '║                                                              ║',
+    '║   ⏳  Waiting for you to enter the code on your phone...      ║',
+    '║   The bot will start automatically once paired.              ║',
+    '╚══════════════════════════════════════════════════════════════╝',
+    '',
+  ].join('\n');
+  // eslint-disable-next-line no-console
+  console.log(banner);
+  logger.info({ code, phoneNumber }, '[PAIRING] Pairing code displayed to user');
+}
 
 class CaltexBot {
   private sessionManager: SessionManager;
@@ -55,7 +127,9 @@ class CaltexBot {
     this.aiHandler = new AIHandler();
     this.groupManager = new GroupManager();
     this.scheduler = new Scheduler();
-    this.apiClient = new APIClient();
+    // Pass API_URL env var (if set) so dashboard reporting works on Pterodactyl.
+    // Falls back to http://localhost:3000 (only useful when running alongside the dashboard).
+    this.apiClient = new APIClient(process.env.API_URL);
 
     // Initialize message handler with all dependencies
     this.messageHandler = new MessageHandler(
@@ -768,6 +842,49 @@ class CaltexBot {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Connect using phone number + pairing code (the new interactive flow)
+  // ---------------------------------------------------------------------------
+  // This is the new primary connection path on Pterodactyl:
+  //   1. User provides a phone number (either via BOT_OWNER env var or stdin prompt)
+  //   2. Bot opens a Baileys socket and waits for the QR event
+  //   3. Once QR fires, bot requests a pairing code from Baileys
+  //   4. Bot prints the code prominently in the console
+  //   5. User enters the code in WhatsApp → connection.open fires → bot replies to commands
+  //   6. Credentials are saved locally so subsequent restarts auto-connect
+  private async connectWithPairingCode(sessionId: string, phoneNumber: string): Promise<void> {
+    try {
+      await this.sessionManager.createSession(sessionId);
+
+      logger.info({ sessionId, phoneNumber }, '[PAIRING] Starting interactive pairing code flow...');
+
+      const { sock, pairingCode } = await this.connectionManager.createConnectionWithPairingCode(
+        {
+          sessionId,
+          printQR: false, // suppress QR — we use pairing code instead
+          browser: 'CALTEX MD',
+          autoReconnect: true,
+          maxReconnectAttempts: 10,
+          reconnectBaseDelay: 2000,
+        },
+        phoneNumber
+      );
+
+      this.scheduler.registerSocket(sessionId, sock);
+
+      if (pairingCode) {
+        printPairingCodeBanner(pairingCode, phoneNumber);
+      } else {
+        logger.warn('[PAIRING] No pairing code was returned — check logs above for errors.');
+        // eslint-disable-next-line no-console
+        console.log('\n  ⚠️  Pairing code could not be generated. Check the bot logs above.\n');
+      }
+    } catch (err: any) {
+      logger.error({ err: err?.message ?? String(err), sessionId, phoneNumber }, '[PAIRING] Failed to start pairing code flow');
+      throw err;
+    }
+  }
+
   private setupShutdownHandlers(): void {
     const shutdown = async (signal: string) => {
       logger.info({ signal }, 'Shutdown signal received, cleaning up...');
@@ -811,47 +928,57 @@ class CaltexBot {
   }
 
   async start(): Promise<void> {
-    // ── STARTUP VALIDATION: fail fast with clear errors ──
+    // ── STARTUP VALIDATION ──
     logger.info('='.repeat(50));
     logger.info('  CALTEX MD WhatsApp Bot - Starting...');
     logger.info('='.repeat(50));
 
-    logger.info({ value: process.env.BOT_SESSION_ID || '(not set)' }, '[STARTUP] Reading BOT_SESSION_ID env var...');
-    const sessionId = process.env.BOT_SESSION_ID;
-    if (!sessionId) {
-      logger.error('[STARTUP] FATAL: BOT_SESSION_ID env var is not set. The bot cannot restore credentials without it.');
-      logger.error('[STARTUP] Set BOT_SESSION_ID to your CALTEX-XXXX-XXXX session id (from the /scan page) and redeploy.');
-      logger.error('[STARTUP] Exiting with code 1.');
-      process.exit(1);
-    }
-    if (!/^CALTEX-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
-      logger.error({ value: sessionId }, '[STARTUP] FATAL: BOT_SESSION_ID does not match expected format CALTEX-XXXX-XXXX.');
-      logger.error('[STARTUP] Exiting with code 1.');
-      process.exit(1);
-    }
-    logger.info({ sessionId }, '[STARTUP] BOT_SESSION_ID is valid');
+    // ── Mode detection ──
+    // The bot supports THREE modes now:
+    //   A) AUTO-CONNECT MODE (default for repeat starts on Pterodactyl):
+    //      Local creds already exist at auth_info_baileys/<sessionId>/creds.json.
+    //      The bot just connects — no pairing code needed.
+    //   B) GITHUB RESTORE MODE (legacy, still supported):
+    //      BOT_SESSION_ID is set to a CALTEX-XXXX-XXXX value AND GitHub env vars are set.
+    //      The bot downloads creds from GitHub, then connects.
+    //   C) INTERACTIVE PAIRING MODE (new!):
+    //      No local creds, no valid CALTEX session ID. The bot prompts the user for a
+    //      phone number (or uses BOT_OWNER env var) and generates a pairing code
+    //      directly on Pterodactyl — no Render or Vercel dashboard needed.
+
+    const sessionId = process.env.BOT_SESSION_ID || 'caltex-md';
+    const isCaltexId = /^CALTEX-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId);
+    const hasLocalCreds = localCredsExist(sessionId);
+    const hasGithubEnv = !!(process.env.GITHUB_TOKEN && process.env.GITHUB_REPO_OWNER && process.env.GITHUB_REPO_NAME);
+    const botOwnerEnv = process.env.BOT_OWNER || '';
 
     logger.info({
-      token: process.env.GITHUB_TOKEN ? '***set***' : '(not set)',
-      owner: process.env.GITHUB_REPO_OWNER || '(not set)',
-      repo: process.env.GITHUB_REPO_NAME || '(not set)',
-    }, '[STARTUP] Checking GitHub credential storage env vars...');
-    if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPO_OWNER || !process.env.GITHUB_REPO_NAME) {
-      logger.error('[STARTUP] FATAL: GitHub env vars missing. Cannot restore WhatsApp credentials.');
-      logger.error('[STARTUP] Required: GITHUB_TOKEN, GITHUB_REPO_OWNER, GITHUB_REPO_NAME');
-      logger.error('[STARTUP] Exiting with code 1.');
-      process.exit(1);
-    }
-    logger.info('[STARTUP] GitHub credential storage is configured');
+      sessionId,
+      isCaltexId,
+      hasLocalCreds,
+      hasGithubEnv,
+      hasBotOwner: !!botOwnerEnv,
+      api_url: process.env.API_URL || '(not set)',
+      nodeVersion: process.version,
+    }, '[STARTUP] Mode detection');
 
-    logger.info({ url: process.env.API_URL || '(not set)' }, '[STARTUP] Session API URL (for reporting status)...');
-    logger.info({ nodeVersion: process.version }, '[STARTUP] Runtime: Node.js');
+    // Mode A: Local credentials exist — auto-connect directly.
+    // Mode B: Valid CALTEX ID + GitHub env — attempt restore from GitHub.
+    // In both cases, just call this.connect(sessionId) which goes through createConnection().
+    const canAutoConnect = hasLocalCreds || (isCaltexId && hasGithubEnv);
 
-    // Start HTTP server
+    // Start HTTP server FIRST (so Pterodactyl detects startup via "HTTP server listening on port")
     await new Promise<void>((resolve) => {
       this.httpServer.listen(PORT, () => {
-        logger.info(`HTTP server listening on port ${PORT}`);
-        logger.info(`Health check: http://localhost:${PORT}/health`);
+        // Use both logger (→ bot.log) AND console.log (→ stdout) so Pterodactyl's
+        // startup detection ("done": "HTTP server listening on port") fires correctly.
+        // Pino's file transport doesn't write to stdout, so console.log is required.
+        const msg = `HTTP server listening on port ${PORT}`;
+        logger.info(msg);
+        // eslint-disable-next-line no-console
+        console.log(`[${new Date().toISOString()}] INFO (main): ${msg}`);
+        // eslint-disable-next-line no-console
+        console.log(`[Health check]: http://localhost:${PORT}/health`);
         resolve();
       });
     });
@@ -859,22 +986,59 @@ class CaltexBot {
     logger.info('CALTEX MD Bot HTTP server started!');
     logger.info(`API available at http://localhost:${PORT}`);
     logger.info(`Commands: http://localhost:${PORT}/api/commands`);
-    logger.info(`Connect WhatsApp: POST http://localhost:${PORT}/api/connect`);
 
     // Report status
     this.apiClient.reportStatus('starting');
 
-    // Auto-connect default session
+    // ── Decide what to do next ──
     const safeConnect = async () => {
       try {
-        await this.connect(DEFAULT_SESSION_ID);
-        logger.info('CALTEX MD Bot WhatsApp connection initiated!');
-        logger.info('Scan the QR code above with WhatsApp to connect');
-        logger.info('   WhatsApp > Settings > Linked Devices > Link a device');
-        this.apiClient.reportStatus('running');
+        if (canAutoConnect) {
+          // Mode A or B: existing creds (local or from GitHub) — connect directly
+          logger.info({ sessionId, mode: hasLocalCreds ? 'A (local creds)' : 'B (GitHub restore)' }, '[STARTUP] Auto-connecting with existing credentials...');
+          await this.connect(sessionId);
+          logger.info('CALTEX MD Bot WhatsApp connection initiated!');
+          this.apiClient.reportStatus('running');
+        } else {
+          // Mode C: Interactive pairing — get phone number and generate pairing code
+          logger.info('[STARTUP] No existing credentials found — entering interactive pairing mode.');
+          // eslint-disable-next-line no-console
+          console.log('\n  ╔══════════════════════════════════════════════════════════════╗');
+          console.log('  ║              CALTEX MD — First-time Setup                    ║');
+          console.log('  ╚══════════════════════════════════════════════════════════════╝');
+          console.log('  No existing WhatsApp session found. We will generate a pairing');
+          console.log('  code that you can enter on your phone to link it to this bot.\n');
+
+          let phoneNumber: string | null = null;
+          if (botOwnerEnv) {
+            logger.info({ botOwnerEnv }, '[STARTUP] BOT_OWNER env var detected — using it as phone number for pairing');
+            phoneNumber = normalizePhoneNumber(botOwnerEnv);
+            if (phoneNumber) {
+              // eslint-disable-next-line no-console
+              console.log(`  Using phone number from BOT_OWNER env var: ${phoneNumber}\n`);
+            } else {
+              logger.warn({ botOwnerEnv }, '[STARTUP] BOT_OWNER env var is set but could not be normalized — prompting user');
+            }
+          }
+          if (!phoneNumber) {
+            // Prompt the user for a phone number via stdin
+            // (Works on Pterodactyl — the panel pipes stdin from the web console)
+            const answer = await promptUser('  Enter your WhatsApp phone number (international format, e.g. 254712345678): ');
+            phoneNumber = normalizePhoneNumber(answer);
+            if (!phoneNumber) {
+              logger.error({ raw: answer }, '[STARTUP] Invalid phone number entered');
+              // eslint-disable-next-line no-console
+              console.log('\n  ❌ Invalid phone number. Please restart the bot and try again.\n');
+              process.exit(1);
+            }
+          }
+
+          await this.connectWithPairingCode(sessionId, phoneNumber);
+          this.apiClient.reportStatus('running');
+        }
       } catch (err: any) {
-        logger.error({ err: err?.message ?? String(err) }, 'WhatsApp connection failed - HTTP API still available');
-        logger.info('You can retry connecting via: POST http://localhost:3031/api/connect');
+        logger.error({ err: err?.message ?? String(err) }, '[STARTUP] WhatsApp connection failed — HTTP API still available');
+        logger.info('You can retry connecting via: POST http://localhost:' + PORT + '/api/connect');
         this.apiClient.reportStatus('running');
       }
     };

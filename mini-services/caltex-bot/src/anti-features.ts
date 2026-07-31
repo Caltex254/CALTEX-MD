@@ -11,10 +11,27 @@ import { writeFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
 import type { AntiFeatureConfig, AntiCheckResult } from './types';
 
 const logger = pino({
-  level: 'info',
+  level: process.env.LOG_LEVEL || 'info',
+  // Multistream: write pretty logs to stdout (so Pterodactyl panel shows them
+  // and startup detection works) AND raw JSON to bot.log (for debugging).
   transport: {
-    target: 'pino/file',
-    options: { destination: join(process.cwd(), 'bot.log') },
+    targets: [
+      {
+        target: 'pino-pretty',
+        level: process.env.LOG_LEVEL || 'info',
+        options: {
+          colorize: true,
+          ignore: 'pid,hostname',
+          translateTime: 'SYS:standard',
+          singleLine: false,
+        },
+      },
+      {
+        target: 'pino/file',
+        level: process.env.LOG_LEVEL || 'info',
+        options: { destination: join(process.cwd(), 'bot.log'), mkdir: true },
+      },
+    ],
   },
 }).child({ module: 'anti-features' });
 
@@ -81,15 +98,24 @@ export class AntiFeatures {
   }
 
   private loadConfig(): AntiFeatureConfig {
+    let config: AntiFeatureConfig = { ...DEFAULT_CONFIG };
     if (existsSync(this.configPath)) {
       try {
         const data = JSON.parse(readFileSync(this.configPath, 'utf-8'));
-        return { ...DEFAULT_CONFIG, ...data };
+        config = { ...config, ...data };
       } catch (err) {
         logger.error({ err }, 'Failed to load anti-config, using defaults');
       }
     }
-    return { ...DEFAULT_CONFIG };
+
+    // ── Override with environment variables (Pterodactyl support) ──
+    const envAntiLink = process.env.ANTI_LINK;
+    if (envAntiLink !== undefined) {
+      config.antiLink.enabled = envAntiLink === 'true' || envAntiLink === '1';
+      logger.info({ enabled: config.antiLink.enabled }, '[CONFIG] Loaded antiLink.enabled from ANTI_LINK env var');
+    }
+
+    return config;
   }
 
   saveConfig(): void {

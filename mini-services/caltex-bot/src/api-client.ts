@@ -9,10 +9,27 @@ import { join } from 'path';
 import type { LogEntry, BotStats, BotSettings, Plugin, BotUser, BotGroup } from './types';
 
 const logger = pino({
-  level: 'info',
+  level: process.env.LOG_LEVEL || 'info',
+  // Multistream: write pretty logs to stdout (so Pterodactyl panel shows them
+  // and startup detection works) AND raw JSON to bot.log (for debugging).
   transport: {
-    target: 'pino/file',
-    options: { destination: join(process.cwd(), 'bot.log') },
+    targets: [
+      {
+        target: 'pino-pretty',
+        level: process.env.LOG_LEVEL || 'info',
+        options: {
+          colorize: true,
+          ignore: 'pid,hostname',
+          translateTime: 'SYS:standard',
+          singleLine: false,
+        },
+      },
+      {
+        target: 'pino/file',
+        level: process.env.LOG_LEVEL || 'info',
+        options: { destination: join(process.cwd(), 'bot.log'), mkdir: true },
+      },
+    ],
   },
 }).child({ module: 'api-client' });
 

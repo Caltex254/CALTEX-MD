@@ -1,193 +1,242 @@
-# CALTEX MD Bot — Pterodactyl Panel Deployment Guide
+# CALTEX MD Bot — Pterodactyl Deployment Guide
 
-This guide explains how to deploy the CALTEX MD WhatsApp Bot on a Pterodactyl panel.
+This guide explains how to deploy the CALTEX MD WhatsApp bot on a Pterodactyl panel. The bot supports **three connection modes** and will auto-detect the right one at startup.
 
-## Prerequisites
+## Quick Start (Recommended)
 
-1. **A Pterodactyl panel** with access to create servers
-2. **Node 20 egg** available (or import our custom egg)
-3. **Your CALTEX Session ID** (e.g. `CALTEX-R4QA-TWE4`) from the [pairing dashboard](https://caltex-md.vercel.app/scan)
-4. **A GitHub personal access token** with `repo` scope
-5. **A private GitHub repo** named `caltex-sessions` (for credential storage)
+The simplest deployment: just set `BOT_OWNER` to your phone number and start the server. The bot will generate a pairing code on first start — no separate session API or dashboard needed.
 
-## Option A: Use the Custom Egg (Recommended)
+### Step 1 — Import the Egg
 
-### Step 1: Import the Egg
+1. Go to your Pterodactyl admin panel → **Nests** → **Import Egg**
+2. Upload `egg-caltex-bot.json` from this repo
+3. Assign it to a nest (create one called "WhatsApp Bots" if needed)
 
-1. Go to your Pterodactyl admin panel
-2. Navigate to **Nests** → Create a new nest called `WhatsApp Bots`
-3. Click **Import Egg** and upload `egg-caltex-bot.json` from this repo
-4. The egg will appear under the `WhatsApp Bots` nest
+### Step 2 — Create a Server
 
-### Step 2: Create a Server
+1. Go to **Servers** → **Create New**
+2. Select the CALTEX MD egg
+3. Set the following:
+   - **Docker image**: `Node 20` (ghcr.io/pterodactyl/yolks:node_20)
+   - **Memory**: 512 MB minimum, 1024 MB recommended
+   - **Disk**: 1024 MB minimum (more if you process lots of media)
+   - **Swap**: 0 MB (or 256 MB if you see OOM crashes)
+4. Click **Create**
 
-1. In the user panel, click **Create Server**
-2. Select the `WhatsApp Bots` nest and the `CALTEX MD WhatsApp Bot` egg
-3. Configure:
-   - **Server Name**: `caltex-md-bot`
-   - **Docker Image**: `Node 20` (ghcr.io/pterodactyl/yolks:node_20)
-   - **Memory**: 512 MB minimum (1024 MB recommended)
-   - **Disk**: 1024 MB minimum
-   - **CPU Limit**: 100%
-4. Click **Create Server**
+### Step 3 — Upload Bot Files
 
-### Step 3: Upload Bot Files
+The egg's installation script will automatically clone the repo and copy the bot files to `/home/container/`. If you prefer to upload manually:
 
-The egg's install script auto-clones the repo. If it doesn't, manually upload:
+1. Download the contents of `mini-services/caltex-bot/` from this repo
+2. Also download `pterodactyl-start.sh` from the repo root
+3. Upload everything to `/home/container/` via the Pterodactyl file manager
+4. Make sure `pterodactyl-start.sh` is at `/home/container/pterodactyl-start.sh`
 
-1. Download the `mini-services/caltex-bot/` directory from this repo
-2. In the Pterodactyl **File Manager**, upload all files to `/home/container/`
-3. Make sure `package.json`, `index.ts`, `tsconfig.json`, and the `src/` folder are at the root
-
-### Step 4: Configure Environment Variables
+### Step 4 — Configure Environment Variables
 
 Go to the server's **Startup** tab and set:
 
-| Variable | Value | Required |
-|----------|-------|----------|
-| Bot Session ID | `CALTEX-R4QA-TWE4` (your ID) | ✅ Yes |
-| Bot Owner Phone | `254104906247` (your number) | ✅ Yes |
-| GitHub Token | `ghp_xxxxxxxxxxxx` | ✅ Yes |
-| GitHub Repo Owner | `Caltex254` | ✅ Yes |
-| GitHub Repo Name | `caltex-sessions` | ✅ Yes |
-| Bot Name | `CALTEX MD` | Optional |
-| Command Prefix | `.` | Optional |
-| Auto Read Messages | `false` | Optional |
-| Auto Typing | `false` | Optional |
-| Anti Link | `false` | Optional |
-| Log Level | `info` | Optional |
+| Variable | Required? | Example | Description |
+|----------|-----------|---------|-------------|
+| `BOT_OWNER` | **Yes** | `254712345678` | Your phone number in international format (no `+` or spaces). Used for owner-only commands AND as the default phone number for the pairing code flow. |
+| `BOT_SESSION_ID` | No | (leave blank) | Leave blank on first start to use the pairing code flow. Set to `CALTEX-XXXX-XXXX` only if you want to restore creds from GitHub (legacy mode). |
+| `GITHUB_TOKEN` | No | (leave blank) | Only needed for GitHub credential restore (legacy). |
+| `GITHUB_REPO_OWNER` | No | `Caltex254` | Only needed for GitHub credential restore (legacy). |
+| `GITHUB_REPO_NAME` | No | `caltex-sessions` | Only needed for GitHub credential restore (legacy). |
+| `BOT_NAME` | No | `CALTEX MD` | Display name shown in WhatsApp's Linked Devices list. |
+| `BOT_PREFIX` | No | `.` | Command prefix. Use `.` for `.menu`, `!` for `!menu`, etc. |
+| `AUTO_READ` | No | `false` | `true` to auto-mark incoming messages as read. |
+| `AUTO_TYPING` | No | `false` | `true` to show typing indicator when processing messages. |
+| `ANTI_LINK` | No | `false` | `true` to delete messages containing links in groups. |
+| `LOG_LEVEL` | No | `info` | Logging verbosity: `debug`, `info`, `warn`, `error`. |
 
-### Step 5: Start the Server
+### Step 5 — Start the Server
 
-1. Click **Start** in the panel
-2. Watch the console — you should see:
-   ```
-   [STARTUP] Reading BOT_SESSION_ID env var... value=CALTEX-R4QA-TWE4
-   [STARTUP] BOT_SESSION_ID is valid
-   [STARTUP] GitHub credential storage is configured
-   [LIFECYCLE] Loading credentials...
-   [LIFECYCLE] Credentials downloaded from GitHub
-   [LIFECYCLE] connection.open — WhatsApp connection established
-   ```
-3. The bot is now connected! Check WhatsApp → Settings → Linked Devices
+1. Click **Start** in the Pterodactyl panel
+2. Watch the console — within ~5 seconds you should see:
 
-## Option B: Manual Setup (Generic Node.js Egg)
+```
+[2025-XX-XX HH:MM:SS] INFO (main): HTTP server listening on port XXXX
+[STARTUP] No existing credentials found — entering interactive pairing mode.
+[STARTUP] BOT_OWNER env var detected — using it as phone number for pairing
 
-If you don't want to import the custom egg:
-
-1. Create a server using the generic **Node.js** egg
-2. Set the **Startup Command** to:
-   ```
-   if [ ! -d node_modules ]; then npm install --no-audit --no-fund; fi && npx tsx index.ts
-   ```
-3. Upload the bot files from `mini-services/caltex-bot/` to `/home/container/`
-4. Set all environment variables (see Step 4 above)
-5. Start the server
-
-## Port Configuration
-
-Pterodactyl assigns a dynamic port via the `SERVER_PORT` environment variable. The bot automatically reads this:
-
-```typescript
-const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '3031', 10);
+  ╔══════════════════════════════════════════════════════════════╗
+  ║          CALTEX MD — WHATSAPP PAIRING CODE                   ║
+  ║          Phone:  254712345678                                ║
+  ║          Code:   ABCD1234                                    ║
+  ║   1. Open WhatsApp on your phone                             ║
+  ║   2. Go to Settings → Linked Devices                         ║
+  ║   3. Tap "Link a Device"                                     ║
+  ║   4. Tap "Link with phone number instead"                    ║
+  ║   5. Enter the code above: ABCD1234                          ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
-You don't need to manually configure the port — Pterodactyl handles it.
+### Step 6 — Enter the Pairing Code in WhatsApp
+
+1. Open **WhatsApp** on your phone (the one matching the `BOT_OWNER` number)
+2. Tap **Settings** (iOS) or the **three dots menu** (Android) → **Linked Devices**
+3. Tap **Link a Device**
+4. Tap **Link with phone number instead** (do NOT scan a QR code)
+5. Enter the 8-character pairing code shown in the Pterodactyl console
+6. Wait ~3 seconds — you should see in the console:
+
+```
+[PAIRING] connection.open — WhatsApp paired successfully, bot is now an active linked device
+```
+
+7. You'll receive a WhatsApp message from yourself saying **"BOT CONNECTED SUCCESSFULLY"**
+
+### Step 7 — Test Commands
+
+Send any of these commands to yourself (or in a group where the bot is a member):
+
+- `.ping` — Check if the bot is alive (replies with "🏓 Pong!")
+- `.help` — Show all available commands
+- `.info` — Show bot information
+- `.ai <question>` — Chat with AI (requires AI API key, see below)
+- `.sticker` (reply to an image) — Convert image to sticker
+
+The bot will reply automatically. Commands are prefixed with `.` by default (configurable via `BOT_PREFIX`).
+
+## What Happens on Restart?
+
+After the first successful pairing, the bot saves credentials locally to `/home/container/auth_info_baileys/<sessionId>/`. On subsequent restarts:
+
+1. The bot detects local credentials exist
+2. Auto-connects in **Mode A** (no pairing code needed)
+3. You'll see in the console:
+
+```
+[STARTUP] Auto-connecting with existing credentials...
+[LIFECYCLE] Local credentials found - skipping GitHub restore
+[LIFECYCLE] connection.open — WhatsApp connection established
+```
+
+If you ever need to re-pair (e.g. you logged out of the linked device on your phone), just delete the `auth_info_baileys` folder via the Pterodactyl file manager and restart the server.
+
+## Connection Modes Reference
+
+| Mode | Trigger | Behavior |
+|------|---------|----------|
+| **A — Auto-connect** | Local creds exist at `auth_info_baileys/<sessionId>/creds.json` | Bot connects directly, no pairing needed. |
+| **B — GitHub restore (legacy)** | `BOT_SESSION_ID=CALTEX-XXXX-XXXX` AND `GITHUB_TOKEN` set | Bot downloads creds from GitHub, then connects. |
+| **C — Interactive pairing (new)** | No local creds, no valid CALTEX ID | Bot uses `BOT_OWNER` env var (or prompts via stdin) for phone number, generates pairing code, displays it in console. |
+
+## Optional: Enable AI Commands
+
+The `.ai`, `.translate`, and `.summarize` commands require an AI API key. To enable them:
+
+1. Get an API key from OpenAI, Google Gemini, Anthropic Claude, or any OpenAI-compatible provider
+2. Create a file called `ai-config.json` in `/home/container/` with the following content:
+
+```json
+{
+  "provider": "openai",
+  "openai": {
+    "apiKey": "sk-...",
+    "model": "gpt-4o-mini"
+  }
+}
+```
+
+3. Restart the server
+
+Alternatively, use the dashboard's API: `PUT /api/config/ai` with the same JSON body.
 
 ## Troubleshooting
 
-### "BOT_SESSION_ID is not set"
-- Go to the **Startup** tab in Pterodactyl
-- Set the **Bot Session ID** variable to your `CALTEX-XXXX-XXXX` ID
-- Restart the server
+### "BOT_OWNER is not set" error
 
-### "Could not restore credentials from GitHub"
-- Verify `GITHUB_TOKEN` is set and has `repo` scope
-- Verify `GITHUB_REPO_OWNER` and `GITHUB_REPO_NAME` are correct
-- Check that the `caltex-sessions` repo exists and is private
-- Verify the session ID exists in the repo: `https://github.com/Caltex254/caltex-sessions/blob/main/sessions/CALTEX-XXXX-XXXX.json`
+Set `BOT_OWNER` in the **Startup** tab of your Pterodactyl server. It must be your phone number in international format (e.g. `254712345678` for Kenya, `447123456789` for UK).
 
-### "npx tsx: command not found"
-- The startup script auto-installs dependencies. If it fails:
-  1. Go to the **File Manager**
-  2. Delete the `node_modules` folder
-  3. Restart the server (it will reinstall)
+### Pairing code doesn't appear
 
-### "sharp module not found" or native build errors
-- `sharp` is used for image processing (optional)
-- If it fails to build, you can remove it from `package.json` — the bot will still work for text messages
-- Or switch to a Pterodactyl egg with build tools installed
+Check the console for these logs:
+- `[PAIRING] Fetched latest Baileys version` — confirms internet access
+- `[PAIRING] Creating WhatsApp connection for pairing code flow` — confirms socket creation
+- `connected to WA` — confirms WhatsApp server connection
+- `[PAIRING] QR event received` — confirms Baileys is ready for pairing
 
-### Bot connects then disconnects immediately
-- This is usually a **session conflict** — another service is using the same WhatsApp credentials
-- Make sure only ONE bot instance is running with this session ID
-- If you have the bot on Render too, either:
-  - Stop the Render service, OR
-  - Use a different session ID (pair again on the dashboard)
+If you don't see `connected to WA` within 30 seconds, your Pterodactyl server might be blocking outgoing WebSocket connections. Check your host's firewall.
+
+### Pairing code expired
+
+Pairing codes are valid for ~60 seconds. If it expires, just restart the server to get a new one.
+
+### Bot doesn't reply to commands
+
+1. Verify the bot is connected: `GET http://localhost:<PORT>/health`
+2. Check the command prefix — if you set `BOT_PREFIX=!`, use `!ping` not `.ping`
+3. Check you're listed as owner: `BOT_OWNER` env var must match your phone number
+4. Check the logs for `[LIFECYCLE] connection.open` — without this, the bot isn't actually connected
+
+### "Cannot find module 'sharp'" error
+
+Restart the server — the install script will reinstall dependencies. If it persists, manually run `npm install` via the Pterodactyl console.
 
 ### Port already in use
-- Pterodactyl assigns `SERVER_PORT` automatically
-- If you get "EADDRINUSE", check that no other process is using the port
-- The bot reads `SERVER_PORT` first, then `PORT`, then defaults to 3031
+
+Pterodactyl auto-assigns `SERVER_PORT`. Don't manually set `PORT` in your env vars.
+
+### Want to reset everything
+
+1. Stop the server
+2. Delete these files/folders via the Pterodactyl file manager:
+   - `auth_info_baileys/`
+   - `bot-config.json`
+   - `anti-config.json`
+   - `ai-config.json`
+   - `bot.log`
+3. Restart the server — it will enter first-time setup again
+
+## Logs
+
+Bot logs are written to two places:
+- **Pterodactyl console** (stdout) — pretty-formatted, real-time
+- **`/home/container/bot.log`** — raw JSON, useful for debugging
+
+Set `LOG_LEVEL=debug` in the Startup tab to see more verbose logs.
 
 ## File Structure on Pterodactyl
 
+After deployment, your `/home/container/` will contain:
+
 ```
 /home/container/
-├── index.ts                    # Bot entry point
-├── package.json                # Dependencies
-├── tsconfig.json               # TypeScript config
-├── pterodactyl-start.sh        # Pterodactyl startup script
-├── start.sh                    # Generic startup script
+├── index.ts                      # Main entry point
+├── package.json                  # Dependencies
+├── pterodactyl-start.sh          # Startup script (used by egg)
 ├── src/
-│   ├── connection.ts           # WhatsApp connection manager
-│   ├── session-manager.ts      # Session persistence
-│   ├── message-handler.ts      # Incoming message handler
-│   ├── ai-handler.ts           # AI integration
-│   ├── media-handler.ts        # Media processing
-│   ├── group-manager.ts        # Group management
-│   ├── anti-features.ts        # Anti-spam/anti-link
-│   ├── scheduler.ts            # Scheduled messages
-│   ├── api-client.ts           # Dashboard API client
-│   ├── github-storage.ts       # GitHub credential storage
-│   └── types.ts                # TypeScript types
-├── auth_info_baileys/          # WhatsApp session (auto-created)
-│   └── CALTEX-XXXX-XXXX/       # Credentials per session
-├── logs/                       # Log files (auto-created)
-└── media/                      # Downloaded media (auto-created)
+│   ├── connection.ts             # WhatsApp connection manager (Baileys)
+│   ├── message-handler.ts        # Command parsing & dispatch
+│   ├── session-manager.ts        # Session persistence
+│   ├── anti-features.ts          # Anti-link, anti-spam, etc.
+│   ├── media-handler.ts          # Stickers, image processing
+│   ├── ai-handler.ts             # AI integration
+│   ├── group-manager.ts          # Group admin commands
+│   ├── scheduler.ts              # Scheduled messages
+│   ├── api-client.ts             # Reports to dashboard (optional)
+│   ├── github-storage.ts         # GitHub credential storage (legacy)
+│   └── types.ts                  # TypeScript types
+├── auth_info_baileys/            # ← created after first pairing
+│   └── caltex-md/
+│       ├── creds.json            # WhatsApp credentials
+│       └── app-state-sync-key-*.json
+├── bot-config.json               # ← created when you change config via API
+├── anti-config.json              # ← created when you change anti-feature config
+├── ai-config.json                # ← you create this to enable AI commands
+└── bot.log                       # ← created at runtime
 ```
 
-## Resource Recommendations
+## Updating the Bot
 
-| Resource | Minimum | Recommended |
-|----------|---------|-------------|
-| Memory | 512 MB | 1024 MB |
-| Disk | 1024 MB | 2048 MB |
-| CPU | 50% | 100% |
-| Swap | 0 MB | 256 MB |
+To update to a new version:
 
-## Environment Variables Reference
+1. Stop the server
+2. Delete `index.ts`, `src/`, and `package.json` (keep `auth_info_baileys/`, `*-config.json`, and `bot.log`)
+3. Upload the new `index.ts`, `src/`, and `package.json` from `mini-services/caltex-bot/`
+4. Upload the new `pterodactyl-start.sh` from the repo root
+5. Start the server — dependencies will auto-install
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BOT_SESSION_ID` | (required) | CALTEX-XXXX-XXXX session ID |
-| `BOT_OWNER` | (required) | Owner phone number |
-| `GITHUB_TOKEN` | (required) | GitHub PAT with repo scope |
-| `GITHUB_REPO_OWNER` | `Caltex254` | GitHub repo owner |
-| `GITHUB_REPO_NAME` | `caltex-sessions` | GitHub repo name |
-| `BOT_NAME` | `CALTEX MD` | Bot display name |
-| `BOT_PREFIX` | `.` | Command prefix |
-| `BOT_PORT` | `3031` | HTTP API port (overridden by SERVER_PORT) |
-| `NODE_ENV` | `production` | Node environment |
-| `LOG_LEVEL` | `info` | Logging verbosity |
-| `AUTO_READ` | `false` | Auto-read messages |
-| `AUTO_TYPING` | `false` | Show typing indicator |
-| `ANTI_LINK` | `false` | Delete links in groups |
-| `ANTI_BADWORD` | `false` | Delete bad words |
-| `ANTI_SPAM` | `false` | Anti-spam protection |
-
-## Support
-
-- GitHub: https://github.com/Caltex254/CALTEX-MD
-- Dashboard: https://caltex-md.vercel.app
-- Session API: https://caltex-session-api.onrender.com
+Your existing WhatsApp session (in `auth_info_baileys/`) will be preserved, so you won't need to re-pair.

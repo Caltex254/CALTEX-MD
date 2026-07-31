@@ -12,6 +12,38 @@
 #   1. Ensures dependencies are installed
 #   2. Starts the bot with npx tsx
 #   3. Auto-restarts on crash (with backoff)
+#
+# ── Connection modes ──
+# The bot now supports THREE connection modes (auto-detected at runtime):
+#
+#   A) AUTO-CONNECT (default on restart):
+#      Local credentials exist at auth_info_baileys/<sessionId>/creds.json.
+#      The bot just connects — no pairing code needed.
+#
+#   B) GITHUB RESTORE (legacy, still supported):
+#      BOT_SESSION_ID is set to a CALTEX-XXXX-XXXX value AND GitHub env vars are set.
+#      The bot downloads creds from GitHub, then connects.
+#
+#   C) INTERACTIVE PAIRING (new!):
+#      No local creds, no valid CALTEX session ID. The bot uses BOT_OWNER env var
+#      (or prompts the user via stdin) for a phone number, then generates a
+#      pairing code directly on Pterodactyl — no Render or Vercel needed.
+#
+# ── Required env vars ──
+#   BOT_OWNER         — phone number of the bot owner (e.g. 254712345678).
+#                       Used both for owner-only commands AND as the default
+#                       phone number for the interactive pairing flow.
+#
+# ── Optional env vars ──
+#   BOT_SESSION_ID    — CALTEX-XXXX-XXXX for GitHub restore mode (legacy).
+#   GITHUB_TOKEN      — for credential restore/upload (legacy).
+#   GITHUB_REPO_OWNER — defaults to "Caltex254".
+#   GITHUB_REPO_NAME  — defaults to "caltex-sessions".
+#   BOT_PREFIX        — command prefix (defaults to ".").
+#   AUTO_READ         — "true"/"false".
+#   AUTO_TYPING       — "true"/"false".
+#   ANTI_LINK         — "true"/"false".
+#   LOG_LEVEL         — "debug"/"info"/"warn"/"error".
 # ============================================================================
 
 set -e
@@ -23,20 +55,18 @@ echo "[$(date)] Container working directory: $(pwd)"
 echo "[$(date)] Node version: $(node --version 2>/dev/null || echo 'not found')"
 echo "[$(date)] npm version: $(npm --version 2>/dev/null || echo 'not found')"
 echo "[$(date)] SERVER_PORT: ${SERVER_PORT:-'(not set)'}"
-echo "[$(date)] BOT_SESSION_ID: ${BOT_SESSION_ID:+'***set***'}${BOT_SESSION_ID:-'(not set)'}"
-echo "[$(date)] GITHUB_TOKEN: ${GITHUB_TOKEN:+'***set***'}${GITHUB_TOKEN:-'(not set)'}"
+echo "[$(date)] BOT_OWNER: ${BOT_OWNER:+'***set***'}${BOT_OWNER:-'(not set)'}"
+echo "[$(date)] BOT_SESSION_ID: ${BOT_SESSION_ID:+'***set***'}${BOT_SESSION_ID:-'(not set — will use interactive pairing)'}"
+echo "[$(date)] GITHUB_TOKEN: ${GITHUB_TOKEN:+'***set***'}${GITHUB_TOKEN:-'(not set — optional)'}"
 echo ""
 
-# Verify required env vars
-if [ -z "$BOT_SESSION_ID" ]; then
-    echo "[FATAL] BOT_SESSION_ID is not set. Set it in the Pterodactyl panel (Startup tab)."
-    echo "[FATAL] The bot needs a CALTEX-XXXX-XXXX session ID to auto-connect."
-    exit 1
-fi
-
-if [ -z "$GITHUB_TOKEN" ]; then
-    echo "[FATAL] GITHUB_TOKEN is not set. Set it in the Pterodactyl panel (Startup tab)."
-    echo "[FATAL] The bot needs GitHub access to restore WhatsApp credentials."
+# BOT_OWNER is the only required env var — it identifies the bot owner
+# and is used as the default phone number for the interactive pairing flow.
+if [ -z "$BOT_OWNER" ]; then
+    echo "[FATAL] BOT_OWNER is not set. Set it in the Pterodactyl panel (Startup tab)."
+    echo "[FATAL] BOT_OWNER should be your phone number in international format, e.g. 254712345678."
+    echo "[FATAL] It is used both for owner-only commands AND as the default phone number"
+    echo "[FATAL] for the interactive WhatsApp pairing code flow."
     exit 1
 fi
 

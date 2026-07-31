@@ -1,8 +1,8 @@
 {
-  "_comment": "CALTEX MD Bot - Pterodactyl Egg Configuration",
+  "_comment": "CALTEX MD Bot - Pterodactyl Egg Configuration. Supports three connection modes: (A) auto-connect with local creds, (B) GitHub credential restore (legacy), (C) interactive pairing code flow on Pterodactyl (new — no Render/Vercel needed).",
   "name": "CALTEX MD WhatsApp Bot",
   "author": "Caltex254",
-  "description": "CALTEX MD - Powerful WhatsApp Multi-Device Bot with AI, Plugin System, Web Dashboard & REST API. Uses Node.js + tsx runtime with Baileys for WhatsApp connection.",
+  "description": "CALTEX MD - Powerful WhatsApp Multi-Device Bot with AI, Plugin System, Web Dashboard & REST API. Uses Node.js + tsx runtime with Baileys for WhatsApp connection. Supports interactive phone-number pairing directly on Pterodactyl — no separate Render session API or Vercel dashboard required.",
   "features": [
     "EULA"
   ],
@@ -10,7 +10,7 @@
     "Node 20": "ghcr.io/pterodactyl/yolks:node_20"
   },
   "file_denylist": [],
-  "startup": "if [ ! -d node_modules ]; then npm install --no-audit --no-fund; fi && npx tsx index.ts",
+  "startup": "bash pterodactyl-start.sh",
   "config": {
     "files": {
       "package.json": {
@@ -32,24 +32,15 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# CALTEX MD Bot - Pterodactyl Installation Script\n# The bot files are uploaded directly by the user, no installation needed.\n# Dependencies are installed at startup via npm install.\n\napt update\napt install -y git\n\n# If package.json doesn't exist, clone the repo\nif [ ! -f /mnt/server/package.json ]; then\n    echo \"Cloning CALTEX-MD repository...\"\n    git clone --depth 1 https://github.com/Caltex254/CALTEX-MD.git /tmp/caltex\n    cp -r /tmp/caltex/mini-services/caltex-bot/* /mnt/server/\n    cp -r /tmp/caltex/mini-services/caltex-bot/.* /mnt/server/ 2>/dev/null || true\n    rm -rf /tmp/caltex\nfi\n\necho \"Installation complete. Bot files are ready.\"\necho \"Dependencies will be installed on first startup via npm install.\"",
+      "script": "#!/bin/bash\n# CALTEX MD Bot - Pterodactyl Installation Script\n# The bot files are uploaded directly by the user, no installation needed.\n# Dependencies are installed at startup via npm install.\n\napt update\napt install -y git\n\n# If package.json doesn't exist, clone the repo\nif [ ! -f /mnt/server/package.json ]; then\n    echo \"Cloning CALTEX-MD repository...\"\n    git clone --depth 1 https://github.com/Caltex254/CALTEX-MD.git /tmp/caltex\n    # Copy the bot service files (the actual WhatsApp bot)\n    cp -r /tmp/caltex/mini-services/caltex-bot/* /mnt/server/\n    cp -r /tmp/caltex/mini-services/caltex-bot/.* /mnt/server/ 2>/dev/null || true\n    # Also copy the Pterodactyl startup script from repo root\n    cp /tmp/caltex/pterodactyl-start.sh /mnt/server/pterodactyl-start.sh 2>/dev/null || true\n    chmod +x /mnt/server/pterodactyl-start.sh 2>/dev/null || true\n    rm -rf /tmp/caltex\nfi\n\necho \"Installation complete. Bot files are ready.\"\necho \"Dependencies will be installed on first startup via npm install.\"",
       "container": "debian:bullseye-slim",
       "entrypoint": "bash"
     }
   },
   "variables": [
     {
-      "name": "Bot Session ID",
-      "description": "Your CALTEX-XXXX-XXXX session ID from the pairing dashboard. Required for auto-connecting without QR code.",
-      "env_variable": "BOT_SESSION_ID",
-      "default_value": "",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": "required|string"
-    },
-    {
       "name": "Bot Owner Phone",
-      "description": "Phone number of the bot owner (international format, no + or spaces). Example: 254104906247",
+      "description": "Phone number of the bot owner (international format, no + or spaces). Example: 254712345678. Used for owner-only commands AND as the default phone number for the interactive WhatsApp pairing code flow on first start.",
       "env_variable": "BOT_OWNER",
       "default_value": "",
       "user_viewable": true,
@@ -57,35 +48,44 @@
       "rules": "required|string"
     },
     {
-      "name": "GitHub Token",
-      "description": "GitHub personal access token for credential storage (used to restore WhatsApp session across restarts).",
+      "name": "Bot Session ID (optional, legacy)",
+      "description": "Optional. Set to a CALTEX-XXXX-XXXX session ID to restore credentials from GitHub instead of using interactive pairing. Leave blank on first start to use the pairing code flow.",
+      "env_variable": "BOT_SESSION_ID",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "GitHub Token (optional, legacy)",
+      "description": "Optional. Only needed if you want to restore credentials from GitHub (legacy mode). Leave blank for the standard interactive pairing flow.",
       "env_variable": "GITHUB_TOKEN",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|string"
+      "rules": "nullable|string"
     },
     {
-      "name": "GitHub Repo Owner",
-      "description": "GitHub username or org that owns the caltex-sessions repo.",
+      "name": "GitHub Repo Owner (optional)",
+      "description": "GitHub username or org that owns the caltex-sessions repo. Only needed if using GitHub restore mode.",
       "env_variable": "GITHUB_REPO_OWNER",
       "default_value": "Caltex254",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|string"
+      "rules": "nullable|string"
     },
     {
-      "name": "GitHub Repo Name",
-      "description": "Name of the private GitHub repo where WhatsApp credentials are stored.",
+      "name": "GitHub Repo Name (optional)",
+      "description": "Name of the private GitHub repo where WhatsApp credentials are stored. Only needed if using GitHub restore mode.",
       "env_variable": "GITHUB_REPO_NAME",
       "default_value": "caltex-sessions",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|string"
+      "rules": "nullable|string"
     },
     {
       "name": "Bot Name",
-      "description": "Display name for the bot.",
+      "description": "Display name for the bot (shown in WhatsApp as the linked device name).",
       "env_variable": "BOT_NAME",
       "default_value": "CALTEX MD",
       "user_viewable": true,
@@ -94,7 +94,7 @@
     },
     {
       "name": "Command Prefix",
-      "description": "Prefix for bot commands. Use '.' for .menu, .ping etc.",
+      "description": "Prefix for bot commands. Use '.' for .menu, .ping etc. Other common values: '!', '/', '#'.",
       "env_variable": "BOT_PREFIX",
       "default_value": ".",
       "user_viewable": true,
@@ -108,7 +108,7 @@
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|boolean"
+      "rules": "required|string"
     },
     {
       "name": "Auto Typing",
@@ -117,7 +117,7 @@
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|boolean"
+      "rules": "required|string"
     },
     {
       "name": "Anti Link",
@@ -126,7 +126,7 @@
       "default_value": "false",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|boolean"
+      "rules": "required|string"
     },
     {
       "name": "Node Environment",
