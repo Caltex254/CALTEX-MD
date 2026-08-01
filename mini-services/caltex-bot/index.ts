@@ -856,15 +856,18 @@ class CaltexBot {
   }
 
   // ---------------------------------------------------------------------------
-  // Connect using phone number + pairing code (the new interactive flow)
+  // Connect using phone number + pairing code (the canonical Pterodactyl flow)
   // ---------------------------------------------------------------------------
-  // This is the new primary connection path on Pterodactyl:
-  //   1. User provides a phone number (either via BOT_OWNER env var or stdin prompt)
-  //   2. Bot opens a Baileys socket and waits for the QR event
-  //   3. Once QR fires, bot requests a pairing code from Baileys
-  //   4. Bot prints the code prominently in the console
-  //   5. User enters the code in WhatsApp → connection.open fires → bot replies to commands
-  //   6. Credentials are saved locally so subsequent restarts auto-connect
+  // This is the primary connection path on Pterodactyl first-start:
+  //   1. User provides a phone number (via BOT_OWNER env var or stdin prompt)
+  //   2. Bot creates a Baileys socket with Browsers.ubuntu('Chrome')
+  //   3. Bot immediately calls sock.requestPairingCode(phone) — does NOT wait
+  //      for the QR event (Baileys queues the IQ internally)
+  //   4. Bot waits 5 seconds for an error response from WhatsApp
+  //   5. If no error → WhatsApp accepted the pairing request → display code
+  //   6. User enters the code in WhatsApp → connection.open fires → bot
+  //      replies to commands and sends "✅ BOT CONNECTED" message
+  //   7. Credentials are saved locally so subsequent restarts auto-connect
   private async connectWithPairingCode(sessionId: string, phoneNumber: string): Promise<void> {
     try {
       await this.sessionManager.createSession(sessionId);
@@ -875,7 +878,7 @@ class CaltexBot {
         {
           sessionId,
           printQR: false, // suppress QR — we use pairing code instead
-          browser: 'CALTEX MD',
+          browser: 'CALTEX MD', // overridden to Browsers.ubuntu('Chrome') inside connection.ts
           autoReconnect: true,
           maxReconnectAttempts: 10,
           reconnectBaseDelay: 2000,
@@ -886,11 +889,24 @@ class CaltexBot {
       this.scheduler.registerSocket(sessionId, sock);
 
       if (pairingCode) {
+        // The connection manager has already verified WhatsApp acknowledged
+        // the pairing request before returning a non-empty code, so it's safe
+        // to display the banner here.
         printPairingCodeBanner(pairingCode, phoneNumber);
       } else {
-        logger.warn('[PAIRING] No pairing code was returned — check logs above for errors.');
+        logger.warn('[PAIRING] No pairing code was returned — WhatsApp may have rejected the request.');
         // eslint-disable-next-line no-console
-        console.log('\n  ⚠️  Pairing code could not be generated. Check the bot logs above.\n');
+        console.log('\n  ⚠️  Pairing code could not be generated. WhatsApp may have rejected the request.');
+        // eslint-disable-next-line no-console
+        console.log('     Check the bot logs above for the rejection reason.');
+        // eslint-disable-next-line no-console
+        console.log('     The bot will retry automatically. If it keeps failing, verify:');
+        // eslint-disable-next-line no-console
+        console.log('       - Phone number is correct (international format, no +)');
+        // eslint-disable-next-line no-console
+        console.log('       - Phone has an active WhatsApp account');
+        // eslint-disable-next-line no-console
+        console.log('       - You haven\'t been rate-limited (wait 5 min and retry)\n');
       }
     } catch (err: any) {
       logger.error({ err: err?.message ?? String(err), sessionId, phoneNumber }, '[PAIRING] Failed to start pairing code flow');

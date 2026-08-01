@@ -2,6 +2,26 @@
 // CALTEX MD WhatsApp Bot - Connection Manager
 // Uses Baileys for WhatsApp Multi-Device connection
 // ============================================================================
+//
+// This is the canonical implementation of the WhatsApp pairing-code flow.
+// It follows the official Baileys example pattern:
+//   1. Create socket with makeWASocket()
+//   2. If not registered, immediately call requestPairingCode(phone)
+//   3. Wait for connection.update -> connection: 'open'
+//   4. Save credentials on every creds.update event
+//   5. Auto-reconnect on close unless DisconnectReason.loggedOut
+//
+// Key correctness requirements (DO NOT CHANGE without reading the comments):
+//   - Browser MUST be Browsers.ubuntu('Chrome'). Using a custom name like
+//     'CALTEX MD' makes Baileys send companion_platform_id=9 (OTHER_WEB_CLIENT)
+//     which WhatsApp silently rejects — no popup appears on the user's phone.
+//   - requestPairingCode() MUST be called immediately after makeWASocket(),
+//     NOT after waiting for the QR event. Baileys queues the IQ internally
+//     and sends it as soon as the WebSocket handshake completes.
+//   - Only one socket per sessionId at any time (single-instance lock).
+//   - Stale auth folders (creds.json exists but creds.registered=false)
+//     MUST be deleted before starting a fresh pairing attempt.
+// ============================================================================
 
 import {
   makeWASocket,
@@ -16,10 +36,11 @@ import {
   proto,
   UserFacingSocketConfig,
 } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
 import { EventEmitter } from 'events';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { SessionManager } from './session-manager';
 import { downloadSessionFromGithub, isGithubStorageConfigured } from './github-storage';
@@ -27,8 +48,6 @@ import type { ConnectionConfig, BotEvents } from './types';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  // Multistream: write pretty logs to stdout (so Pterodactyl panel shows them
-  // and startup detection works) AND raw JSON to bot.log (for debugging).
   transport: {
     targets: [
       {
@@ -50,6 +69,21 @@ const logger = pino({
   },
 });
 
+// Map DisconnectReason numeric codes to human-readable names for logging.
+// Uses literal numeric keys because some DisconnectReason values collide
+// (e.g. connectionLost and timedOut both === 408).
+const DISCONNECT_REASON_NAMES: Record<number, string> = {
+  500: 'badSession',
+  428: 'connectionClosed',
+  408: 'timedOut/connectionLost',
+  440: 'connectionReplaced',
+  401: 'loggedOut',
+  515: 'restartRequired',
+  411: 'multideviceMismatch',
+  403: 'forbidden',
+  503: 'unavailableService',
+};
+
 export class ConnectionManager extends EventEmitter {
   private sockets: Map<string, WASocket> = new Map();
   private connectionStates: Map<string, ConnectionState> = new Map();
@@ -58,6 +92,10 @@ export class ConnectionManager extends EventEmitter {
   private sessionManager: SessionManager;
   private configs: Map<string, ConnectionConfig> = new Map();
   private authFolders: Map<string, string> = new Map();
+  // Single-instance lock: prevents multiple simultaneous sockets for the same sessionId.
+  // Without this, a reconnect during pairing could create two sockets that race
+  // for the same auth folder and corrupt the credentials.
+  private connectingLocks: Set<string> = new Set();
   private isShuttingDown = false;
   private globalLogger: pino.Logger;
 
@@ -80,6 +118,22 @@ export class ConnectionManager extends EventEmitter {
     return folder;
   }
 
+  // Delete the auth folder for a session. Used when stale credentials are
+  // detected (creds.json exists but creds.registered is false) so the next
+  // pairing attempt starts completely fresh.
+  private cleanAuthFolder(sessionId: string): void {
+    const folder = this.authFolders.get(sessionId) || join(process.cwd(), 'auth_info_baileys', sessionId);
+    if (existsSync(folder)) {
+      this.globalLogger.warn({ sessionId, folder }, '[AUTH] Cleaning stale auth folder');
+      try {
+        rmSync(folder, { recursive: true, force: true });
+      } catch (err: any) {
+        this.globalLogger.error({ sessionId, err: err.message }, '[AUTH] Failed to clean auth folder');
+      }
+    }
+    mkdirSync(folder, { recursive: true });
+  }
+
   async createConnection(config: ConnectionConfig): Promise<WASocket> {
     const {
       sessionId,
@@ -92,57 +146,111 @@ export class ConnectionManager extends EventEmitter {
       reconnectBaseDelay = 2000,
     } = config;
 
-    this.configs.set(sessionId, config);
-    this.reconnectAttempts.set(sessionId, 0);
-
-    const authFolder = this.getAuthFolder(sessionId);
-
-    // ── STARTUP LOG: credential loading ──
-    const caltexSessionId = process.env.BOT_SESSION_ID;
-    const credsFile = join(authFolder, 'creds.json');
-    this.globalLogger.info({
-      sessionId,
-      caltexSessionId: caltexSessionId || '(not set)',
-      authFolder,
-      credsFileExists: existsSync(credsFile),
-    }, '[LIFECYCLE] Loading credentials...');
-
-    // ── Free-tier persistence: restore credentials from GitHub if needed ──
-    if (caltexSessionId && !existsSync(credsFile) && isGithubStorageConfigured()) {
-      this.globalLogger.info({ sessionId, caltexSessionId, authFolder }, '[LIFECYCLE] Local creds missing - downloading from GitHub...');
-      try {
-        const result = await downloadSessionFromGithub(caltexSessionId, authFolder);
-        this.globalLogger.info({
-          sessionId,
-          caltexSessionId,
-          fileCount: result.fileCount,
-          phoneNumber: result.phoneNumber,
-        }, '[LIFECYCLE] Credentials downloaded from GitHub - bot will connect as linked device');
-      } catch (restoreErr: any) {
-        this.globalLogger.error({
-          sessionId,
-          caltexSessionId,
-          err: restoreErr.message,
-        }, '[LIFECYCLE] FAILED to restore credentials from GitHub - bot will fall back to QR pairing');
-      }
-    } else if (caltexSessionId && existsSync(credsFile)) {
-      this.globalLogger.info({ sessionId, caltexSessionId }, '[LIFECYCLE] Local credentials found - skipping GitHub restore');
-    } else if (!caltexSessionId) {
-      this.globalLogger.warn({ sessionId }, '[LIFECYCLE] BOT_SESSION_ID not set - cannot restore from GitHub, will use QR pairing');
+    // Single-instance lock — if a connection is already being established for
+    // this sessionId, return the existing socket (if any) instead of creating
+    // a duplicate.
+    if (this.connectingLocks.has(sessionId)) {
+      this.globalLogger.warn({ sessionId }, '[LOCK] Connection already in progress — skipping duplicate createConnection()');
+      const existing = this.sockets.get(sessionId);
+      if (existing) return existing;
     }
+    if (this.sockets.has(sessionId)) {
+      this.globalLogger.warn({ sessionId }, '[LOCK] Socket already exists — returning existing instance');
+      return this.sockets.get(sessionId)!;
+    }
+    this.connectingLocks.add(sessionId);
 
-    // ── STARTUP LOG: initializing Baileys auth state ──
-    this.globalLogger.info({ authFolder }, '[LIFECYCLE] Initializing Baileys auth state from folder...');
-    const { state, saveCreds } = await initAuthState(authFolder);
-    this.globalLogger.info({
-      hasCreds: !!state?.creds,
-      registered: !!state?.creds?.registered,
-      hasMe: !!state?.creds?.me,
-      meId: state?.creds?.me?.id,
-    }, '[LIFECYCLE] Baileys auth state loaded');
+    try {
+      this.configs.set(sessionId, config);
+      this.reconnectAttempts.set(sessionId, 0);
 
-    // ── STARTUP LOG: fetching Baileys version (with timeout) ──
-    let version: [number, number, number] = [2, 3000, 0]; // fallback
+      const authFolder = this.getAuthFolder(sessionId);
+
+      // ── Restore credentials from GitHub if needed ──
+      const caltexSessionId = process.env.BOT_SESSION_ID;
+      const credsFile = join(authFolder, 'creds.json');
+      this.globalLogger.info({
+        sessionId,
+        caltexSessionId: caltexSessionId || '(not set)',
+        authFolder,
+        credsFileExists: existsSync(credsFile),
+      }, '[LIFECYCLE] Loading credentials...');
+
+      if (caltexSessionId && !existsSync(credsFile) && isGithubStorageConfigured()) {
+        this.globalLogger.info({ sessionId, caltexSessionId, authFolder }, '[LIFECYCLE] Local creds missing - downloading from GitHub...');
+        try {
+          const result = await downloadSessionFromGithub(caltexSessionId, authFolder);
+          this.globalLogger.info({
+            sessionId,
+            caltexSessionId,
+            fileCount: result.fileCount,
+            phoneNumber: result.phoneNumber,
+          }, '[LIFECYCLE] Credentials downloaded from GitHub - bot will connect as linked device');
+        } catch (restoreErr: any) {
+          this.globalLogger.error({
+            sessionId,
+            caltexSessionId,
+            err: restoreErr.message,
+          }, '[LIFECYCLE] FAILED to restore credentials from GitHub - bot will fall back to QR pairing');
+        }
+      } else if (caltexSessionId && existsSync(credsFile)) {
+        this.globalLogger.info({ sessionId, caltexSessionId }, '[LIFECYCLE] Local credentials found - skipping GitHub restore');
+      } else if (!caltexSessionId) {
+        this.globalLogger.warn({ sessionId }, '[LIFECYCLE] BOT_SESSION_ID not set - cannot restore from GitHub, will use QR pairing');
+      }
+
+      this.globalLogger.info({ authFolder }, '[LIFECYCLE] Initializing Baileys auth state from folder...');
+      const { state, saveCreds } = await initAuthState(authFolder);
+      this.globalLogger.info({
+        hasCreds: !!state?.creds,
+        registered: !!state?.creds?.registered,
+        hasMe: !!state?.creds?.me,
+        meId: state?.creds?.me?.id,
+      }, '[LIFECYCLE] Baileys auth state loaded');
+
+      // ── Stale auth detection ──
+      // If creds.json exists but creds.registered is false, the previous
+      // pairing attempt failed. The stale noiseKey/identityKey would cause
+      // the next pairing attempt to silently fail. Delete the folder and
+      // re-init the auth state.
+      if (existsSync(credsFile) && !state?.creds?.registered) {
+        this.globalLogger.warn({ sessionId, credsFile }, '[LIFECYCLE] Stale credentials detected (creds.json exists but registered=false) — cleaning folder for fresh pairing');
+        this.cleanAuthFolder(sessionId);
+        // Re-init auth state from the now-empty folder
+        const fresh = await initAuthState(authFolder);
+        return await this.finishConnection(
+          config, sessionId, fresh.state, fresh.saveCreds,
+          { printQR, browser, syncFullHistory, markOnlineOnConnect, autoReconnect, maxReconnectAttempts, reconnectBaseDelay }
+        );
+      }
+
+      return await this.finishConnection(
+        config, sessionId, state, saveCreds,
+        { printQR, browser, syncFullHistory, markOnlineOnConnect, autoReconnect, maxReconnectAttempts, reconnectBaseDelay }
+      );
+    } finally {
+      this.connectingLocks.delete(sessionId);
+    }
+  }
+
+  // Shared socket-creation logic used by both fresh and restored auth states.
+  private async finishConnection(
+    config: ConnectionConfig,
+    sessionId: string,
+    state: any,
+    saveCreds: () => Promise<void>,
+    opts: {
+      printQR: boolean;
+      browser: string;
+      syncFullHistory: boolean;
+      markOnlineOnConnect: boolean;
+      autoReconnect: boolean;
+      maxReconnectAttempts: number;
+      reconnectBaseDelay: number;
+    },
+  ): Promise<WASocket> {
+    // fetchLatestBaileysVersion with 10s timeout (was hanging on slow networks)
+    let version: [number, number, number] = [2, 3000, 1015];
     try {
       const versionPromise = fetchLatestBaileysVersion();
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -150,12 +258,12 @@ export class ConnectionManager extends EventEmitter {
       );
       const result = await Promise.race([versionPromise, timeoutPromise]);
       version = result.version;
-      this.globalLogger.info({ version: version.join('.') }, '[LIFECYCLE] Fetched latest Baileys WhatsApp version');
+      this.globalLogger.info({ version: version.join('.'), isLatest: (result as any).isLatest }, '[LIFECYCLE] Fetched latest Baileys WhatsApp version');
     } catch (versionErr: any) {
       this.globalLogger.warn({ err: versionErr?.message ?? String(versionErr), fallback: version.join('.') }, '[LIFECYCLE] Using fallback Baileys version (fetch failed or timed out)');
     }
 
-    this.globalLogger.info({ sessionId, version: version.join('.'), printQR, browser }, '[LIFECYCLE] Creating Baileys WebSocket socket (Node.js ws implementation)...');
+    this.globalLogger.info({ sessionId, version: version.join('.'), printQR: opts.printQR, browser: opts.browser }, '[LIFECYCLE] Creating Baileys WebSocket socket...');
 
     const socketConfig: UserFacingSocketConfig = {
       version,
@@ -163,12 +271,15 @@ export class ConnectionManager extends EventEmitter {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
       },
-      // printQRInTerminal removed — deprecated in Baileys.
-      // QR codes are handled via the connection.update event -> qr.code event
-      // and exposed via the /api/qr-image HTTP endpoint.
-      browser: Browsers.appropriate(browser),
-      syncFullHistory,
-      markOnlineOnConnect,
+      // CRITICAL: browser MUST be ['Ubuntu', 'Chrome', '22.04.4'].
+      // The second element ('Chrome') is what Baileys sends as companion_platform_display
+      // and is used by getCompanionWebClientType() to determine the platform ID.
+      // 'Chrome' -> platform ID 1 (CHROME) — WhatsApp accepts this.
+      // Any custom name like 'CALTEX MD' -> platform ID 9 (OTHER_WEB_CLIENT) —
+      // WhatsApp SILENTLY REJECTS the pairing (no popup on the user's phone).
+      browser: Browsers.ubuntu('Chrome'),
+      syncFullHistory: opts.syncFullHistory,
+      markOnlineOnConnect: opts.markOnlineOnConnect,
       logger: this.globalLogger.child({ sessionId }),
       generateHighQualityLinkPreview: true,
       shouldIgnoreJid: (jid: string) => {
@@ -188,68 +299,85 @@ export class ConnectionManager extends EventEmitter {
     const sock = makeWASocket(socketConfig);
     this.sockets.set(sessionId, sock);
 
-    // --- Connection Update Handler ---
+    // ── Connection Update Handler ──
+    // Logs EVERY field of connection.update so we can debug pairing failures.
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update;
+
+      // Compute human-readable disconnect reason name if available
+      const errAny = lastDisconnect?.error as any;
+      const statusCode =
+        errAny?.output?.statusCode ??
+        errAny?.output?.payload?.statusCode ??
+        0;
+      const reasonName = DISCONNECT_REASON_NAMES[statusCode] || (statusCode ? `unknown(${statusCode})` : null);
 
       this.globalLogger.info({
         sessionId,
         connection: connection || null,
         hasQr: !!qr,
         hasLastDisconnect: !!lastDisconnect,
+        lastDisconnectErrorCode: errAny?.output?.statusCode ?? null,
+        lastDisconnectErrorMessage: lastDisconnect?.error?.message ?? null,
+        lastDisconnectReasonName: reasonName,
         isNewLogin: !!isNewLogin,
         receivedPendingNotifications: !!receivedPendingNotifications,
-      }, '[LIFECYCLE] connection.update event received');
+      }, '[LIFECYCLE] connection.update event');
 
       if (qr) {
         this.globalLogger.info({ sessionId, qrLength: qr.length }, '[LIFECYCLE] QR code received - scan with WhatsApp to pair');
-        if (printQR) {
+        if (opts.printQR) {
           qrcode.generate(qr, { small: true });
         }
         this.emit('qr.code', qr, sessionId);
       }
 
       if (connection === 'close') {
-        const statusCode =
-          lastDisconnect?.error?.output?.statusCode ??
-          lastDisconnect?.error?.output?.payload?.statusCode ??
-          0;
         const reason = lastDisconnect?.error?.message ?? 'Unknown reason';
         this.globalLogger.warn({
           sessionId,
           statusCode,
+          reasonName,
           reason,
-          errorOutput: lastDisconnect?.error?.output,
-        }, '[LIFECYCLE] connection.close - WhatsApp disconnected, see statusCode/reason for details');
-        const shouldReconnect =
-          statusCode !== DisconnectReason.loggedOut &&
-          autoReconnect &&
-          !this.isShuttingDown;
+          errorOutput: errAny?.output,
+        }, '[LIFECYCLE] connection.close - WhatsApp disconnected');
 
-        this.globalLogger.warn({ sessionId, statusCode, reason, shouldReconnect }, 'Connection closed');
-
-        this.connectionStates.set(sessionId, update);
+        // Clean up the socket from our map immediately
+        this.sockets.delete(sessionId);
+        this.connectionStates.set(sessionId, update as ConnectionState);
         this.emit('connection.close', statusCode, reason, sessionId);
         this.emit('connection.update', update, sessionId);
+
+        // Decide whether to reconnect
+        const shouldReconnect =
+          statusCode !== DisconnectReason.loggedOut &&
+          opts.autoReconnect &&
+          !this.isShuttingDown;
 
         if (shouldReconnect) {
           const attempts = (this.reconnectAttempts.get(sessionId) ?? 0) + 1;
           this.reconnectAttempts.set(sessionId, attempts);
 
-          if (attempts <= maxReconnectAttempts) {
-            const delay = reconnectBaseDelay * Math.pow(2, attempts - 1) + Math.random() * 1000;
-            this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay) }, 'Reconnecting with exponential backoff');
+          if (attempts <= opts.maxReconnectAttempts) {
+            const delay = opts.reconnectBaseDelay * Math.pow(2, Math.min(attempts - 1, 5)) + Math.random() * 1000;
+            this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay), reasonName }, '[LIFECYCLE] Reconnecting with exponential backoff');
             const timer = setTimeout(() => {
               this.reconnectTimers.delete(sessionId);
-              this.createConnection(config);
+              this.createConnection(config).catch((err: any) => {
+                this.globalLogger.error({ sessionId, err: err.message }, '[LIFECYCLE] Reconnect attempt failed');
+              });
             }, delay);
             this.reconnectTimers.set(sessionId, timer);
           } else {
-            this.globalLogger.error({ sessionId, attempts }, 'Max reconnect attempts reached');
+            this.globalLogger.error({ sessionId, attempts }, '[LIFECYCLE] Max reconnect attempts reached');
           }
         } else if (statusCode === DisconnectReason.loggedOut) {
-          this.globalLogger.info({ sessionId }, 'Logged out, clearing session');
+          this.globalLogger.info({ sessionId }, '[LIFECYCLE] Logged out by user — clearing session and auth folder');
+          // Delete the auth folder so the next start is a fresh pairing
+          this.cleanAuthFolder(sessionId);
           await this.sessionManager.deleteSession(sessionId);
+        } else {
+          this.globalLogger.warn({ sessionId, reasonName, statusCode }, '[LIFECYCLE] Not reconnecting (autoReconnect disabled or shutting down)');
         }
       } else if (connection === 'open') {
         this.reconnectAttempts.set(sessionId, 0);
@@ -260,30 +388,41 @@ export class ConnectionManager extends EventEmitter {
           meId: openCreds?.me?.id,
           platform: openCreds?.platform,
         }, '[LIFECYCLE] connection.open - WhatsApp connection established, device is now an active linked device');
-        this.connectionStates.set(sessionId, update);
+        this.connectionStates.set(sessionId, update as ConnectionState);
         this.emit('connection.open', sessionId);
         this.emit('connection.update', update, sessionId);
 
         // Send "BOT CONNECTED SUCCESSFULLY" WhatsApp message
-        // Only fires after connection.open AND auth is confirmed inside the method.
-        // Non-blocking - failure to send doesn't affect the connection.
         this.sendConnectionSuccessMessage(sessionId).catch((err: any) => {
           this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, 'Success message send failed (non-blocking)');
         });
       } else {
-        this.connectionStates.set(sessionId, update);
+        this.connectionStates.set(sessionId, update as ConnectionState);
         this.emit('connection.update', update, sessionId);
       }
     });
 
-    // --- Credentials Update ---
-    sock.ev.on('creds.update', (creds) => {
-      this.globalLogger.debug({ sessionId, hasMe: !!creds?.me, registered: !!creds?.registered }, '[LIFECYCLE] creds.update - saving credentials');
-      saveCreds();
+    // ── Credentials Update ──
+    // Save creds IMMEDIATELY on every update event. This is critical —
+    // Baileys emits creds.update many times during pairing (noise key,
+    // identity key, signal keys, etc.) and each must be persisted or
+    // the next reconnect will fail.
+    sock.ev.on('creds.update', async (creds) => {
+      this.globalLogger.debug({
+        sessionId,
+        hasMe: !!creds?.me,
+        registered: !!creds?.registered,
+        hasPairingCode: !!creds?.pairingCode,
+      }, '[LIFECYCLE] creds.update — saving credentials');
+      try {
+        await saveCreds();
+      } catch (err: any) {
+        this.globalLogger.error({ sessionId, err: err.message }, '[LIFECYCLE] Failed to save credentials');
+      }
       this.emit('creds.update', creds, sessionId);
     });
 
-    // --- Forward all Baileys events through EventEmitter ---
+    // ── Forward all Baileys events through EventEmitter ──
     const eventMap: Record<string, string> = {
       'messages.upsert': 'messages.upsert',
       'messages.delete': 'messages.delete',
@@ -312,7 +451,7 @@ export class ConnectionManager extends EventEmitter {
   }
 
   // ---------------------------------------------------------------------------
-  // Pairing Code Support
+  // Pairing Code Support (legacy single-shot method, kept for API compatibility)
   // ---------------------------------------------------------------------------
   async requestPairingCode(sessionId: string, phoneNumber: string): Promise<string> {
     const sock = this.sockets.get(sessionId);
@@ -320,8 +459,6 @@ export class ConnectionManager extends EventEmitter {
       throw new Error(`No active connection for session: ${sessionId}`);
     }
     try {
-      // Request pairing code from WhatsApp
-      // The phone number should be in format: country code + number (e.g., "254712345678")
       const code = await sock.requestPairingCode(phoneNumber);
       this.globalLogger.info({ sessionId, phoneNumber }, 'Pairing code requested');
       this.emit('pairing.code', code, sessionId, phoneNumber);
@@ -333,24 +470,22 @@ export class ConnectionManager extends EventEmitter {
   }
 
   // ---------------------------------------------------------------------------
-  // Connection with Pairing Code (alternative to QR)
+  // Connection with Pairing Code — the canonical Pterodactyl first-start flow
   // ---------------------------------------------------------------------------
-  // This method is the canonical pairing-code flow for Pterodactyl first-start:
-  // 1. 10s timeout on fetchLatestBaileysVersion (was hanging on slow networks).
-  // 2. markOnlineOnConnect = false — critical for pairing. If true, Baileys
-  //    sends a presence update before the device is registered, and WhatsApp
-  //    silently rejects the pairing (no popup on the user's phone).
-  // 3. connectTimeoutMs = 300s (5 min) — gives the user time to type the code.
-  // 4. Browsers.ubuntu('CALTEX MD') — stable, well-known browser identity.
-  //    Browsers.appropriate() can return undefined on Alpine/musl.
-  // 5. Waits for the 'qr' event before calling requestPairingCode() — calling
-  //    it too early fails silently in some Baileys versions.
-  // 6. 1.5s delay between QR event and requestPairingCode() call — lets the
-  //    noise keypair fully register before requesting the code.
-  // 7. Two retries with 3s/4s delays if requestPairingCode() throws.
-  // 8. Forwards all events (messages.upsert etc.) so the bot replies to
-  //    commands automatically after pairing succeeds.
-  // 9. Saves credentials locally via creds.update so subsequent restarts work.
+  // This method:
+  //   1. Acquires the single-instance lock for the sessionId
+  //   2. Cleans any stale auth folder
+  //   3. Creates a fresh Baileys socket with Browsers.ubuntu('Chrome')
+  //   4. Immediately calls sock.requestPairingCode(phone) — does NOT wait
+  //      for the QR event (Baileys queues the IQ internally)
+  //   5. Waits up to 5 seconds for an error response. If the connection
+  //      closes in that window, WhatsApp rejected the pairing — we don't
+  //      display the code. If the connection stays open, WhatsApp accepted
+  //      the pairing request and will push a notification to the user's
+  //      phone — we display the code.
+  //   6. Sets up the same connection.update / creds.update handlers as
+  //      createConnection() so the bot works correctly after pairing.
+  //   7. Auto-reconnects on close (unless loggedOut).
   async createConnectionWithPairingCode(
     config: ConnectionConfig,
     phoneNumber: string
@@ -359,266 +494,330 @@ export class ConnectionManager extends EventEmitter {
       sessionId,
       browser = 'CALTEX MD',
       syncFullHistory = false,
-      // IMPORTANT: markOnlineOnConnect MUST be false during the pairing flow.
-      // Setting it to true causes Baileys to send a presence update before the
-      // device is fully linked, which WhatsApp silently rejects — the user
-      // then enters the pairing code in WhatsApp but no confirmation popup
-      // appears because the session was never actually registered.
-      markOnlineOnConnect = false,
+      markOnlineOnConnect = true,
       autoReconnect = true,
       maxReconnectAttempts = 10,
       reconnectBaseDelay = 2000,
     } = config;
 
-    this.configs.set(sessionId, config);
-    this.reconnectAttempts.set(sessionId, 0);
-
-    const authFolder = this.getAuthFolder(sessionId);
-    const { state, saveCreds } = await initAuthState(authFolder);
-
-    // fetchLatestBaileysVersion with 10s timeout (was hanging on Pterodactyl)
-    let version: [number, number, number] = [2, 3000, 0];
-    try {
-      const versionPromise = fetchLatestBaileysVersion();
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout after 10s')), 10000)
-      );
-      const result = await Promise.race([versionPromise, timeoutPromise]);
-      version = result.version;
-      this.globalLogger.info({ version: version.join('.') }, '[PAIRING] Fetched latest Baileys version');
-    } catch (versionErr: any) {
-      this.globalLogger.warn({ err: versionErr?.message ?? String(versionErr), fallback: version.join('.') }, '[PAIRING] Using fallback Baileys version');
+    // ── Single-instance lock ──
+    if (this.connectingLocks.has(sessionId)) {
+      this.globalLogger.warn({ sessionId }, '[PAIRING] Connection already in progress — aborting duplicate requestPairingCode()');
+      const existing = this.sockets.get(sessionId);
+      if (existing) return { sock: existing, pairingCode: '' };
     }
+    if (this.sockets.has(sessionId)) {
+      this.globalLogger.warn({ sessionId }, '[PAIRING] Socket already exists — closing it before starting fresh pairing');
+      try {
+        this.sockets.get(sessionId)!.end(undefined);
+      } catch {}
+      this.sockets.delete(sessionId);
+    }
+    this.connectingLocks.add(sessionId);
 
-    this.globalLogger.info({ sessionId, version: version.join('.'), phoneNumber }, '[PAIRING] Creating WhatsApp connection for pairing code flow');
+    try {
+      this.configs.set(sessionId, config);
+      this.reconnectAttempts.set(sessionId, 0);
 
-    const socketConfig: UserFacingSocketConfig = {
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
-      },
-      // Use a stable, well-known browser identity. Browsers.appropriate() can
-      // resolve to an undefined platform on Alpine/musl, which causes Baileys
-      // to send an empty device payload — WhatsApp then refuses the pairing.
-      browser: Browsers.ubuntu(browser),
-      syncFullHistory,
-      markOnlineOnConnect,
-      // 5 minutes — gives the user enough time to open WhatsApp, navigate to
-      // Linked Devices, and type the pairing code without the socket closing.
-      connectTimeoutMs: 300_000,
-      logger: this.globalLogger.child({ sessionId }),
-      generateHighQualityLinkPreview: true,
-      // Respect device deletion events so a logged-out session doesn't try
-      // to keep using stale credentials.
-      shouldSyncHistoryMessage: () => true,
-      shouldIgnoreJid: (jid: string) => {
-        const isGroup = jid.endsWith('@g.us');
-        const isBroadcast = jid === 'status@broadcast';
-        const isNewsletter = jid.includes('@newsletter');
-        const isUser = jid.endsWith('@s.whatsapp.net');
-        return !isGroup && !isBroadcast && !isUser && !isNewsletter;
-      },
-      getMessage: async (key: proto.IMessageKey) => {
-        if (!key.remoteJid) return undefined;
-        return undefined;
-      },
-    };
+      const authFolder = this.getAuthFolder(sessionId);
 
-    const sock = makeWASocket(socketConfig);
-    this.sockets.set(sessionId, sock);
-
-    // ── Pairing code generation ──
-    // We wait for the QR event (Baileys fires it once the WebSocket handshake
-    // is complete and the socket is ready to accept a pairing-code request).
-    // Requesting before the QR event silently fails in Baileys 6.x.
-    let pairingCode = ''
-    let pairingCodeRequested = false;
-    const pairingCodePromise = new Promise<string>((resolve) => {
-      const onQr = async (_qr: string) => {
-        if (pairingCodeRequested) return;
-        pairingCodeRequested = true;
-        try {
-          // 1.5s delay — gives Baileys time to finish registering the noise
-          //    keypair before we send the pairing-code request. Without this,
-          //    some Baileys versions return a code that WhatsApp silently
-          //    rejects (no popup on the user's phone).
-          await new Promise((r) => setTimeout(r, 1500));
-          const code = await sock.requestPairingCode(phoneNumber);
-          pairingCode = code;
-          this.globalLogger.info({ sessionId, pairingCode: code, phoneNumber }, '[PAIRING] Pairing code generated successfully');
-          this.emit('pairing.code', code, sessionId, phoneNumber);
-          resolve(code);
-        } catch (error: any) {
-          this.globalLogger.error({ sessionId, error: error.message }, '[PAIRING] Failed to generate pairing code on QR event — retrying in 3s');
-          // Two retries with increasing delay. The first attempt can fail if
-          // the socket hasn't fully finished the noise handshake.
-          const tryRequest = async (attempt: number): Promise<string> => {
-            try {
-              const code = await sock.requestPairingCode(phoneNumber);
-              pairingCode = code;
-              this.globalLogger.info({ sessionId, pairingCode: code, attempt }, '[PAIRING] Pairing code generated on retry');
-              this.emit('pairing.code', code, sessionId, phoneNumber);
-              return code;
-            } catch (err: any) {
-              this.globalLogger.error({ sessionId, err: err.message, attempt }, '[PAIRING] Retry failed');
-              return '';
-            }
-          };
-          setTimeout(async () => {
-            const code = await tryRequest(1);
-            if (code) { resolve(code); return; }
-            setTimeout(async () => {
-              const code2 = await tryRequest(2);
-              resolve(code2);
-            }, 4000);
-          }, 3000);
-        }
-      };
-      sock.ev.on('connection.update', (update) => {
-        if (update.qr) onQr(update.qr);
-        // If connection opens without QR (creds already exist), resolve early.
-        if (update.connection === 'open' && !pairingCode) resolve('');
-      });
-    });
-
-    // --- Connection Update Handler (full event forwarding, same as createConnection) ---
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr, isNewLogin } = update;
-
-      this.globalLogger.info({
-        sessionId,
-        connection: connection || null,
-        hasQr: !!qr,
-        isNewLogin: !!isNewLogin,
-      }, '[PAIRING] connection.update event received');
-
-      if (qr) {
-        // Suppress QR display — we're using pairing code instead.
-        // Do NOT emit qr.code event so the dashboard doesn't show a QR.
-        this.globalLogger.info({ sessionId }, '[PAIRING] QR event received — pairing code will be requested instead of QR display');
+      // ── Clean any stale auth folder ──
+      // If creds.json exists from a previous failed pairing attempt, the
+      // stale noiseKey/identityKey would cause the new pairing to silently
+      // fail. Always start with a clean folder for the pairing flow.
+      const credsFile = join(authFolder, 'creds.json');
+      if (existsSync(credsFile)) {
+        this.globalLogger.warn({ sessionId, credsFile }, '[PAIRING] Existing creds.json found — cleaning folder for fresh pairing');
+        this.cleanAuthFolder(sessionId);
       }
 
-      if (connection === 'close') {
+      this.globalLogger.info({ sessionId, phoneNumber, authFolder }, '[PAIRING] Initializing fresh Baileys auth state...');
+      const { state, saveCreds } = await initAuthState(authFolder);
+      this.globalLogger.info({
+        hasCreds: !!state?.creds,
+        registered: !!state?.creds?.registered,
+      }, '[PAIRING] Auth state initialized');
+
+      // ── Fetch latest Baileys version ──
+      let version: [number, number, number] = [2, 3000, 1015];
+      try {
+        const versionPromise = fetchLatestBaileysVersion();
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('fetchLatestBaileysVersion timeout after 10s')), 10000)
+        );
+        const result = await Promise.race([versionPromise, timeoutPromise]);
+        version = result.version;
+        this.globalLogger.info({ version: version.join('.') }, '[PAIRING] Fetched latest Baileys version');
+      } catch (versionErr: any) {
+        this.globalLogger.warn({ err: versionErr?.message ?? String(versionErr), fallback: version.join('.') }, '[PAIRING] Using fallback Baileys version');
+      }
+
+      this.globalLogger.info({ sessionId, version: version.join('.'), phoneNumber }, '[PAIRING] Creating WhatsApp socket for pairing code flow');
+
+      const socketConfig: UserFacingSocketConfig = {
+        version,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
+        },
+        // CRITICAL: Browsers.ubuntu('Chrome') — NOT Browsers.ubuntu('CALTEX MD').
+        // See comment in finishConnection() above for the full explanation.
+        browser: Browsers.ubuntu('Chrome'),
+        syncFullHistory,
+        markOnlineOnConnect,
+        // 5 minutes — gives the user time to open WhatsApp and enter the code.
+        connectTimeoutMs: 300_000,
+        logger: this.globalLogger.child({ sessionId }),
+        generateHighQualityLinkPreview: true,
+        shouldIgnoreJid: (jid: string) => {
+          const isGroup = jid.endsWith('@g.us');
+          const isBroadcast = jid === 'status@broadcast';
+          const isNewsletter = jid.includes('@newsletter');
+          const isUser = jid.endsWith('@s.whatsapp.net');
+          return !isGroup && !isBroadcast && !isUser && !isNewsletter;
+        },
+        getMessage: async (key: proto.IMessageKey) => {
+          if (!key.remoteJid) return undefined;
+          return undefined;
+        },
+      };
+
+      const sock = makeWASocket(socketConfig);
+      this.sockets.set(sessionId, sock);
+
+      // ── Set up connection.update + creds.update handlers BEFORE calling
+      //    requestPairingCode() so we don't miss any events. ──
+      let pairingAcknowledged = false;
+      let pairingRejected = false;
+      let rejectionReason = '';
+
+      sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr, isNewLogin } = update;
+        const errAny = lastDisconnect?.error as any;
         const statusCode =
-          lastDisconnect?.error?.output?.statusCode ??
-          lastDisconnect?.error?.output?.payload?.statusCode ??
+          errAny?.output?.statusCode ??
+          errAny?.output?.payload?.statusCode ??
           0;
-        const reason = lastDisconnect?.error?.message ?? 'Unknown reason';
-        const shouldReconnect =
-          statusCode !== DisconnectReason.loggedOut &&
-          autoReconnect &&
-          !this.isShuttingDown;
+        const reasonName = DISCONNECT_REASON_NAMES[statusCode] || (statusCode ? `unknown(${statusCode})` : null);
 
-        this.globalLogger.warn({ sessionId, statusCode, reason, shouldReconnect }, '[PAIRING] Connection closed');
-        this.connectionStates.set(sessionId, update);
-        this.emit('connection.close', statusCode, reason, sessionId);
-        this.emit('connection.update', update, sessionId);
-
-        if (shouldReconnect) {
-          const attempts = (this.reconnectAttempts.get(sessionId) ?? 0) + 1;
-          this.reconnectAttempts.set(sessionId, attempts);
-          if (attempts <= maxReconnectAttempts) {
-            const delay = reconnectBaseDelay * Math.pow(2, attempts - 1) + Math.random() * 1000;
-            this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay) }, '[PAIRING] Reconnecting with exponential backoff');
-            const timer = setTimeout(() => {
-              this.reconnectTimers.delete(sessionId);
-              // On reconnect, use regular createConnection (creds are now saved locally)
-              this.createConnection(config);
-            }, delay);
-            this.reconnectTimers.set(sessionId, timer);
-          } else {
-            this.globalLogger.error({ sessionId, attempts }, '[PAIRING] Max reconnect attempts reached');
-          }
-        } else if (statusCode === DisconnectReason.loggedOut) {
-          this.globalLogger.info({ sessionId }, '[PAIRING] Logged out, clearing session');
-          await this.sessionManager.deleteSession(sessionId);
-        }
-      } else if (connection === 'open') {
-        this.reconnectAttempts.set(sessionId, 0);
-        const openCreds = sock.authState?.creds;
         this.globalLogger.info({
           sessionId,
-          registered: !!openCreds?.registered,
-          meId: openCreds?.me?.id,
-          platform: openCreds?.platform,
-        }, '[PAIRING] connection.open — WhatsApp paired successfully, bot is now an active linked device');
-        this.connectionStates.set(sessionId, update);
-        this.emit('connection.open', sessionId);
-        this.emit('connection.update', update, sessionId);
-        // Send "BOT CONNECTED SUCCESSFULLY" WhatsApp message
-        this.sendConnectionSuccessMessage(sessionId).catch((err: any) => {
-          this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, '[PAIRING] Success message send failed (non-blocking)');
-        });
-      } else {
-        this.connectionStates.set(sessionId, update);
-        this.emit('connection.update', update, sessionId);
-      }
-    });
+          connection: connection || null,
+          hasQr: !!qr,
+          hasLastDisconnect: !!lastDisconnect,
+          lastDisconnectErrorCode: statusCode || null,
+          lastDisconnectReasonName: reasonName,
+          lastDisconnectErrorMessage: lastDisconnect?.error?.message ?? null,
+          isNewLogin: !!isNewLogin,
+        }, '[PAIRING] connection.update event');
 
-    // --- Credentials Update ---
-    sock.ev.on('creds.update', (creds) => {
-      this.globalLogger.debug({ sessionId, hasMe: !!creds?.me, registered: !!creds?.registered }, '[PAIRING] creds.update — saving credentials locally');
-      saveCreds();
-      this.emit('creds.update', creds, sessionId);
-    });
+        if (connection === 'close') {
+          const reason = lastDisconnect?.error?.message ?? 'Unknown reason';
+          this.globalLogger.error({
+            sessionId,
+            statusCode,
+            reasonName,
+            reason,
+          }, '[PAIRING] Connection closed');
 
-    // --- Forward all Baileys events through EventEmitter ---
-    const eventMap: Record<string, string> = {
-      'messages.upsert': 'messages.upsert',
-      'messages.delete': 'messages.delete',
-      'messages.update': 'messages.update',
-      'messages.reaction': 'messages.reaction',
-      'chats.upsert': 'chats.upsert',
-      'chats.update': 'chats.update',
-      'chats.delete': 'chats.delete',
-      'contacts.upsert': 'contacts.upsert',
-      'contacts.update': 'contacts.update',
-      'group-participants.update': 'group.participants.update',
-      'groups.update': 'group.update',
-      'call': 'call',
-      'presence.update': 'presence.update',
-      'blocklist.set': 'blocklist.set',
-      'blocklist.update': 'blocklist.update',
-    };
+          pairingRejected = true;
+          rejectionReason = `${reasonName || 'unknown'}: ${reason}`;
 
-    for (const [baileysEvent, botEvent] of Object.entries(eventMap)) {
-      sock.ev.on(baileysEvent as any, (data: any) => {
-        this.emit(botEvent, data, sessionId);
+          this.sockets.delete(sessionId);
+          this.connectionStates.set(sessionId, update as ConnectionState);
+          this.emit('connection.close', statusCode, reason, sessionId);
+          this.emit('connection.update', update, sessionId);
+
+          // Auto-reconnect unless logged out
+          const shouldReconnect =
+            statusCode !== DisconnectReason.loggedOut &&
+            autoReconnect &&
+            !this.isShuttingDown;
+
+          if (shouldReconnect) {
+            const attempts = (this.reconnectAttempts.get(sessionId) ?? 0) + 1;
+            this.reconnectAttempts.set(sessionId, attempts);
+            if (attempts <= maxReconnectAttempts) {
+              const delay = reconnectBaseDelay * Math.pow(2, Math.min(attempts - 1, 5)) + Math.random() * 1000;
+              this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay) }, '[PAIRING] Reconnecting with exponential backoff (will retry pairing on next start)');
+              const timer = setTimeout(() => {
+                this.reconnectTimers.delete(sessionId);
+                // After a pairing failure, fall back to regular createConnection
+                // which will detect stale creds and clean them.
+                this.createConnection(config).catch((err: any) => {
+                  this.globalLogger.error({ sessionId, err: err.message }, '[PAIRING] Reconnect failed');
+                });
+              }, delay);
+              this.reconnectTimers.set(sessionId, timer);
+            } else {
+              this.globalLogger.error({ sessionId, attempts }, '[PAIRING] Max reconnect attempts reached');
+            }
+          } else if (statusCode === DisconnectReason.loggedOut) {
+            this.globalLogger.info({ sessionId }, '[PAIRING] Logged out — clearing session');
+            this.cleanAuthFolder(sessionId);
+            this.sessionManager.deleteSession(sessionId).catch(() => {});
+          }
+        } else if (connection === 'open') {
+          this.reconnectAttempts.set(sessionId, 0);
+          pairingAcknowledged = true;
+          const openCreds = sock.authState?.creds;
+          this.globalLogger.info({
+            sessionId,
+            registered: !!openCreds?.registered,
+            meId: openCreds?.me?.id,
+            platform: openCreds?.platform,
+          }, '[PAIRING] connection.open — WhatsApp paired successfully, bot is now an active linked device');
+          this.connectionStates.set(sessionId, update as ConnectionState);
+          this.emit('connection.open', sessionId);
+          this.emit('connection.update', update, sessionId);
+          // Send "BOT CONNECTED SUCCESSFULLY" WhatsApp message
+          this.sendConnectionSuccessMessage(sessionId).catch((err: any) => {
+            this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, '[PAIRING] Success message send failed (non-blocking)');
+          });
+        }
       });
+
+      // ── Save credentials on every update ──
+      sock.ev.on('creds.update', async (creds) => {
+        this.globalLogger.debug({
+          sessionId,
+          hasMe: !!creds?.me,
+          registered: !!creds?.registered,
+          hasPairingCode: !!creds?.pairingCode,
+        }, '[PAIRING] creds.update — saving credentials');
+        try {
+          await saveCreds();
+        } catch (err: any) {
+          this.globalLogger.error({ sessionId, err: err.message }, '[PAIRING] Failed to save credentials');
+        }
+        this.emit('creds.update', creds, sessionId);
+      });
+
+      // ── Forward all Baileys events ──
+      const eventMap: Record<string, string> = {
+        'messages.upsert': 'messages.upsert',
+        'messages.delete': 'messages.delete',
+        'messages.update': 'messages.update',
+        'messages.reaction': 'messages.reaction',
+        'chats.upsert': 'chats.upsert',
+        'chats.update': 'chats.update',
+        'chats.delete': 'chats.delete',
+        'contacts.upsert': 'contacts.upsert',
+        'contacts.update': 'contacts.update',
+        'group-participants.update': 'group.participants.update',
+        'groups.update': 'group.update',
+        'call': 'call',
+        'presence.update': 'presence.update',
+        'blocklist.set': 'blocklist.set',
+        'blocklist.update': 'blocklist.update',
+      };
+      for (const [baileysEvent, botEvent] of Object.entries(eventMap)) {
+        sock.ev.on(baileysEvent as any, (data: any) => {
+          this.emit(botEvent, data, sessionId);
+        });
+      }
+
+      // ── Request the pairing code ──
+      // Per Baileys source: requestPairingCode() generates the code locally,
+      // emits creds.update, sends the link_code_companion_reg IQ, and returns
+      // the code immediately. It does NOT wait for WhatsApp's acknowledgement.
+      //
+      // We call it immediately after makeWASocket() — Baileys internally
+      // queues the IQ and sends it as soon as the WebSocket handshake
+      // completes. We do NOT need to wait for the QR event.
+      //
+      // After calling it, we wait up to 5 seconds. If the connection closes
+      // in that window, WhatsApp rejected the pairing (invalid phone number,
+      // rate limited, etc.) — we don't display the code. If the connection
+      // stays open, WhatsApp accepted the request and will push a
+      // notification to the user's phone — we display the code.
+      this.globalLogger.info({ sessionId, phoneNumber }, '[PAIRING] Calling requestPairingCode() — IQ will be sent once WebSocket handshake completes');
+      let pairingCode = '';
+      try {
+        pairingCode = await sock.requestPairingCode(phoneNumber);
+        this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] requestPairingCode() returned — IQ sent to WhatsApp servers');
+        this.emit('pairing.code', pairingCode, sessionId, phoneNumber);
+      } catch (err: any) {
+        this.globalLogger.error({ sessionId, phoneNumber, err: err.message }, '[PAIRING] requestPairingCode() threw an error');
+        return { sock, pairingCode: '' };
+      }
+
+      // ── Wait for WhatsApp to acknowledge or reject the pairing ──
+      // 5 seconds is enough time for WhatsApp to respond if the phone number
+      // is invalid or the pairing is rate-limited. If no rejection arrives
+      // in 5s, we assume WhatsApp accepted the request and will push the
+      // notification to the user's phone.
+      const acknowledgementTimeout = new Promise<'acknowledged' | 'rejected'>((resolve) =>
+        setTimeout(() => resolve('acknowledged'), 5000)
+      );
+      const rejectionPromise = new Promise<'acknowledged' | 'rejected'>((resolve) => {
+        // Poll for pairingRejected flag every 100ms
+        const interval = setInterval(() => {
+          if (pairingRejected) {
+            clearInterval(interval);
+            resolve('rejected');
+          } else if (pairingAcknowledged) {
+            // connection.open already fired — pairing succeeded
+            clearInterval(interval);
+            resolve('acknowledged');
+          }
+        }, 100);
+        // Clean up interval after 30s regardless
+        setTimeout(() => clearInterval(interval), 30_000);
+      });
+
+      const result = await Promise.race<'acknowledged' | 'rejected'>([acknowledgementTimeout, rejectionPromise]);
+
+      if (result === 'rejected') {
+        this.globalLogger.error({ sessionId, phoneNumber, rejectionReason }, '[PAIRING] WhatsApp REJECTED the pairing request — not displaying code to user');
+        // eslint-disable-next-line no-console
+        console.log('');
+        // eslint-disable-next-line no-console
+        console.log('  ❌ WhatsApp rejected the pairing request.');
+        // eslint-disable-next-line no-console
+        console.log(`  Reason: ${rejectionReason}`);
+        // eslint-disable-next-line no-console
+        console.log('  The bot will retry. Please check:');
+        // eslint-disable-next-line no-console
+        console.log('    - Phone number is correct (international format, no +)');
+        // eslint-disable-next-line no-console
+        console.log('    - Phone has an active WhatsApp account');
+        // eslint-disable-next-line no-console
+        console.log('    - You haven\'t been rate-limited (wait 5 min and retry)');
+        // eslint-disable-next-line no-console
+        console.log('');
+        return { sock, pairingCode: '' };
+      }
+
+      // ── Pairing request acknowledged — display the code to the user ──
+      if (pairingCode) {
+        this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] WhatsApp acknowledged pairing request — displaying code to user');
+        // eslint-disable-next-line no-console
+        console.log('');
+        // eslint-disable-next-line no-console
+        console.log('  ┌─────────────────────────────────────────────────────────┐');
+        // eslint-disable-next-line no-console
+        console.log(`  │  Pairing code acknowledged by WhatsApp for: ${phoneNumber}`);
+        // eslint-disable-next-line no-console
+        console.log(`  │  Code: ${pairingCode}`);
+        // eslint-disable-next-line no-console
+        console.log('  │  Open WhatsApp → Settings → Linked Devices → Link a Device');
+        // eslint-disable-next-line no-console
+        console.log('  │  → "Link with phone number instead" → type the code above');
+        // eslint-disable-next-line no-console
+        console.log('  └─────────────────────────────────────────────────────────┘');
+        // eslint-disable-next-line no-console
+        console.log('');
+      }
+
+      // Don't wait for connection.open here — return immediately so the
+      // caller can finish its setup. The connection.update handler above
+      // will fire connection.open when the user enters the code on their
+      // phone, and the success message will be sent at that point.
+      return { sock, pairingCode };
+    } finally {
+      this.connectingLocks.delete(sessionId);
     }
-
-    // Wait for the pairing code to be generated. Give Baileys up to 90s to
-    // deliver the QR event (slow networks can take 30-60s on Pterodactyl).
-    const timeoutPromise = new Promise<string>((resolve) =>
-      setTimeout(() => {
-        this.globalLogger.warn({ sessionId }, '[PAIRING] Timed out waiting for pairing code generation — socket may have connected without QR');
-        resolve('');
-      }, 90_000)
-    );
-    pairingCode = await Promise.race([pairingCodePromise, timeoutPromise]);
-
-    // If we got a code, log a very visible marker so the user knows the bot
-    // is now waiting for them to enter it on their phone.
-    if (pairingCode) {
-      // eslint-disable-next-line no-console
-      console.log('');
-      // eslint-disable-next-line no-console
-      console.log('  ┌─────────────────────────────────────────────────────────┐');
-      // eslint-disable-next-line no-console
-      console.log(`  │  Pairing code sent to WhatsApp servers for: ${phoneNumber}`);
-      // eslint-disable-next-line no-console
-      console.log(`  │  Code: ${pairingCode}`);
-      // eslint-disable-next-line no-console
-      console.log('  │  Waiting for you to enter it on your phone...');
-      // eslint-disable-next-line no-console
-      console.log('  └─────────────────────────────────────────────────────────┘');
-      // eslint-disable-next-line no-console
-      console.log('');
-      this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] Code dispatched — awaiting user confirmation on phone');
-    }
-
-    return { sock, pairingCode };
   }
 
   // ---------------------------------------------------------------------------
@@ -724,6 +923,7 @@ export class ConnectionManager extends EventEmitter {
   // ---------------------------------------------------------------------------
   // Send "BOT CONNECTED SUCCESSFULLY" message to the linked WhatsApp account.
   // Only called AFTER connection.open fires AND creds.registered is confirmed.
+  // Also sends the Session ID so the user can identify this bot instance.
   // ---------------------------------------------------------------------------
   async sendConnectionSuccessMessage(sessionId: string): Promise<void> {
     try {
@@ -775,6 +975,7 @@ ${caltexSessionId}
 ONLINE
 
 Your bot is now ready to receive commands.
+Type .menu to see available commands.
 
 Thank you for using CALTEX MD ❤️
 
@@ -784,7 +985,7 @@ Thank you for using CALTEX MD ❤️
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       await sock.sendMessage(jid, { text: message });
-      this.globalLogger.info({ sessionId, phoneNumber, jid }, 'WhatsApp success message sent to linked account');
+      this.globalLogger.info({ sessionId, phoneNumber, jid, caltexSessionId }, 'WhatsApp success message + Session ID sent to linked account');
     } catch (err: any) {
       this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, 'Failed to send WhatsApp success message (non-blocking)');
     }
