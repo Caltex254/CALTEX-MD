@@ -1,7 +1,13 @@
 #!/bin/sh
 # ============================================================================
-# CALTEX MD Bot - Pterodactyl Panel Startup Script (v1.6.0 — silent)
+# CALTEX MD Bot - Pterodactyl Panel Startup Script (v1.7.0 — rate-limit aware)
 # ============================================================================
+# v1.7.0: When the bot detects WhatsApp rate-limiting (401 loggedOut /
+#         device_removed during pairing), it exits cleanly with code 0.
+#         This script treats exit 0 as "user-initiated stop" and does NOT
+#         auto-restart — the user must manually click "Start" on the panel
+#         after waiting 1-12 hours for WhatsApp's rate-limit to expire.
+#
 # v1.6.0: This script is silent on success. Only prints on errors or restart.
 # The bot itself prints the clean startup banner:
 #   === WHATSAPP BOT STARTED ===
@@ -75,10 +81,13 @@ fi
 mkdir -p auth_info_baileys
 
 # ── Auto-restart loop with exponential backoff ──
-# v1.6.0: Only prints when the bot crashes — silent on first start.
+# v1.7.0: Reduced MAX_RETRIES from 10 to 3, increased BASE_DELAY from 5 to 30.
+#         Exit code 0 = bot shut down cleanly (e.g. rate-limit detected) —
+#         do NOT restart, the user must manually click "Start" on the panel.
+#         Exit code non-zero = bot crashed — retry with backoff.
 RETRY_COUNT=0
-MAX_RETRIES=10
-BASE_DELAY=5
+MAX_RETRIES=3
+BASE_DELAY=30
 
 while true; do
     # Run the bot. All stdout/stderr goes to the Pterodactyl console.
@@ -86,6 +95,8 @@ while true; do
     EXIT_CODE=$?
 
     if [ $EXIT_CODE -eq 0 ]; then
+        # v1.7.0: Exit 0 = clean shutdown (rate-limit detected, or user pressed Ctrl-C).
+        # Do NOT auto-restart — user must manually click "Start" on the panel.
         break
     fi
 
@@ -93,6 +104,8 @@ while true; do
 
     if [ $RETRY_COUNT -gt $MAX_RETRIES ]; then
         echo "[FATAL] Max retries ($MAX_RETRIES) exceeded. Bot has crashed $MAX_RETRIES times in a row."
+        echo "[FATAL] If the bot is failing to pair, please WAIT 1-12 hours for"
+        echo "[FATAL] WhatsApp's rate-limit to expire, then click Start on the panel."
         exit 1
     fi
 
