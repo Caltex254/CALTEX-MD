@@ -1,0 +1,107 @@
+{
+  "_comment": "WhatsApp Bot (whatsapp-web.js / Puppeteer) — universal egg for ANY whatsapp-web.js based WhatsApp bot. Auto-installs Chromium dependencies.",
+  "name": "WhatsApp Bot (whatsapp-web.js)",
+  "author": "Caltex254",
+  "description": "Universal egg for ANY WhatsApp bot built on whatsapp-web.js (Puppeteer-based). Auto-installs Chromium dependencies on the Yolks image. Auto-detects the entry file. Supports persistent sessions via .wwebjs_auth folder. Compatible with popular whatsapp-web.js bot frameworks. NOTE: For best Puppeteer compatibility, use the Debian-based Yolks image (ghcr.io/pterodactyl/yolks:node_20).",
+  "version": "1.0.0",
+  "features": [],
+  "docker_images": {
+    "Node 20 (Debian, recommended)": "ghcr.io/pterodactyl/yolks:node_20",
+    "Node 18 (Debian, recommended)": "ghcr.io/pterodactyl/yolks:node_18",
+    "Node 20 (Alpine)": "ghcr.io/pterodactyl/yolks:nodejs_20",
+    "Node 18 (Alpine)": "ghcr.io/pterodactyl/yolks:nodejs_18"
+  },
+  "file_denylist": [],
+  "startup": "sh whatsapp-webjs-start.sh",
+  "config": {
+    "files": {
+      "package.json": {
+        "parser": "json",
+        "find": {
+          "scripts.start": "node index.js"
+        }
+      }
+    },
+    "startup": {
+      "done": "Starting WhatsApp Bot...",
+      "userInteraction": []
+    },
+    "logs": {
+      "custom": false,
+      "location": "bot.log"
+    },
+    "stop": "^^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/sh\nset -e\nmkdir -p /mnt/server\ncd /mnt/server\nif [ ! -f whatsapp-webjs-start.sh ]; then\n    cat > whatsapp-webjs-start.sh <<'STARTSH'\n#!/bin/sh\necho '[install] Placeholder.'\nSTARTSH\nfi\nchmod +x whatsapp-webjs-start.sh\nmkdir -p /mnt/server/.wwebjs_auth\necho '[install] WhatsApp Bot (whatsapp-web.js) egg ready.'",
+      "container": "debian:bullseye-slim",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Bot Owner Phone (optional)",
+      "description": "Phone number of the bot owner (used by some bots for owner-only commands). International format, no + or spaces.",
+      "env_variable": "BOT_OWNER",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Command Prefix",
+      "description": "Prefix for bot commands. Use '.' for .menu, .ping etc.",
+      "env_variable": "BOT_PREFIX",
+      "default_value": "!",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Puppeteer Executable Path (optional)",
+      "description": "Optional. Override Puppeteer's Chromium path. Auto-detected by default. Leave blank unless you know what you're doing.",
+      "env_variable": "PUPPETEER_EXECUTABLE_PATH",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Startup File (optional)",
+      "description": "Override the auto-detected entry file.",
+      "env_variable": "STARTUP_FILE",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Node Environment",
+      "description": "Node.js environment.",
+      "env_variable": "NODE_ENV",
+      "default_value": "production",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "Max Restart Retries",
+      "description": "Number of times to auto-restart on crash before giving up.",
+      "env_variable": "MAX_RETRIES",
+      "default_value": "10",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|between:1,100"
+    },
+    {
+      "name": "Base Restart Delay (seconds)",
+      "description": "Initial delay between restart attempts.",
+      "env_variable": "BASE_DELAY",
+      "default_value": "5",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|between:1,60"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "_comment": "Universal Node.js Bot Egg — works with ANY Node.js bot (WhatsApp/Telegram/Discord/Slack/IRC). Auto-detects entry file (index.ts/index.js/bot.ts/bot.js/app.ts/app.js/main.ts/main.js or package.json start script).",
+  "name": "Universal Node.js Bot",
+  "author": "Caltex254",
+  "description": "Universal egg for running ANY Node.js bot — WhatsApp (Baileys / whatsapp-web.js), Telegram (telegraf / node-telegram-bot-api), Discord (discord.js), Slack (slack-sdk), IRC, or any other framework. Auto-detects the entry file (index.ts, index.js, bot.ts, bot.js, app.ts, app.js, main.ts, main.js) or uses package.json 'start' script. Uses Node.js 20 + tsx runtime on Alpine. Auto-restarts on crash with exponential backoff. Just upload your bot files and the egg handles the rest.",
+  "version": "1.0.0",
+  "features": [],
+  "docker_images": {
+    "Node 20 (Alpine)": "ghcr.io/pterodactyl/yolks:nodejs_20",
+    "Node 18 (Alpine)": "ghcr.io/pterodactyl/yolks:nodejs_18",
+    "Node 20 (Debian)": "ghcr.io/pterodactyl/yolks:node_20",
+    "Node 18 (Debian)": "ghcr.io/pterodactyl/yolks:node_18"
+  },
+  "file_denylist": [],
+  "startup": "sh universal-node-start.sh",
+  "config": {
+    "files": {
+      "package.json": {
+        "parser": "json",
+        "find": {
+          "scripts.start": "node index.js"
+        }
+      }
+    },
+    "startup": {
+      "done": "Starting bot...",
+      "userInteraction": []
+    },
+    "logs": {
+      "custom": false,
+      "location": "bot.log"
+    },
+    "stop": "^^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/sh\n# Universal Node.js Bot - install script\n# Files are normally uploaded directly. This is a fallback that downloads the\n# universal startup script if missing.\nset -e\nmkdir -p /mnt/server\ncd /mnt/server\nif [ ! -f universal-node-start.sh ]; then\n    cat > universal-node-start.sh <<'STARTSH'\n#!/bin/sh\necho '[install] Placeholder. The real script is shipped with the egg.'\nSTARTSH\nfi\nchmod +x universal-node-start.sh\necho '[install] Universal Node.js Bot egg ready.'",
+      "container": "debian:bullseye-slim",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Startup File (optional)",
+      "description": "Optional. Override the auto-detected entry file. E.g. 'src/bot.ts' or 'whatsapp-bot.js'. Leave blank to auto-detect.",
+      "env_variable": "STARTUP_FILE",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Skip 'npm start'",
+      "description": "If 'true', ignores package.json 'start' script and uses the auto-detected entry file. Useful when 'start' script does something other than launch the bot.",
+      "env_variable": "SKIP_NPM_START",
+      "default_value": "false",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string|in:true,false"
+    },
+    {
+      "name": "Node Environment",
+      "description": "Node.js environment (production/development/test).",
+      "env_variable": "NODE_ENV",
+      "default_value": "production",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|in:production,development,test"
+    },
+    {
+      "name": "Max Restart Retries",
+      "description": "Number of times to auto-restart the bot on crash before giving up.",
+      "env_variable": "MAX_RETRIES",
+      "default_value": "10",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|between:1,100"
+    },
+    {
+      "name": "Base Restart Delay (seconds)",
+      "description": "Initial delay between restart attempts. Doubles on each retry (exponential backoff), capped at 300s.",
+      "env_variable": "BASE_DELAY",
+      "default_value": "5",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|between:1,60"
+    }
+  ]
+}

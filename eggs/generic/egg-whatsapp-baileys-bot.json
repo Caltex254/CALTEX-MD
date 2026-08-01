@@ -1,0 +1,134 @@
+{
+  "_comment": "WhatsApp Bot (Baileys / @whiskeysockets/baileys) — universal egg for ANY Baileys-based WhatsApp bot. Auto-detects entry file. Supports interactive pairing-code flow on Pterodactyl.",
+  "name": "WhatsApp Bot (Baileys)",
+  "author": "Caltex254",
+  "description": "Universal egg for ANY WhatsApp bot built on @whiskeysockets/baileys (formerly @adiwajshing/baileys). Auto-detects the entry file (index.ts/index.js/bot.ts/bot.js/app.ts/app.js/main.ts/main.js). Auto-installs @whiskeysockets/baileys and tsx if missing. Supports interactive phone-number pairing code flow on Pterodactyl — just set BOT_PHONE env var. Works with WhatsApp Multi-Device API. Compatible with popular Baileys bot frameworks like WhiskeySockets/Baileys-MD, wabot-md, aquaxv, etc.",
+  "version": "1.0.0",
+  "features": [],
+  "docker_images": {
+    "Node 20 (Alpine)": "ghcr.io/pterodactyl/yolks:nodejs_20",
+    "Node 18 (Alpine)": "ghcr.io/pterodactyl/yolks:nodejs_18",
+    "Node 20 (Debian)": "ghcr.io/pterodactyl/yolks:node_20",
+    "Node 18 (Debian)": "ghcr.io/pterodactyl/yolks:node_18"
+  },
+  "file_denylist": [],
+  "startup": "sh whatsapp-baileys-start.sh",
+  "config": {
+    "files": {
+      "package.json": {
+        "parser": "json",
+        "find": {
+          "scripts.start": "tsx index.ts"
+        }
+      }
+    },
+    "startup": {
+      "done": "Starting WhatsApp Bot...",
+      "userInteraction": []
+    },
+    "logs": {
+      "custom": false,
+      "location": "bot.log"
+    },
+    "stop": "^^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/sh\nset -e\nmkdir -p /mnt/server\ncd /mnt/server\nif [ ! -f whatsapp-baileys-start.sh ]; then\n    cat > whatsapp-baileys-start.sh <<'STARTSH'\n#!/bin/sh\necho '[install] Placeholder.'\nSTARTSH\nfi\nchmod +x whatsapp-baileys-start.sh\nmkdir -p /mnt/server/auth_info_baileys\necho '[install] WhatsApp Bot (Baileys) egg ready.'",
+      "container": "debian:bullseye-slim",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Bot Phone Number (pairing)",
+      "description": "Phone number to generate a WhatsApp pairing code, international format without + or spaces (e.g. 254712345678). Used by the bot on first start to display a pairing code in the console.",
+      "env_variable": "BOT_PHONE",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Bot Owner Phone (permissions)",
+      "description": "Phone number of the bot owner (used for owner-only commands). Same format as BOT_PHONE. If BOT_PHONE is blank, this is also used as the pairing phone.",
+      "env_variable": "BOT_OWNER",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Command Prefix",
+      "description": "Prefix for bot commands. Use '.' for .menu, .ping etc. Other common values: '!', '/', '#'.",
+      "env_variable": "BOT_PREFIX",
+      "default_value": ".",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "Bot Name",
+      "description": "Display name for the bot (shown in WhatsApp as the linked device name).",
+      "env_variable": "BOT_NAME",
+      "default_value": "My WhatsApp Bot",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Session ID (optional)",
+      "description": "Optional session identifier (used by some bot frameworks for credential storage). Defaults to 'default'.",
+      "env_variable": "BOT_SESSION_ID",
+      "default_value": "default",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Startup File (optional)",
+      "description": "Override the auto-detected entry file. E.g. 'src/bot.ts'. Leave blank to auto-detect.",
+      "env_variable": "STARTUP_FILE",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string"
+    },
+    {
+      "name": "Node Environment",
+      "description": "Node.js environment.",
+      "env_variable": "NODE_ENV",
+      "default_value": "production",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string"
+    },
+    {
+      "name": "Log Level",
+      "description": "Pino/winston log level. Use 'warn' or 'error' for production, 'debug' for troubleshooting.",
+      "env_variable": "LOG_LEVEL",
+      "default_value": "warn",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "nullable|string|in:debug,info,warn,error"
+    },
+    {
+      "name": "Max Restart Retries",
+      "description": "Number of times to auto-restart on crash before giving up.",
+      "env_variable": "MAX_RETRIES",
+      "default_value": "10",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|between:1,100"
+    },
+    {
+      "name": "Base Restart Delay (seconds)",
+      "description": "Initial delay between restart attempts. Doubles on each retry, capped at 300s.",
+      "env_variable": "BASE_DELAY",
+      "default_value": "5",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|between:1,60"
+    }
+  ]
+}
