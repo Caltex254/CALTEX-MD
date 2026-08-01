@@ -260,7 +260,13 @@ export class ConnectionManager extends EventEmitter {
       markOnlineOnConnect: opts.markOnlineOnConnect,
       logger: this.globalLogger.child({ sessionId }),
       generateHighQualityLinkPreview: true,
-      shouldIgnoreJid: (jid: string) => {
+      // v1.6.1 FIX: Baileys calls shouldIgnoreJid from handleReceipt with an
+      // undefined jid for some receipt events. Without the null guard, this
+      // throws "TypeError: Cannot read properties of undefined (reading 'endsWith')"
+      // which breaks receipt handling and spamms the logs. Return false (don't
+      // ignore) when jid is missing so Baileys continues processing normally.
+      shouldIgnoreJid: (jid: string | undefined | null) => {
+        if (!jid || typeof jid !== 'string') return false;
         const isGroup = jid.endsWith('@g.us');
         const isBroadcast = jid === 'status@broadcast';
         const isNewsletter = jid.includes('@newsletter');
@@ -546,7 +552,9 @@ export class ConnectionManager extends EventEmitter {
         connectTimeoutMs: 300_000,
         logger: this.globalLogger.child({ sessionId }),
         generateHighQualityLinkPreview: true,
-        shouldIgnoreJid: (jid: string) => {
+        // v1.6.1 FIX: Same null-safe shouldIgnoreJid as in finishConnection().
+        shouldIgnoreJid: (jid: string | undefined | null) => {
+          if (!jid || typeof jid !== 'string') return false;
           const isGroup = jid.endsWith('@g.us');
           const isBroadcast = jid === 'status@broadcast';
           const isNewsletter = jid.includes('@newsletter');

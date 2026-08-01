@@ -1,7 +1,7 @@
 {
   "name": "caltex-bot",
-  "version": "1.6.0",
-  "description": "CALTEX MD WhatsApp Multi-Device Bot — v1.6.0: clean console, 3s pairing delay, 10s retry, silent warn-level logging",
+  "version": "1.6.1",
+  "description": "CALTEX MD WhatsApp Multi-Device Bot — v1.6.1: fix shouldIgnoreJid crash on undefined jid (broke receipt handling and command processing)",
   "main": "index.ts",
   "scripts": {
     "dev": "tsx watch index.ts",
