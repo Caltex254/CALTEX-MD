@@ -3,13 +3,13 @@
   "name": "CALTEX MD WhatsApp Bot",
   "author": "Caltex254",
   "description": "CALTEX MD - Powerful WhatsApp Multi-Device Bot with AI, Plugin System, Web Dashboard & REST API. Uses Node.js 20 + tsx runtime with Baileys for WhatsApp connection. Supports interactive phone-number pairing directly on Pterodactyl — no separate Render session API or Vercel dashboard required. This is a Node.js egg, NOT a Java/Minecraft egg.",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "features": [],
   "docker_images": {
-    "Node 20": "ghcr.io/pterodactyl/yolks:node_20"
+    "Node 20": "ghcr.io/pterodactyl/yolks:nodejs_20"
   },
   "file_denylist": [],
-  "startup": "bash pterodactyl-start.sh",
+  "startup": "sh pterodactyl-start.sh",
   "config": {
     "files": {
       "package.json": {
@@ -31,20 +31,20 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# CALTEX MD Bot - Pterodactyl Installation Script\n# The bot files are normally uploaded directly by the user. This script is a\n# fallback: if package.json is missing, it clones the repo and copies ONLY the\n# bot service (mini-services/caltex-bot/) to /mnt/server/.\n#\n# The bot is Node.js + TypeScript. NO Java, NO Minecraft, NO server.jar.\n\nset -e\n\napt-get update -y\napt-get install -y git ca-certificates\n\n# If package.json doesn't exist, clone the repo and copy the bot service files.\nif [ ! -f /mnt/server/package.json ]; then\n    echo \"[install] package.json not found — cloning CALTEX-MD repository...\"\n    rm -rf /tmp/caltex\n    git clone --depth 1 https://github.com/Caltex254/CALTEX-MD.git /tmp/caltex\n\n    # Copy the bot service files (the actual WhatsApp bot) into /mnt/server/\n    # Use 'cp -a .' to include hidden files (e.g. .env.example) but exclude\n    # '.' and '..' entries that the '.*' glob would otherwise match.\n    mkdir -p /mnt/server\n    cp -a /tmp/caltex/mini-services/caltex-bot/. /mnt/server/\n\n    # Also copy the Pterodactyl startup script from the repo root.\n    cp /tmp/caltex/pterodactyl-start.sh /mnt/server/pterodactyl-start.sh\n    chmod +x /mnt/server/pterodactyl-start.sh\n\n    # Clean up.\n    rm -rf /tmp/caltex\n    echo \"[install] Bot files copied to /mnt/server/\"\nelse\n    echo \"[install] package.json already exists — skipping clone.\"\nfi\n\n# Make sure the startup script is executable (in case it was uploaded without +x).\nchmod +x /mnt/server/pterodactyl-start.sh 2>/dev/null || true\n\n# Pre-create the auth_info_baileys directory so the bot can persist credentials.\nmkdir -p /mnt/server/auth_info_baileys\n\necho \"[install] Installation complete.\"\necho \"[install] Bot files are at /mnt/server/ (this becomes /home/container inside the container).\"\necho \"[install] Dependencies will be installed on first startup via 'npm install' (run by pterodactyl-start.sh).\"\necho \"[install] Required env var: BOT_OWNER (your WhatsApp phone number, e.g. 254712345678).\"",
+      "script": "#!/bin/sh\n# CALTEX MD Bot - Pterodactyl Installation Script\n# The bot files are normally uploaded directly by the user. This script is a\n# fallback: if package.json is missing, it clones the repo and copies ONLY the\n# bot service (mini-services/caltex-bot/) to /mnt/server/.\n#\n# The bot is Node.js + TypeScript. NO Java, NO Minecraft, NO server.jar.\n# Uses /bin/sh (POSIX) because the install container is debian:bullseye-slim\n# but the runtime container (ghcr.io/pterodactyl/yolks:nodejs_20) is Alpine\n# and does NOT have bash.\n\nset -e\n\napt-get update -y\napt-get install -y git ca-certificates\n\n# If package.json doesn't exist, clone the repo and copy the bot service files.\nif [ ! -f /mnt/server/package.json ]; then\n    echo \"[install] package.json not found — cloning CALTEX-MD repository...\"\n    rm -rf /tmp/caltex\n    git clone --depth 1 https://github.com/Caltex254/CALTEX-MD.git /tmp/caltex\n\n    # Copy the bot service files (the actual WhatsApp bot) into /mnt/server/\n    # Use 'cp -a .' to include hidden files (e.g. .env.example) but exclude\n    # '.' and '..' entries that the '.*' glob would otherwise match.\n    mkdir -p /mnt/server\n    cp -a /tmp/caltex/mini-services/caltex-bot/. /mnt/server/\n\n    # Also copy the Pterodactyl startup script from the repo root.\n    cp /tmp/caltex/pterodactyl-start.sh /mnt/server/pterodactyl-start.sh\n    chmod +x /mnt/server/pterodactyl-start.sh\n\n    # Clean up.\n    rm -rf /tmp/caltex\n    echo \"[install] Bot files copied to /mnt/server/\"\nelse\n    echo \"[install] package.json already exists — skipping clone.\"\nfi\n\n# Make sure the startup script is executable (in case it was uploaded without +x).\nchmod +x /mnt/server/pterodactyl-start.sh 2>/dev/null || true\n\n# Pre-create the auth_info_baileys directory so the bot can persist credentials.\nmkdir -p /mnt/server/auth_info_baileys\n\necho \"[install] Installation complete.\"\necho \"[install] Bot files are at /mnt/server/ (this becomes /home/container inside the container).\"\necho \"[install] Dependencies will be installed on first startup via 'npm install' (run by pterodactyl-start.sh).\"\necho \"[install] BOT_OWNER is optional — if not set, the bot will prompt for a phone number on first start.\"",
       "container": "debian:bullseye-slim",
-      "entrypoint": "bash"
+      "entrypoint": "sh"
     }
   },
   "variables": [
     {
-      "name": "Bot Owner Phone",
-      "description": "Phone number of the bot owner (international format, no + or spaces). Example: 254712345678. Used for owner-only commands AND as the default phone number for the interactive WhatsApp pairing code flow on first start.",
+      "name": "Bot Owner Phone (optional)",
+      "description": "Optional. Phone number of the bot owner (international format, no + or spaces). Example: 254712345678. If left blank, the bot will prompt for a phone number interactively on the Pterodactyl console when it first starts. Once paired, credentials are saved and the bot auto-connects on subsequent restarts.",
       "env_variable": "BOT_OWNER",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
-      "rules": "required|string"
+      "rules": "nullable|string"
     },
     {
       "name": "Bot Session ID (optional, legacy)",

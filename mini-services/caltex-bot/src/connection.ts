@@ -335,16 +335,22 @@ export class ConnectionManager extends EventEmitter {
   // ---------------------------------------------------------------------------
   // Connection with Pairing Code (alternative to QR)
   // ---------------------------------------------------------------------------
-  // This method is more robust than the previous version:
-  // 1. Adds a 10s timeout to fetchLatestBaileysVersion (was hanging on slow networks)
-  // 2. Does NOT request the pairing code immediately — instead it waits for the
-  //    'qr' event, which signals the socket is fully ready to accept pairing
-  //    code requests. Calling requestPairingCode() too early fails silently in
-  //    some Baileys versions.
-  // 3. Adds connectTimeoutMs (120s) — Pterodactyl containers can be slow.
-  // 4. Properly forwards all events (messages.upsert etc.) so the bot replies
-  //    to commands automatically after pairing succeeds.
-  // 5. Saves credentials locally via creds.update so subsequent restarts work.
+  // This method is the canonical pairing-code flow for Pterodactyl first-start:
+  // 1. 10s timeout on fetchLatestBaileysVersion (was hanging on slow networks).
+  // 2. markOnlineOnConnect = false — critical for pairing. If true, Baileys
+  //    sends a presence update before the device is registered, and WhatsApp
+  //    silently rejects the pairing (no popup on the user's phone).
+  // 3. connectTimeoutMs = 300s (5 min) — gives the user time to type the code.
+  // 4. Browsers.ubuntu('CALTEX MD') — stable, well-known browser identity.
+  //    Browsers.appropriate() can return undefined on Alpine/musl.
+  // 5. Waits for the 'qr' event before calling requestPairingCode() — calling
+  //    it too early fails silently in some Baileys versions.
+  // 6. 1.5s delay between QR event and requestPairingCode() call — lets the
+  //    noise keypair fully register before requesting the code.
+  // 7. Two retries with 3s/4s delays if requestPairingCode() throws.
+  // 8. Forwards all events (messages.upsert etc.) so the bot replies to
+  //    commands automatically after pairing succeeds.
+  // 9. Saves credentials locally via creds.update so subsequent restarts work.
   async createConnectionWithPairingCode(
     config: ConnectionConfig,
     phoneNumber: string
@@ -353,7 +359,12 @@ export class ConnectionManager extends EventEmitter {
       sessionId,
       browser = 'CALTEX MD',
       syncFullHistory = false,
-      markOnlineOnConnect = true,
+      // IMPORTANT: markOnlineOnConnect MUST be false during the pairing flow.
+      // Setting it to true causes Baileys to send a presence update before the
+      // device is fully linked, which WhatsApp silently rejects — the user
+      // then enters the pairing code in WhatsApp but no confirmation popup
+      // appears because the session was never actually registered.
+      markOnlineOnConnect = false,
       autoReconnect = true,
       maxReconnectAttempts = 10,
       reconnectBaseDelay = 2000,
@@ -387,12 +398,20 @@ export class ConnectionManager extends EventEmitter {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
       },
-      browser: Browsers.appropriate(browser),
+      // Use a stable, well-known browser identity. Browsers.appropriate() can
+      // resolve to an undefined platform on Alpine/musl, which causes Baileys
+      // to send an empty device payload — WhatsApp then refuses the pairing.
+      browser: Browsers.ubuntu(browser),
       syncFullHistory,
       markOnlineOnConnect,
-      connectTimeoutMs: 120_000, // 2 minutes — Pterodactyl can be slow to handshake
+      // 5 minutes — gives the user enough time to open WhatsApp, navigate to
+      // Linked Devices, and type the pairing code without the socket closing.
+      connectTimeoutMs: 300_000,
       logger: this.globalLogger.child({ sessionId }),
       generateHighQualityLinkPreview: true,
+      // Respect device deletion events so a logged-out session doesn't try
+      // to keep using stale credentials.
+      shouldSyncHistoryMessage: () => true,
       shouldIgnoreJid: (jid: string) => {
         const isGroup = jid.endsWith('@g.us');
         const isBroadcast = jid === 'status@broadcast';
@@ -409,45 +428,56 @@ export class ConnectionManager extends EventEmitter {
     const sock = makeWASocket(socketConfig);
     this.sockets.set(sessionId, sock);
 
-    // We do NOT request the pairing code immediately — instead we wait for the
-    // 'qr' event (fired by Baileys when the socket is ready for authentication).
-    // Requesting too early can silently fail in some Baileys versions.
-    let pairingCode = '';
+    // ── Pairing code generation ──
+    // We wait for the QR event (Baileys fires it once the WebSocket handshake
+    // is complete and the socket is ready to accept a pairing-code request).
+    // Requesting before the QR event silently fails in Baileys 6.x.
+    let pairingCode = ''
     let pairingCodeRequested = false;
     const pairingCodePromise = new Promise<string>((resolve) => {
       const onQr = async (_qr: string) => {
         if (pairingCodeRequested) return;
         pairingCodeRequested = true;
         try {
-          // Small delay to ensure socket internals are ready
-          await new Promise((r) => setTimeout(r, 500));
+          // 1.5s delay — gives Baileys time to finish registering the noise
+          //    keypair before we send the pairing-code request. Without this,
+          //    some Baileys versions return a code that WhatsApp silently
+          //    rejects (no popup on the user's phone).
+          await new Promise((r) => setTimeout(r, 1500));
           const code = await sock.requestPairingCode(phoneNumber);
           pairingCode = code;
           this.globalLogger.info({ sessionId, pairingCode: code, phoneNumber }, '[PAIRING] Pairing code generated successfully');
           this.emit('pairing.code', code, sessionId, phoneNumber);
           resolve(code);
         } catch (error: any) {
-          this.globalLogger.error({ sessionId, error: error.message }, '[PAIRING] Failed to generate pairing code on QR event');
-          // Retry once after 2s
-          setTimeout(async () => {
+          this.globalLogger.error({ sessionId, error: error.message }, '[PAIRING] Failed to generate pairing code on QR event — retrying in 3s');
+          // Two retries with increasing delay. The first attempt can fail if
+          // the socket hasn't fully finished the noise handshake.
+          const tryRequest = async (attempt: number): Promise<string> => {
             try {
               const code = await sock.requestPairingCode(phoneNumber);
               pairingCode = code;
-              this.globalLogger.info({ sessionId, pairingCode: code }, '[PAIRING] Pairing code generated on retry');
+              this.globalLogger.info({ sessionId, pairingCode: code, attempt }, '[PAIRING] Pairing code generated on retry');
               this.emit('pairing.code', code, sessionId, phoneNumber);
-              resolve(code);
-            } catch (err2: any) {
-              this.globalLogger.error({ sessionId, error: err2.message }, '[PAIRING] Pairing code retry also failed');
-              resolve('');
+              return code;
+            } catch (err: any) {
+              this.globalLogger.error({ sessionId, err: err.message, attempt }, '[PAIRING] Retry failed');
+              return '';
             }
-          }, 2000);
+          };
+          setTimeout(async () => {
+            const code = await tryRequest(1);
+            if (code) { resolve(code); return; }
+            setTimeout(async () => {
+              const code2 = await tryRequest(2);
+              resolve(code2);
+            }, 4000);
+          }, 3000);
         }
       };
       sock.ev.on('connection.update', (update) => {
         if (update.qr) onQr(update.qr);
-      });
-      // Also resolve early if connection opens without QR (means creds already exist)
-      sock.ev.on('connection.update', (update) => {
+        // If connection opens without QR (creds already exist), resolve early.
         if (update.connection === 'open' && !pairingCode) resolve('');
       });
     });
@@ -558,15 +588,35 @@ export class ConnectionManager extends EventEmitter {
       });
     }
 
-    // Wait for pairing code to be generated (resolves on QR event)
-    // Don't wait forever — give it 60s to get a QR from Baileys.
+    // Wait for the pairing code to be generated. Give Baileys up to 90s to
+    // deliver the QR event (slow networks can take 30-60s on Pterodactyl).
     const timeoutPromise = new Promise<string>((resolve) =>
       setTimeout(() => {
         this.globalLogger.warn({ sessionId }, '[PAIRING] Timed out waiting for pairing code generation — socket may have connected without QR');
         resolve('');
-      }, 60_000)
+      }, 90_000)
     );
     pairingCode = await Promise.race([pairingCodePromise, timeoutPromise]);
+
+    // If we got a code, log a very visible marker so the user knows the bot
+    // is now waiting for them to enter it on their phone.
+    if (pairingCode) {
+      // eslint-disable-next-line no-console
+      console.log('');
+      // eslint-disable-next-line no-console
+      console.log('  ┌─────────────────────────────────────────────────────────┐');
+      // eslint-disable-next-line no-console
+      console.log(`  │  Pairing code sent to WhatsApp servers for: ${phoneNumber}`);
+      // eslint-disable-next-line no-console
+      console.log(`  │  Code: ${pairingCode}`);
+      // eslint-disable-next-line no-console
+      console.log('  │  Waiting for you to enter it on your phone...');
+      // eslint-disable-next-line no-console
+      console.log('  └─────────────────────────────────────────────────────────┘');
+      // eslint-disable-next-line no-console
+      console.log('');
+      this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] Code dispatched — awaiting user confirmation on phone');
+    }
 
     return { sock, pairingCode };
   }

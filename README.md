@@ -16,7 +16,34 @@
 
 ---
 
-## 📌 How to Connect CALTEX MD Bot
+## 🐧 Deploy on Pterodactyl Panel (Recommended)
+
+The fastest way to run CALTEX MD is on a **Pterodactyl** panel — the bot
+ships with a dedicated egg and an interactive WhatsApp pairing flow built
+right into the console. **No dashboard session needed.**
+
+> 📦 **Download the Pterodactyl-only ZIP** (recommended):
+> [**caltex-pterodactyl.zip** (latest release)](https://github.com/Caltex254/CALTEX-MD/releases/tag/pterodactyl-latest)
+>
+> This ZIP contains **only** the files the panel needs — no dashboard, no
+> Prisma, no Next.js. Just unzip, upload to your server, and start.
+
+📖 **Full Pterodactyl setup guide:** see [`README-PTERODACTYL.md`](./README-PTERODACTYL.md)
+
+Quick summary:
+
+1. Import `egg-caltex-bot.json` into your panel (**Admin → Eggs → Import Egg**).
+2. Create a new server from the egg.
+3. Upload the contents of `caltex-pterodactyl.zip` to the server's file manager.
+4. Click **Start** — the console will prompt you for your WhatsApp phone number.
+5. Type your number, get the pairing code, enter it on your phone — done.
+
+The bot uses Docker image `ghcr.io/pterodactyl/yolks:nodejs_20` and runs
+via `sh pterodactyl-start.sh` (Node.js 20 + tsx runtime, no Java, no bash).
+
+---
+
+## 📌 How to Connect CALTEX MD Bot (Other Platforms)
 
 ### Step 1: Get Session ID
 

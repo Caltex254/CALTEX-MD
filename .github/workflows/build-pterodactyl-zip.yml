@@ -1,0 +1,158 @@
+# =============================================================================
+# Build & Publish Pterodactyl-Only Deploy ZIP
+# =============================================================================
+# Why this workflow exists:
+#   The main repo contains the WhatsApp bot (mini-services/caltex-bot/), the
+#   Next.js dashboard (src/), the API server (session-api/), Prisma schemas,
+#   Dockerfiles, etc. End users who just want to deploy the bot on a
+#   Pterodactyl panel only need a small subset of files.
+#
+#   This workflow builds a minimal ZIP — `caltex-pterodactyl.zip` — that
+#   contains ONLY what the Pterodactyl panel needs:
+#     - All files from mini-services/caltex-bot/ (flattened to root)
+#     - pterodactyl-start.sh
+#     - egg-caltex-bot.json
+#     - README-PTERODACTYL.md
+#     - .env.example
+#
+#   The ZIP is published as a release asset on a rolling "pterodactyl-latest"
+#   release tag, so users always get the latest version at a stable URL:
+#     https://github.com/Caltex254/CALTEX-MD/releases/tag/pterodactyl-latest
+#
+#   The workflow fires on every push to main, on tags matching v*, and on
+#   manual dispatch.
+# =============================================================================
+
+name: Build Pterodactyl Deploy ZIP
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build Pterodactyl-only ZIP
+        run: |
+          set -e
+          STAGE="/tmp/caltex-pterodactyl"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+
+          # 1. Copy the bot service files (flattened to root).
+          #    This is what the Pterodactyl container expects at /home/container/.
+          cp -a mini-services/caltex-bot/. "$STAGE/"
+
+          # 2. Copy the Pterodactyl startup script (lives at repo root).
+          cp pterodactyl-start.sh "$STAGE/pterodactyl-start.sh"
+          chmod +x "$STAGE/pterodactyl-start.sh"
+
+          # 3. Copy the egg JSON so admins can import it directly.
+          cp egg-caltex-bot.json "$STAGE/egg-caltex-bot.json"
+
+          # 4. Copy the dedicated Pterodactyl README if it exists.
+          if [ -f README-PTERODACTYL.md ]; then
+            cp README-PTERODACTYL.md "$STAGE/README-PTERODACTYL.md"
+          fi
+
+          # 5. Copy .env.example for reference.
+          if [ -f mini-services/caltex-bot/.env.example ]; then
+            cp mini-services/caltex-bot/.env.example "$STAGE/.env.example"
+          elif [ -f .env.example ]; then
+            cp .env.example "$STAGE/.env.example"
+          fi
+
+          # 6. Clean up any node_modules or auth_info_baileys that may have
+          #    accidentally ended up in the staged dir.
+          rm -rf "$STAGE/node_modules" "$STAGE/auth_info_baileys" "$STAGE/bot.log"
+
+          # 7. Print a tree-like summary so the workflow log shows what's inside.
+          echo "=== Pterodactyl ZIP contents ==="
+          (cd "$STAGE" && find . -maxdepth 3 -not -path '*/node_modules/*' | sort)
+
+          # 8. Zip it up.
+          cd /tmp
+          rm -f caltex-pterodactyl.zip
+          zip -r caltex-pterodactyl.zip caltex-pterodactyl/
+          ls -lh caltex-pterodactyl.zip
+
+      - name: Upload ZIP as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: caltex-pterodactyl-zip
+          path: /tmp/caltex-pterodactyl.zip
+          retention-days: 30
+
+      - name: Publish ZIP to rolling release (pterodactyl-latest)
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pterodactyl-latest
+          name: CALTEX MD — Pterodactyl Deploy (latest)
+          body: |
+            # CALTEX MD — Pterodactyl Deploy Package
+
+            This release contains **only** the files needed to deploy the
+            CALTEX MD WhatsApp bot on a Pterodactyl panel. No dashboard, no
+            Prisma, no Next.js — just the bot itself.
+
+            ## What's inside `caltex-pterodactyl.zip`
+
+            ```
+            caltex-pterodactyl/
+              ├── index.ts                  # Bot entry point
+              ├── src/                      # Bot source (connection.ts, message-handler.ts, ...)
+              ├── package.json              # Dependencies (Baileys, tsx, pino, ...)
+              ├── package-lock.json         # Locked dependency tree
+              ├── tsconfig.json
+              ├── start.sh                  # Local-dev start script
+              ├── pterodactyl-start.sh      # Pterodactyl startup script (sh, NOT bash)
+              ├── egg-caltex-bot.json       # Import this egg into your panel
+              ├── .env.example              # Example env vars
+              └── README-PTERODACTYL.md     # Setup instructions
+            ```
+
+            ## Quick deploy steps
+
+            1. Download and unzip `caltex-pterodactyl.zip`.
+            2. In Pterodactyl: **Admin → Eggs → Import Egg** → upload `egg-caltex-bot.json`.
+            3. Create a new server from the imported egg.
+            4. Upload all files from the unzipped folder to the server's file manager.
+            5. Start the server from the panel.
+            6. Watch the console — you'll see:
+               ```
+               ╔══════════════════════════════════════════════════════════════╗
+               ║          CALTEX MD — FIRST-TIME WHATSAPP SETUP               ║
+               ╚══════════════════════════════════════════════════════════════╝
+               Enter your WhatsApp phone number:
+               ```
+            7. Type your phone number (e.g. `254712345678`) and press **Enter**.
+            8. A pairing code appears. Open WhatsApp on your phone → **Settings →
+               Linked Devices → Link a Device → Link with phone number instead**
+               → type the code.
+            9. WhatsApp confirms the link — the bot sends a "✅ BOT CONNECTED"
+               message to your number. Done!
+
+            ## Auto-restart
+
+            If the bot crashes, `pterodactyl-start.sh` automatically restarts it
+            with exponential backoff (5s, 10s, 20s, ...) up to 10 times.
+
+            ## Need help?
+
+            See `README-PTERODACTYL.md` inside the ZIP, or open an issue at
+            https://github.com/Caltex254/CALTEX-MD/issues.
+          files: /tmp/caltex-pterodactyl.zip
+          prerelease: false
+          draft: false

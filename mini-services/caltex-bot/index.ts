@@ -50,14 +50,22 @@ function promptUser(question: string): Promise<string> {
   });
 }
 
-// Normalize a phone number to digits-only format (e.g. "254712345678")
+// Normalize a phone number to digits-only international format (e.g. "254712345678").
+// Rules:
+//   - Strip everything except digits.
+//   - If it starts with "00", drop the "00" (international prefix).
+//   - If it starts with "+", the "+" was already stripped by the digit filter.
+//   - If it starts with "0" (local format), assume the bot owner's country
+//     is Kenya (254) — this matches the CALTEX MD deployment context. Users
+//     in other countries should type the full international format.
+//   - Validate: must be 7-15 digits after normalization (ITU-T E.164).
 function normalizePhoneNumber(input: string): string | null {
   let phone = input.trim().replace(/[^0-9]/g, '');
   if (!phone) return null;
-  // Handle common cases: +254712345678 → 254712345678, 0712345678 → 254712345678 (if starts with 0)
   if (phone.startsWith('00')) phone = phone.slice(2);
-  if (phone.startsWith('0')) phone = '254' + phone.slice(1); // Kenya default — adjust if needed
-  if (phone.length < 10) return null;
+  if (phone.startsWith('0')) phone = '254' + phone.slice(1); // Kenya default
+  // ITU-T E.164: valid phone numbers are 7-15 digits (after country code).
+  if (phone.length < 7 || phone.length > 15) return null;
   return phone;
 }
 
@@ -1071,7 +1079,8 @@ class CaltexBot {
 
           // eslint-disable-next-line no-console
           console.log(`\n  ✅ Using phone number: ${phoneNumber}`);
-          console.log('  Generating WhatsApp pairing code...\n');
+          console.log('  Generating WhatsApp pairing code...');
+          console.log('  (This usually takes 5-15 seconds. Please wait...)\n');
 
           await this.connectWithPairingCode(sessionId, phoneNumber);
           this.apiClient.reportStatus('running');
