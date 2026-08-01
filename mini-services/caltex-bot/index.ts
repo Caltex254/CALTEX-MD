@@ -69,39 +69,29 @@ function normalizePhoneNumber(input: string): string | null {
   return phone;
 }
 
-// Pretty-print the pairing code so the user can easily read it in the Pterodactyl console
-function printPairingCodeBanner(code: string, phoneNumber: string): void {
-  // Box is 64 chars wide total: ║ + 62 inner + ║
-  const INNER_WIDTH = 62;
-  const padLine = (text: string) => {
-    // text already includes leading spaces; pad the rest with spaces on the right
-    if (text.length >= INNER_WIDTH) return text.slice(0, INNER_WIDTH);
-    return text + ' '.repeat(INNER_WIDTH - text.length);
-  };
-  const banner = [
-    '',
-    '╔══════════════════════════════════════════════════════════════╗',
-    '║                                                              ║',
-    '║          CALTEX MD — WHATSAPP PAIRING CODE                   ║',
-    '║                                                              ║',
-    `║          Phone:  ${phoneNumber.padEnd(INNER_WIDTH - 10 - 8)}║`,
-    '║                                                              ║',
-    `║          Code:   ${code.padEnd(INNER_WIDTH - 10 - 8)}║`,
-    '║                                                              ║',
-    '║   1. Open WhatsApp on your phone                             ║',
-    '║   2. Go to Settings → Linked Devices                         ║',
-    '║   3. Tap "Link a Device"                                     ║',
-    '║   4. Tap "Link with phone number instead"                    ║',
-    `║   5. Enter the code above: ${code.padEnd(INNER_WIDTH - 28)}║`,
-    '║                                                              ║',
-    '║   ⏳  Waiting for you to enter the code on your phone...      ║',
-    '║   The bot will start automatically once paired.              ║',
-    '╚══════════════════════════════════════════════════════════════╝',
-    '',
-  ].join('\n');
+// Pretty-print the pairing code so the user can easily read it in the Pterodactyl console.
+// v1.6.0: Minimal output per spec — just the code and where to enter it.
+function printPairingCodeBanner(code: string, _phoneNumber: string): void {
+  // Format the code with a dash in the middle if it's 8 chars (e.g. CKAMG484 -> CKAM-G484).
+  // Baileys returns the code without a dash, but WhatsApp accepts both formats.
+  let displayCode = code;
+  if (code.length === 8 && !code.includes('-')) {
+    displayCode = code.slice(0, 4) + '-' + code.slice(4);
+  }
   // eslint-disable-next-line no-console
-  console.log(banner);
-  logger.info({ code, phoneNumber }, '[PAIRING] Pairing code displayed to user');
+  console.log('');
+  // eslint-disable-next-line no-console
+  console.log('=== PAIRING CODE ===');
+  // eslint-disable-next-line no-console
+  console.log(`Code: ${displayCode}`);
+  // eslint-disable-next-line no-console
+  console.log('Go to WhatsApp > Settings > Linked Devices > Link with phone number');
+  // eslint-disable-next-line no-console
+  console.log('Enter the code above.');
+  // eslint-disable-next-line no-console
+  console.log('====================');
+  // eslint-disable-next-line no-console
+  console.log('');
 }
 
 class CaltexBot {
@@ -123,9 +113,8 @@ class CaltexBot {
   constructor() {
     this.startTime = Date.now();
 
-    logger.info('='.repeat(50));
-    logger.info('  CALTEX MD WhatsApp Bot - Starting...');
-    logger.info('='.repeat(50));
+    // v1.6.0: Silent constructor — no startup banner here. The banner is
+    // printed in start() after the HTTP server is listening.
 
     // Initialize all components
     this.sessionManager = new SessionManager();
@@ -160,29 +149,25 @@ class CaltexBot {
   private setupEventHandlers(): void {
     // Connection events
     this.connectionManager.on('connection.open', (sessionId: string) => {
-      logger.info({ sessionId }, 'WhatsApp connection opened');
+      // eslint-disable-next-line no-console
+      console.log('Connected.');
       this.sessionManager.updateSessionStatus(sessionId, 'active');
       this.apiClient.reportConnectionStatus(sessionId, 'connected');
-      this.apiClient.sendLog('info', 'connection', 'WhatsApp connection opened', { sessionId });
     });
 
     this.connectionManager.on('connection.close', (statusCode: number, reason: string, sessionId: string) => {
-      logger.warn({ sessionId, statusCode, reason }, 'WhatsApp connection closed');
+      // eslint-disable-next-line no-console
+      console.log(`Disconnected. (code ${statusCode}: ${reason})`);
       this.sessionManager.updateSessionStatus(sessionId, 'disconnected');
       this.apiClient.reportConnectionStatus(sessionId, 'disconnected', { statusCode, reason });
-      this.apiClient.sendLog('warn', 'connection', 'WhatsApp connection closed', { sessionId, statusCode, reason });
-      // Notify owner about disconnection
-      this.apiClient.notifyOwner('disconnect', 'Bot Disconnected', `Session ${sessionId} disconnected: ${reason} (code: ${statusCode})`, 'error');
     });
 
     this.connectionManager.on('qr.code', (qr: string, sessionId: string) => {
-      logger.info({ sessionId }, 'QR code generated - scan with WhatsApp');
       this.lastQR.set(sessionId, { qr, ts: Date.now() });
       this.apiClient.reportQRCode(sessionId, qr);
     });
 
     this.connectionManager.on('pairing.code', (code: string, sessionId: string, phoneNumber: string) => {
-      logger.info({ sessionId, phoneNumber, code }, 'Pairing code generated');
       this.apiClient.sendLog('info', 'pairing', `Pairing code generated for ${phoneNumber}: ${code}`, { sessionId, phoneNumber });
     });
 
@@ -204,7 +189,6 @@ class CaltexBot {
       } catch (err) {
         logger.error({ err, sessionId }, 'Error handling messages.upsert');
         this.apiClient.sendLog('error', 'message-handler', 'Error processing messages', { error: String(err) });
-        this.apiClient.notifyOwner('plugin_crash', 'Message Handler Error', `Error in message processing: ${String(err)}`, 'error');
       }
     });
 
@@ -260,11 +244,6 @@ class CaltexBot {
       this.apiClient.reportCommand(data.command, data.sender, data.jid, data.success);
     });
 
-    // NOTE: 'message:processed' events from the MessageHandler are counted via
-    // totalMessagesProcessed above (in the messages.upsert handler). The previous
-    // code called this.emit('stats:update', ...) but CaltexBot does not extend
-    // EventEmitter and nothing listens for that event, so it has been removed
-    // to prevent a runtime TypeError on every incoming message.
     this.messageHandler.on('message:processed', (_data: any) => {
       // Intentionally a no-op — kept as an extension point for future features.
     });
@@ -857,8 +836,6 @@ class CaltexBot {
       });
 
       this.scheduler.registerSocket(sessionId, sock);
-
-      logger.info({ sessionId }, 'Bot session connecting...');
     } catch (err) {
       logger.error({ err, sessionId }, 'Failed to create connection');
       throw err;
@@ -868,20 +845,19 @@ class CaltexBot {
   // ---------------------------------------------------------------------------
   // Connect using phone number + pairing code (the canonical Pterodactyl flow)
   // ---------------------------------------------------------------------------
-  // This is the primary connection path on Pterodactyl first-start:
-  //   1. User provides a phone number (via BOT_OWNER env var or stdin prompt)
-  //   2. Bot creates a Baileys socket with Browsers.ubuntu('Chrome')
-  //   3. Bot WAITS for the QR event (WhatsApp's ack that the connection is ready)
-  //   4. Bot calls sock.requestPairingCode(phone) — code is returned locally
-  //   5. Bot displays the code in a banner and waits for user to enter it
-  //   6. User enters the code in WhatsApp → connection.open fires → bot
-  //      sends "✅ BOT CONNECTED" message + Session ID
-  //   7. Credentials are saved locally so subsequent restarts auto-connect
+  // v1.6.0: Clean pairing flow per user spec.
+  //   1. Call createConnectionWithPairingCode (which waits for QR event, then
+  //      waits 3s, then calls requestPairingCode)
+  //   2. If a pairing code is returned, print the clean banner and return.
+  //      The connection.update handler will print "Connected." when WhatsApp
+  //      confirms the link.
+  //   3. If pairing fails (pairingFailed=true OR thrown error), print
+  //      "Link failed. Retrying in 10s...", wait 10 seconds, retry.
+  //   4. After MAX_PAIRING_RETRIES (3) failed attempts, print a clean error.
   //
-  // If pairing fails (e.g. WhatsApp rejects the IQ, or 401 before success),
-  // the connection manager returns pairingFailed=true. In that case, we
-  // re-prompt the user for a phone number (up to MAX_PAIRING_RETRIES) so
-  // they can retry without having to restart the server.
+  // The 10-second delay is per the user's explicit spec — it avoids spamming
+  // WhatsApp's pairing endpoint with rapid requests (which causes the
+  // "Couldn't link device. Something went wrong" error on the user's phone).
   private async connectWithPairingCode(sessionId: string, phoneNumber: string): Promise<void> {
     const MAX_PAIRING_RETRIES = 3;
     let currentPhone = phoneNumber;
@@ -890,13 +866,11 @@ class CaltexBot {
       try {
         await this.sessionManager.createSession(sessionId);
 
-        logger.info({ sessionId, phoneNumber: currentPhone, attempt }, '[PAIRING] Starting interactive pairing code flow...');
-
         const { sock, pairingCode, pairingFailed } = await this.connectionManager.createConnectionWithPairingCode(
           {
             sessionId,
-            printQR: false, // suppress QR — we use pairing code instead
-            browser: 'CALTEX MD', // overridden to Browsers.ubuntu('Chrome') inside connection.ts
+            printQR: false,
+            browser: 'CALTEX MD',
             autoReconnect: true,
             maxReconnectAttempts: 10,
             reconnectBaseDelay: 2000,
@@ -908,81 +882,54 @@ class CaltexBot {
 
         if (pairingFailed) {
           // Pairing failed before the code was even generated.
-          // Clean up and re-prompt for phone number.
-          logger.warn({ sessionId, attempt, phoneNumber: currentPhone }, '[PAIRING] Pairing failed — re-prompting for phone number');
-          // eslint-disable-next-line no-console
-          console.log(`\n  ⚠️  Pairing attempt ${attempt}/${MAX_PAIRING_RETRIES} failed.`);
-          // eslint-disable-next-line no-console
-          console.log('     The connection was rejected by WhatsApp before the pairing code could be sent.');
-          // eslint-disable-next-line no-console
-          console.log('     This usually means the phone number was entered incorrectly or WhatsApp is rate-limiting.\n');
-
           if (attempt < MAX_PAIRING_RETRIES) {
-            // Re-prompt for phone number
-            const newPhone = await promptUser(`  [Retry ${attempt + 1}/${MAX_PAIRING_RETRIES}] Enter WhatsApp phone number (or press Enter to use ${currentPhone}): `);
-            if (newPhone.trim()) {
-              const normalized = normalizePhoneNumber(newPhone);
-              if (normalized) {
-                currentPhone = normalized;
-                // eslint-disable-next-line no-console
-                console.log(`  ✅ Using phone number: ${currentPhone}\n`);
-              } else {
-                // eslint-disable-next-line no-console
-                console.log(`  ⚠️  "${newPhone}" could not be parsed — using previous number: ${currentPhone}\n`);
-              }
-            }
-            // Brief delay before retry to let any rate-limit cool down
             // eslint-disable-next-line no-console
-            console.log('  Waiting 5 seconds before retry...\n');
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            console.log('Link failed. Retrying in 10s...');
+            await new Promise(resolve => setTimeout(resolve, 10000));
             continue;
           } else {
             // eslint-disable-next-line no-console
-            console.log('  ❌ All pairing attempts failed. Please restart the server from the panel to try again.\n');
+            console.log('Link failed. All retries exhausted. Please restart the server.');
             return;
           }
         }
 
         if (pairingCode) {
-          // Display the pairing code in a banner. The connection manager has
-          // already verified the QR event fired (WhatsApp's ack that the
-          // connection is ready) before returning a non-empty code, so it's
+          // Display the clean pairing code banner. The connection manager
+          // has already verified the QR event fired (WhatsApp's ack) AND
+          // waited 3 seconds before calling requestPairingCode, so it's
           // safe to display the banner here.
           printPairingCodeBanner(pairingCode, currentPhone);
-
-          // After displaying the code, return immediately. The connection.update
-          // handler inside the connection manager will fire connection.open when
-          // the user enters the code on their phone, and the success message +
-          // Session ID will be sent at that point.
-          logger.info({ sessionId, pairingCode, phoneNumber: currentPhone }, '[PAIRING] Pairing code displayed — waiting for user to enter code on phone');
           return;
         } else {
           // pairingFailed was false but no code was returned — unusual but handle it
-          logger.warn({ sessionId, attempt }, '[PAIRING] No pairing code returned (and pairingFailed was false) — unusual state, retrying');
           if (attempt < MAX_PAIRING_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            // eslint-disable-next-line no-console
+            console.log('Link failed. Retrying in 10s...');
+            await new Promise(resolve => setTimeout(resolve, 10000));
             continue;
           }
+          // eslint-disable-next-line no-console
+          console.log('Link failed. All retries exhausted. Please restart the server.');
+          return;
         }
       } catch (err: any) {
-        logger.error({ err: err?.message ?? String(err), sessionId, phoneNumber: currentPhone, attempt }, '[PAIRING] Failed to start pairing code flow');
+        // v1.6.0: Catch the error and show a clean message — do NOT dump stack trace.
         if (attempt < MAX_PAIRING_RETRIES) {
           // eslint-disable-next-line no-console
-          console.log(`\n  ⚠️  Pairing attempt ${attempt}/${MAX_PAIRING_RETRIES} errored: ${err.message}`);
-          // eslint-disable-next-line no-console
-          console.log('  Retrying in 5 seconds...\n');
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          console.log('Link failed. Retrying in 10s...');
+          await new Promise(resolve => setTimeout(resolve, 10000));
           continue;
         }
-        throw err;
+        // eslint-disable-next-line no-console
+        console.log('Link failed. All retries exhausted. Please restart the server.');
+        return;
       }
     }
   }
 
   private setupShutdownHandlers(): void {
     const shutdown = async (signal: string) => {
-      logger.info({ signal }, 'Shutdown signal received, cleaning up...');
-
       try {
         await this.connectionManager.disconnectAll();
         this.scheduler.destroy();
@@ -990,12 +937,10 @@ class CaltexBot {
         this.aiHandler.destroy();
 
         this.httpServer.close(() => {
-          logger.info('HTTP server closed');
           process.exit(0);
         });
 
         setTimeout(() => {
-          logger.warn('Forced shutdown after timeout');
           process.exit(1);
         }, 10000);
       } catch (err) {
@@ -1022,10 +967,7 @@ class CaltexBot {
   }
 
   async start(): Promise<void> {
-    // ── STARTUP VALIDATION ──
-    logger.info('='.repeat(50));
-    logger.info('  CALTEX MD WhatsApp Bot - Starting...');
-    logger.info('='.repeat(50));
+    // v1.6.0: Silent startup validation — no logger.info banner.
 
     // ── Mode detection ──
     // The bot supports THREE modes now:
@@ -1046,145 +988,88 @@ class CaltexBot {
     const hasGithubEnv = !!(process.env.GITHUB_TOKEN && process.env.GITHUB_REPO_OWNER && process.env.GITHUB_REPO_NAME);
     const botOwnerEnv = process.env.BOT_OWNER || '';
 
-    logger.info({
-      sessionId,
-      isCaltexId,
-      hasLocalCreds,
-      hasGithubEnv,
-      hasBotOwner: !!botOwnerEnv,
-      api_url: process.env.API_URL || '(not set)',
-      nodeVersion: process.version,
-    }, '[STARTUP] Mode detection');
-
-    // Mode A: Local credentials exist — auto-connect directly.
-    // Mode B: Valid CALTEX ID + GitHub env — attempt restore from GitHub.
-    // In both cases, just call this.connect(sessionId) which goes through createConnection().
     const canAutoConnect = hasLocalCreds || (isCaltexId && hasGithubEnv);
 
-    // Start HTTP server FIRST (so Pterodactyl detects startup via "HTTP server listening on port")
+    // Start HTTP server FIRST (silent — no log line). Pterodactyl's startup
+    // detection looks for the process to be listening, not for a specific log line.
     await new Promise<void>((resolve) => {
       this.httpServer.listen(PORT, () => {
-        // Use both logger (→ bot.log) AND console.log (→ stdout) so Pterodactyl's
-        // startup detection ("done": "HTTP server listening on port") fires correctly.
-        // Pino's file transport doesn't write to stdout, so console.log is required.
-        const msg = `HTTP server listening on port ${PORT}`;
-        logger.info(msg);
-        // eslint-disable-next-line no-console
-        console.log(`[${new Date().toISOString()}] INFO (main): ${msg}`);
-        // eslint-disable-next-line no-console
-        console.log(`[Health check]: http://localhost:${PORT}/health`);
         resolve();
       });
     });
 
-    logger.info('CALTEX MD Bot HTTP server started!');
-    logger.info(`API available at http://localhost:${PORT}`);
-    logger.info(`Commands: http://localhost:${PORT}/api/commands`);
-
-    // Report status
+    // Report status (silent)
     this.apiClient.reportStatus('starting');
 
     // ── Decide what to do next ──
     const safeConnect = async () => {
       try {
         if (canAutoConnect) {
-          // Mode A or B: existing creds (local or from GitHub) — connect directly
-          logger.info({ sessionId, mode: hasLocalCreds ? 'A (local creds)' : 'B (GitHub restore)' }, '[STARTUP] Auto-connecting with existing credentials...');
+          // Mode A or B: existing creds (local or from GitHub) — connect directly.
+          // Silent — no "Auto-connecting with existing credentials" log.
           await this.connect(sessionId);
-          logger.info('CALTEX MD Bot WhatsApp connection initiated!');
           this.apiClient.reportStatus('running');
         } else {
-          // Mode C: Interactive pairing — get phone number and generate pairing code
-          logger.info('[STARTUP] No existing credentials found — entering interactive pairing mode.');
-
-          // Big, prominent banner so the user immediately sees the prompt in the
-          // Pterodactyl web console. Using console.log (not pino) because pino's
-          // file transport does not write to stdout — Pterodactyl only shows stdout.
+          // Mode C: Interactive pairing — get phone number and generate pairing code.
+          // v1.6.0: Clean startup banner per user spec.
           // eslint-disable-next-line no-console
-          console.log('');
-          console.log('  ╔══════════════════════════════════════════════════════════════╗');
-          console.log('  ║                                                              ║');
-          console.log('  ║          CALTEX MD — FIRST-TIME WHATSAPP SETUP               ║');
-          console.log('  ║                                                              ║');
-          console.log('  ║   No existing WhatsApp session was found. To link this       ║');
-          console.log('  ║   bot to a WhatsApp account, type the phone number below     ║');
-          console.log('  ║   and press ENTER. A pairing code will be generated.         ║');
-          console.log('  ║                                                              ║');
-          console.log('  ║   Format: country code + number, no + or spaces.             ║');
-          console.log('  ║   Examples: 254712345678  (Kenya)                           ║');
-          console.log('  ║             2348012345678  (Nigeria)                        ║');
-          console.log('  ║             14155552671    (USA)                            ║');
-          console.log('  ║                                                              ║');
-          console.log('  ╚══════════════════════════════════════════════════════════════╝');
-          console.log('');
+          console.log('=== WHATSAPP BOT STARTED ===');
+          // eslint-disable-next-line no-console
+          console.log('Waiting for WhatsApp number...');
 
           let phoneNumber: string | null = null;
 
-          // If BOT_OWNER env var is set and parses, use it (still allows the env
-          // var to override the prompt for automated deployments).
+          // If BOT_OWNER env var is set and parses, use it (silent — no log line).
           if (botOwnerEnv) {
-            logger.info({ botOwnerEnv }, '[STARTUP] BOT_OWNER env var detected — using it as phone number for pairing');
             phoneNumber = normalizePhoneNumber(botOwnerEnv);
-            if (phoneNumber) {
-              // eslint-disable-next-line no-console
-              console.log(`  Using phone number from BOT_OWNER env var: ${phoneNumber}\n`);
-            } else {
-              logger.warn({ botOwnerEnv }, '[STARTUP] BOT_OWNER env var is set but could not be normalized — prompting user');
-            }
           }
 
-          // Interactive prompt loop — give the user up to 5 attempts to enter a
-          // valid phone number. If they keep typing invalid input, exit so they
-          // can restart the server and try again.
+          // Interactive prompt — single prompt, validate, then proceed silently.
+          // The user spec requires exactly this prompt:
+          //   Enter number with country code:
           if (!phoneNumber) {
             const MAX_ATTEMPTS = 5;
             for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-              const remaining = MAX_ATTEMPTS - attempt;
-              const promptMsg = attempt === 1
-                ? '  Enter your WhatsApp phone number: '
-                : `  [Attempt ${attempt}/${MAX_ATTEMPTS}] Invalid input. Please enter a valid phone number${remaining > 0 ? ` (${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} left)` : ''}: `;
-              const answer = await promptUser(promptMsg);
+              const answer = await promptUser('Enter number with country code: ');
               phoneNumber = normalizePhoneNumber(answer);
               if (phoneNumber) break;
-              logger.warn({ raw: answer, attempt }, '[STARTUP] Invalid phone number entered');
               // eslint-disable-next-line no-console
-              console.log(`    -> "${answer}" could not be parsed as a phone number.`);
+              console.log(`Invalid number "${answer}". Try again.`);
             }
             if (!phoneNumber) {
-              logger.error('[STARTUP] Too many invalid phone number attempts — exiting');
               // eslint-disable-next-line no-console
-              console.log('\n  ❌ Too many invalid attempts. Please restart the server from the panel and try again.\n');
+              console.log('Too many invalid attempts. Restart the server to try again.');
               process.exit(1);
             }
           }
 
-          // eslint-disable-next-line no-console
-          console.log(`\n  ✅ Using phone number: ${phoneNumber}`);
-          console.log('  Generating WhatsApp pairing code...');
-          console.log('  (This usually takes 5-15 seconds. Please wait...)\n');
-
+          // Silent from here until the code is ready (per user spec:
+          // "After user enters number, show nothing else until code is ready.")
           await this.connectWithPairingCode(sessionId, phoneNumber);
           this.apiClient.reportStatus('running');
         }
       } catch (err: any) {
         logger.error({ err: err?.message ?? String(err) }, '[STARTUP] WhatsApp connection failed — HTTP API still available');
-        logger.info('You can retry connecting via: POST http://localhost:' + PORT + '/api/connect');
         this.apiClient.reportStatus('running');
       }
     };
 
-    setTimeout(safeConnect, 3000);
+    // Start the connection flow immediately (no 3s setTimeout delay — the user
+    // wants the prompt to appear as soon as the bot starts).
+    safeConnect().catch((err) => {
+      logger.error({ err }, 'safeConnect() threw unexpectedly');
+    });
   }
 }
 
 // Start the bot
 const bot = new CaltexBot();
 bot.start().catch((err) => {
-  logger.fatal({ err }, 'Failed to start CALTEX MD Bot');
+  logger.error({ err }, 'Failed to start CALTEX MD Bot');
   process.exit(1);
 });
 
-// Global error handlers
+// Global error handlers — silent at warn level (these are pino.error so still shown)
 process.on('uncaughtException', (err) => {
   logger.error({ err }, 'Uncaught exception');
 });

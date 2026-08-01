@@ -8,15 +8,16 @@ import pino from 'pino';
 import { join } from 'path';
 import type { LogEntry, BotStats, BotSettings, Plugin, BotUser, BotGroup } from './types';
 
+// v1.6.0: Default log level is 'warn' to keep the Pterodactyl console clean.
+// The api-client used to spam 'info' logs for every sendLog() call, drowning
+// out the pairing code. Now info-level sendLog() entries are silently buffered.
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  // Multistream: write pretty logs to stdout (so Pterodactyl panel shows them
-  // and startup detection works) AND raw JSON to bot.log (for debugging).
+  level: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'warn',
   transport: {
     targets: [
       {
         target: 'pino-pretty',
-        level: process.env.LOG_LEVEL || 'info',
+        level: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'warn',
         options: {
           colorize: true,
           ignore: 'pid,hostname',
@@ -26,7 +27,7 @@ const logger = pino({
       },
       {
         target: 'pino/file',
-        level: process.env.LOG_LEVEL || 'info',
+        level: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'warn',
         options: { destination: join(process.cwd(), 'bot.log'), mkdir: true },
       },
     ],
@@ -128,7 +129,9 @@ export class APIClient {
         logger.debug({ source, data }, message);
         break;
       default:
-        logger.info({ source, data }, message);
+        // v1.6.0: 'info' level — silently buffer to API; do NOT log to console.
+        // This was the source of the [api-client] JSON spam during pairing.
+        logger.debug({ source, data }, message);
     }
   }
 
@@ -413,6 +416,6 @@ export class APIClient {
     this.flushLogs();
     this.flushStats();
 
-    logger.info('API client destroyed');
+    logger.debug('API client destroyed');
   }
 }

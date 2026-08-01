@@ -1,7 +1,7 @@
 {
   "name": "caltex-bot",
-  "version": "1.5.0",
-  "description": "CALTEX MD WhatsApp Multi-Device Bot — fixed pairing code flow (wait for QR before requestPairingCode, distinguish pairing-failure-401 from loggedOut)",
+  "version": "1.6.0",
+  "description": "CALTEX MD WhatsApp Multi-Device Bot — v1.6.0: clean console, 3s pairing delay, 10s retry, silent warn-level logging",
   "main": "index.ts",
   "scripts": {
     "dev": "tsx watch index.ts",

@@ -16,14 +16,14 @@ import { GroupManager } from './group-manager';
 import type { BotConfig, CommandContext, CommandDefinition } from './types';
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'warn',
   // Multistream: write pretty logs to stdout (so Pterodactyl panel shows them
   // and startup detection works) AND raw JSON to bot.log (for debugging).
   transport: {
     targets: [
       {
         target: 'pino-pretty',
-        level: process.env.LOG_LEVEL || 'info',
+        level: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'warn',
         options: {
           colorize: true,
           ignore: 'pid,hostname',
@@ -33,7 +33,7 @@ const logger = pino({
       },
       {
         target: 'pino/file',
-        level: process.env.LOG_LEVEL || 'info',
+        level: process.env.LOG_LEVEL === 'debug' ? 'debug' : 'warn',
         options: { destination: join(process.cwd(), 'bot.log'), mkdir: true },
       },
     ],
