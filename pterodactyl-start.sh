@@ -55,6 +55,34 @@
 # explicit `|| { ...; exit 1; }` guards for setup steps that must succeed,
 # and let the loop capture the bot's exit code itself.
 
+# ── Load .env file from /home/container/ if it exists ──
+# This lets you set BOT_OWNER (and any other env var) by creating a file
+# called `.env` in the server's file manager with content like:
+#     BOT_OWNER=254712345678
+#     BOT_SESSION_ID=caltex-md
+#     LOG_LEVEL=debug
+# Variables already set in the environment take precedence over .env file
+# values (so the Pterodactyl Startup-tab variables win over .env).
+if [ -f /home/container/.env ]; then
+    echo "[$(date)] Loading /home/container/.env ..."
+    # POSIX-compatible .env loader: skips comments/blank lines, exports KEY=VALUE
+    while IFS='=' read -r key value || [ -n "$key" ]; do
+        # Skip comments and blank lines
+        case "$key" in
+            ''|\#*) continue ;;
+        esac
+        # Strip leading/trailing whitespace from key
+        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        # Strip leading/trailing whitespace and surrounding quotes from value
+        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//;s/^'\''//;s/'\''$//')
+        # Only set if not already set in environment (env vars from Pterodactyl panel win)
+        if [ -z "$(eval echo \"\$$key\")" ]; then
+            export "$key=$value"
+        fi
+    done < /home/container/.env
+    echo "[$(date)] .env loaded."
+fi
+
 echo "=========================================="
 echo "  CALTEX MD Bot - Pterodactyl Startup"
 echo "=========================================="
