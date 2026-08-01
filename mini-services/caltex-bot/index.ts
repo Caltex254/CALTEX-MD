@@ -1007,14 +1007,32 @@ class CaltexBot {
         } else {
           // Mode C: Interactive pairing — get phone number and generate pairing code
           logger.info('[STARTUP] No existing credentials found — entering interactive pairing mode.');
+
+          // Big, prominent banner so the user immediately sees the prompt in the
+          // Pterodactyl web console. Using console.log (not pino) because pino's
+          // file transport does not write to stdout — Pterodactyl only shows stdout.
           // eslint-disable-next-line no-console
-          console.log('\n  ╔══════════════════════════════════════════════════════════════╗');
-          console.log('  ║              CALTEX MD — First-time Setup                    ║');
+          console.log('');
+          console.log('  ╔══════════════════════════════════════════════════════════════╗');
+          console.log('  ║                                                              ║');
+          console.log('  ║          CALTEX MD — FIRST-TIME WHATSAPP SETUP               ║');
+          console.log('  ║                                                              ║');
+          console.log('  ║   No existing WhatsApp session was found. To link this       ║');
+          console.log('  ║   bot to a WhatsApp account, type the phone number below     ║');
+          console.log('  ║   and press ENTER. A pairing code will be generated.         ║');
+          console.log('  ║                                                              ║');
+          console.log('  ║   Format: country code + number, no + or spaces.             ║');
+          console.log('  ║   Examples: 254712345678  (Kenya)                           ║');
+          console.log('  ║             2348012345678  (Nigeria)                        ║');
+          console.log('  ║             14155552671    (USA)                            ║');
+          console.log('  ║                                                              ║');
           console.log('  ╚══════════════════════════════════════════════════════════════╝');
-          console.log('  No existing WhatsApp session found. We will generate a pairing');
-          console.log('  code that you can enter on your phone to link it to this bot.\n');
+          console.log('');
 
           let phoneNumber: string | null = null;
+
+          // If BOT_OWNER env var is set and parses, use it (still allows the env
+          // var to override the prompt for automated deployments).
           if (botOwnerEnv) {
             logger.info({ botOwnerEnv }, '[STARTUP] BOT_OWNER env var detected — using it as phone number for pairing');
             phoneNumber = normalizePhoneNumber(botOwnerEnv);
@@ -1025,18 +1043,35 @@ class CaltexBot {
               logger.warn({ botOwnerEnv }, '[STARTUP] BOT_OWNER env var is set but could not be normalized — prompting user');
             }
           }
+
+          // Interactive prompt loop — give the user up to 5 attempts to enter a
+          // valid phone number. If they keep typing invalid input, exit so they
+          // can restart the server and try again.
           if (!phoneNumber) {
-            // Prompt the user for a phone number via stdin
-            // (Works on Pterodactyl — the panel pipes stdin from the web console)
-            const answer = await promptUser('  Enter your WhatsApp phone number (international format, e.g. 254712345678): ');
-            phoneNumber = normalizePhoneNumber(answer);
-            if (!phoneNumber) {
-              logger.error({ raw: answer }, '[STARTUP] Invalid phone number entered');
+            const MAX_ATTEMPTS = 5;
+            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+              const remaining = MAX_ATTEMPTS - attempt;
+              const promptMsg = attempt === 1
+                ? '  Enter your WhatsApp phone number: '
+                : `  [Attempt ${attempt}/${MAX_ATTEMPTS}] Invalid input. Please enter a valid phone number${remaining > 0 ? ` (${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} left)` : ''}: `;
+              const answer = await promptUser(promptMsg);
+              phoneNumber = normalizePhoneNumber(answer);
+              if (phoneNumber) break;
+              logger.warn({ raw: answer, attempt }, '[STARTUP] Invalid phone number entered');
               // eslint-disable-next-line no-console
-              console.log('\n  ❌ Invalid phone number. Please restart the bot and try again.\n');
+              console.log(`    -> "${answer}" could not be parsed as a phone number.`);
+            }
+            if (!phoneNumber) {
+              logger.error('[STARTUP] Too many invalid phone number attempts — exiting');
+              // eslint-disable-next-line no-console
+              console.log('\n  ❌ Too many invalid attempts. Please restart the server from the panel and try again.\n');
               process.exit(1);
             }
           }
+
+          // eslint-disable-next-line no-console
+          console.log(`\n  ✅ Using phone number: ${phoneNumber}`);
+          console.log('  Generating WhatsApp pairing code...\n');
 
           await this.connectWithPairingCode(sessionId, phoneNumber);
           this.apiClient.reportStatus('running');
