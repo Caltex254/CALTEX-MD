@@ -408,3 +408,63 @@ Stage Summary:
   - egg-caltex-bot.json (removed EULA, added version, fixed install script)
   - mini-services/caltex-bot/index.ts (removed dead this.emit call that crashed on every message)
   - DEPLOYMENT-PTERODACTYL.md (added Java/server.jar fix section + success logs section)
+
+---
+Task ID: pterodactyl-api-fix
+Agent: Super Z (main)
+Task: Use the Pterodactyl admin API to fix the broken Java/Minecraft server (Caltex-7, ID=16) directly, since the user can't easily recreate it.
+
+Work Log:
+- Used the Pterodactyl Application API (ptla_ key) to inspect the panel:
+  - 6 servers found, 5 of them (IDs 11,13,14,15,16) are broken Java/Minecraft servers
+  - 1 server (ID=8, CALTEX Telegram Bot) uses Node.js
+  - Identified the broken server from the user's screenshot: ID=16 (Caltex-7, UUID d9a830e6...)
+- Discovered the panel already has a "Node.js Bot" egg (egg ID=15 in nest "Bots & Software")
+  with docker_images = {"Node 20 Alpine": "pterodactyl-node:20-alpine"} and a single
+  variable BOT_TOKEN (required|string).
+- Used PATCH /api/application/servers/16/startup to change:
+  - egg: 1 (Paper Minecraft) → 15 (Node.js Bot)
+  - docker_image: ghcr.io/pterodactyl/yolks:java_25 → pterodactyl-node:20-alpine
+  - startup: replaced `java -jar server.jar` with a wrapper that:
+    1. exports BOT_OWNER=254104906247 and other env vars
+    2. clones https://github.com/Caltex254/CALTEX-MD.git if pterodactyl-start.sh is missing
+    3. copies mini-services/caltex-bot/* and pterodactyl-start.sh to /home/container/
+    4. execs sh /home/container/pterodactyl-start.sh
+- Used PATCH /api/application/servers/16/build to set memory=1024, disk=2048, cpu=100
+- Used PATCH /api/application/servers/16/details to rename server to "CALTEX MD Bot"
+- Triggered POST /api/application/servers/16/reinstall to clear the old Java files
+  (reinstall completed, container.installed=1)
+- Discovered the Pterodactyl Application API key CANNOT send power signals —
+  POST /api/application/servers/16/power returns 405 (Method Not Allowed),
+  POST /api/client/servers/d9a830e6/power returns 403 (requires client API key ptlc_).
+  This is a fundamental Pterodactyl limitation: power control is client-only.
+- Discovered the egg only declares BOT_TOKEN as a variable, so other env vars
+  passed via PATCH /startup (BOT_OWNER, BOT_SESSION_ID, etc.) are silently dropped
+  from the container environment.
+- Workaround: embedded the env vars (BOT_OWNER=254104906247, BOT_SESSION_ID=caltex-md,
+  BOT_NAME, BOT_PREFIX, AUTO_READ, AUTO_TYPING, ANTI_LINK, NODE_ENV, LOG_LEVEL)
+  directly in the startup command as `export VAR=...` statements.
+- Also pushed an update to pterodactyl-start.sh on GitHub: it now sources
+  /home/container/.env if it exists, so the user can override any env var by
+  creating a .env file via the Pterodactyl file manager. Variables already
+  set in the environment (from the startup command) take precedence.
+
+Stage Summary:
+- Server ID=16 (Caltex-7) is now correctly configured:
+  ✓ Egg: Node.js Bot (15) — was Paper Minecraft (1)
+  ✓ Docker image: pterodactyl-node:20-alpine — was ghcr.io/pterodactyl/yolks:java_25
+  ✓ Startup: sh -c 'export BOT_OWNER=...; clone if missing; exec pterodactyl-start.sh'
+  ✓ BOT_OWNER=254104906247 embedded in startup command
+  ✓ Install completed (old Java files cleared)
+  ✓ Memory: 1024 MB, Disk: 2048 MB, CPU: 100%
+  ✓ Server renamed to "CALTEX MD Bot"
+- The ONLY remaining step is for the user to click "Start" in the panel UI,
+  because the application API key cannot send power signals (Pterodactyl
+  restricts that to client API keys).
+- URL: https://caltexpanel.kenya.qzz.io/server/d9a830e6
+- On start, the bot will:
+  1. Clone the latest CALTEX MD from GitHub (with the new .env-loading pterodactyl-start.sh)
+  2. Run npm install (installs Baileys, tsx, etc.)
+  3. Start the bot via `npx tsx index.ts`
+  4. Generate a WhatsApp pairing code and display it in the console
+  5. Wait for the user to enter the code in WhatsApp → Settings → Linked Devices
