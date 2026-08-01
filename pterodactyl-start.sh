@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # ============================================================================
 # CALTEX MD Bot - Pterodactyl Panel Startup Script
 # ============================================================================
@@ -94,7 +94,7 @@ echo "[$(date)] SERVER_PORT: ${SERVER_PORT:-'(not set — bot will fall back to 
 if [ -n "$BOT_OWNER" ]; then
     echo "[$(date)] BOT_OWNER: ***set*** (value hidden for security)"
 else
-    echo "[$(date)] BOT_OWNER: (NOT SET — required)"
+    echo "[$(date)] BOT_OWNER: (not set — bot will prompt for phone number on first start)"
 fi
 if [ -n "$BOT_SESSION_ID" ]; then
     echo "[$(date)] BOT_SESSION_ID: ***set*** (value hidden for security)"
@@ -121,15 +121,14 @@ if command -v java >/dev/null 2>&1 && [ ! -f /home/container/package.json ] && [
     echo "[WARN] Make sure the server egg is set to: ghcr.io/pterodactyl/yolks:node_20"
 fi
 
-# ── Required env var: BOT_OWNER ──
-# It identifies the bot owner and is used as the default phone number for
-# the interactive WhatsApp pairing code flow.
+# ── Optional env var: BOT_OWNER ──
+# If set, the bot uses this phone number directly for the WhatsApp pairing code
+# flow on first start (no user prompt).
+# If NOT set, the bot will print a banner in the console and prompt the user to
+# type their WhatsApp phone number interactively on first start.
 if [ -z "$BOT_OWNER" ]; then
-    echo "[FATAL] BOT_OWNER is not set. Set it in the Pterodactyl panel (Startup tab)."
-    echo "[FATAL] BOT_OWNER should be your phone number in international format, e.g. 254712345678."
-    echo "[FATAL] It is used both for owner-only commands AND as the default phone number"
-    echo "[FATAL] for the interactive WhatsApp pairing code flow."
-    exit 1
+    echo "[$(date)] BOT_OWNER is not set — bot will prompt for phone number on first start."
+    echo "[$(date)] (To skip the prompt, set BOT_OWNER in the Pterodactyl Startup tab.)"
 fi
 
 # ── Sanity check: index.ts must exist ──
