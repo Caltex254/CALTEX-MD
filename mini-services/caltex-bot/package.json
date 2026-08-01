@@ -1,7 +1,7 @@
 {
   "name": "caltex-bot",
-  "version": "1.4.0",
-  "description": "CALTEX MD WhatsApp Multi-Device Bot — supports interactive pairing code flow on Pterodactyl",
+  "version": "1.5.0",
+  "description": "CALTEX MD WhatsApp Multi-Device Bot — fixed pairing code flow (wait for QR before requestPairingCode, distinguish pairing-failure-401 from loggedOut)",
   "main": "index.ts",
   "scripts": {
     "dev": "tsx watch index.ts",

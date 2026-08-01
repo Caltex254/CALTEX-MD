@@ -472,24 +472,45 @@ export class ConnectionManager extends EventEmitter {
   // ---------------------------------------------------------------------------
   // Connection with Pairing Code — the canonical Pterodactyl first-start flow
   // ---------------------------------------------------------------------------
+  // CRITICAL FIX (v1.5.0): Previously, requestPairingCode() was called
+  // IMMEDIATELY after makeWASocket() — but the WebSocket was not yet open.
+  // Baileys' sendNode() checks ws.isOpen and throws "Connection Closed"
+  // synchronously when the WS is not open, which caused:
+  //   1. requestPairingCode() to throw "Connection Closed"
+  //   2. BUT authState.creds.me was already set (Baileys sets it BEFORE sendNode)
+  //   3. creds.update fired and saved creds with me.id set but registered=false
+  //   4. WS then opened, Baileys tried to log in with these half-baked creds
+  //   5. WhatsApp rejected with CB:failure reason=401 ("Connection Failure")
+  //   6. Code misinterpreted 401 as loggedOut and just cleared the session
+  //
+  // The fix:
+  //   1. Wait for the `qr` event BEFORE calling requestPairingCode().
+  //      The `qr` event fires AFTER: WS open → noise handshake → WhatsApp
+  //      responds with QR ref. This guarantees the WS is ready.
+  //   2. If requestPairingCode() throws or the connection closes before
+  //      pairing succeeds, do NOT treat 401 as loggedOut. Instead, clean
+  //      up and signal the caller to retry with a fresh phone number.
+  //   3. Track pairing success via creds.registered flag, not via the
+  //      connection.close statusCode (which can be 401 during failed pairing).
+  //
   // This method:
-  //   1. Acquires the single-instance lock for the sessionId
+  //   1. Acquires single-instance lock
   //   2. Cleans any stale auth folder
   //   3. Creates a fresh Baileys socket with Browsers.ubuntu('Chrome')
-  //   4. Immediately calls sock.requestPairingCode(phone) — does NOT wait
-  //      for the QR event (Baileys queues the IQ internally)
-  //   5. Waits up to 5 seconds for an error response. If the connection
-  //      closes in that window, WhatsApp rejected the pairing — we don't
-  //      display the code. If the connection stays open, WhatsApp accepted
-  //      the pairing request and will push a notification to the user's
-  //      phone — we display the code.
-  //   6. Sets up the same connection.update / creds.update handlers as
-  //      createConnection() so the bot works correctly after pairing.
-  //   7. Auto-reconnects on close (unless loggedOut).
+  //   4. Waits for the `qr` event (60s timeout) — this is the WhatsApp ack
+  //   5. Calls sock.requestPairingCode(phone) — code is returned locally
+  //   6. Returns the code to the caller IMMEDIATELY (no ack wait — the
+  //      `qr` event was already the ack)
+  //   7. Tracks pairing success via creds.registered + connection.open
+  //   8. On close:
+  //      - If pairing succeeded (registered=true) and 401 → loggedOut
+  //      - If pairing failed (registered=false) and 401 → pairing failure
+  //        (clean up, signal caller to re-prompt for phone number)
+  //      - Other statusCodes → auto-reconnect with backoff
   async createConnectionWithPairingCode(
     config: ConnectionConfig,
     phoneNumber: string
-  ): Promise<{ sock: WASocket; pairingCode: string }> {
+  ): Promise<{ sock: WASocket; pairingCode: string; pairingFailed: boolean }> {
     const {
       sessionId,
       browser = 'CALTEX MD',
@@ -504,7 +525,7 @@ export class ConnectionManager extends EventEmitter {
     if (this.connectingLocks.has(sessionId)) {
       this.globalLogger.warn({ sessionId }, '[PAIRING] Connection already in progress — aborting duplicate requestPairingCode()');
       const existing = this.sockets.get(sessionId);
-      if (existing) return { sock: existing, pairingCode: '' };
+      if (existing) return { sock: existing, pairingCode: '', pairingFailed: false };
     }
     if (this.sockets.has(sessionId)) {
       this.globalLogger.warn({ sessionId }, '[PAIRING] Socket already exists — closing it before starting fresh pairing');
@@ -522,9 +543,9 @@ export class ConnectionManager extends EventEmitter {
       const authFolder = this.getAuthFolder(sessionId);
 
       // ── Clean any stale auth folder ──
-      // If creds.json exists from a previous failed pairing attempt, the
-      // stale noiseKey/identityKey would cause the new pairing to silently
-      // fail. Always start with a clean folder for the pairing flow.
+      // ALWAYS start with a clean folder for the pairing flow.
+      // Stale noiseKey/identityKey from a previous failed attempt would
+      // cause WhatsApp to reject the new pairing with 401.
       const credsFile = join(authFolder, 'creds.json');
       if (existsSync(credsFile)) {
         this.globalLogger.warn({ sessionId, credsFile }, '[PAIRING] Existing creds.json found — cleaning folder for fresh pairing');
@@ -561,7 +582,10 @@ export class ConnectionManager extends EventEmitter {
           keys: makeCacheableSignalKeyStore(state.keys, this.globalLogger),
         },
         // CRITICAL: Browsers.ubuntu('Chrome') — NOT Browsers.ubuntu('CALTEX MD').
-        // See comment in finishConnection() above for the full explanation.
+        // The browser name's second element ('Chrome') is what Baileys sends
+        // as companion_platform_display. 'Chrome' → platform ID 1 (CHROME).
+        // Any custom name like 'CALTEX MD' → platform ID 9 (OTHER_WEB_CLIENT)
+        // which WhatsApp SILENTLY REJECTS (no popup on user's phone).
         browser: Browsers.ubuntu('Chrome'),
         syncFullHistory,
         markOnlineOnConnect,
@@ -585,14 +609,40 @@ export class ConnectionManager extends EventEmitter {
       const sock = makeWASocket(socketConfig);
       this.sockets.set(sessionId, sock);
 
-      // ── Set up connection.update + creds.update handlers BEFORE calling
-      //    requestPairingCode() so we don't miss any events. ──
-      let pairingAcknowledged = false;
-      let pairingRejected = false;
-      let rejectionReason = '';
+      // ── State tracking ──
+      // pairingSucceeded: set to true ONLY when connection.open fires OR
+      //                   creds.registered becomes true. Used to distinguish
+      //                   a real loggedOut (post-success 401) from a pairing
+      //                   failure (pre-success 401).
+      // qrReceived: resolves the waitForQR promise. The `qr` event is the
+      //             WhatsApp server's acknowledgement that the connection
+      //             is established and ready for the pairing IQ.
+      // connectionClosedPreQR: set if connection closes before QR arrives.
+      let pairingSucceeded = false;
+      let connectionClosedPreQR = false;
+      let connectionClosedPreSuccess = false;
+      let closeStatusCode = 0;
+      let closeReason = '';
+      let qrResolve: (() => void) | null = null;
+      let qrReject: ((err: Error) => void) | null = null;
 
-      sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr, isNewLogin } = update;
+      // Promise that resolves when the first `qr` event fires OR rejects
+      // when the connection closes before QR arrives. The actual event
+      // listener is registered in the connection.update handler below
+      // (single handler, no duplicate listeners).
+      const waitForQR = new Promise<void>((resolve, reject) => {
+        qrResolve = resolve;
+        qrReject = reject;
+      });
+
+      // ── Connection Update Handler ──
+      // Single handler that:
+      //   - Resolves waitForQR when qr event fires
+      //   - Rejects waitForQR if connection closes before QR
+      //   - Tracks pairingSucceeded for proper 401 handling
+      //   - Auto-reconnects on transient failures
+      sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr, isNewLogin, receivedPendingNotifications } = update;
         const errAny = lastDisconnect?.error as any;
         const statusCode =
           errAny?.output?.statusCode ??
@@ -600,6 +650,7 @@ export class ConnectionManager extends EventEmitter {
           0;
         const reasonName = DISCONNECT_REASON_NAMES[statusCode] || (statusCode ? `unknown(${statusCode})` : null);
 
+        // Log EVERY connection.update event with all fields for debugging
         this.globalLogger.info({
           sessionId,
           connection: connection || null,
@@ -609,37 +660,78 @@ export class ConnectionManager extends EventEmitter {
           lastDisconnectReasonName: reasonName,
           lastDisconnectErrorMessage: lastDisconnect?.error?.message ?? null,
           isNewLogin: !!isNewLogin,
+          receivedPendingNotifications: !!receivedPendingNotifications,
+          pairingSucceeded,
         }, '[PAIRING] connection.update event');
+
+        if (qr) {
+          // The QR event fires after WS open + noise handshake + WhatsApp response.
+          // This is the canonical "ready to pair" signal. We don't display the QR
+          // (we're using pairing code instead), but we use this event to know
+          // that requestPairingCode() can now be called safely.
+          this.globalLogger.info({ sessionId, qrLength: qr.length }, '[PAIRING] QR event received — connection is ready for pairing code request');
+          if (qrResolve) {
+            qrResolve();
+            qrResolve = null;
+            qrReject = null;
+          }
+        }
 
         if (connection === 'close') {
           const reason = lastDisconnect?.error?.message ?? 'Unknown reason';
-          this.globalLogger.error({
+          this.globalLogger.warn({
             sessionId,
             statusCode,
             reasonName,
             reason,
+            pairingSucceeded,
+            errorOutput: errAny?.output,
           }, '[PAIRING] Connection closed');
 
-          pairingRejected = true;
-          rejectionReason = `${reasonName || 'unknown'}: ${reason}`;
+          if (!pairingSucceeded) {
+            connectionClosedPreSuccess = true;
+            closeStatusCode = statusCode;
+            closeReason = reason;
+            // If QR hasn't fired yet, reject the waitForQR promise so the
+            // caller doesn't hang waiting for an event that will never come.
+            if (qrReject) {
+              connectionClosedPreQR = true;
+              qrReject(new Error(`Connection closed before QR event: ${statusCode} ${reason}`));
+              qrResolve = null;
+              qrReject = null;
+            }
+          }
 
           this.sockets.delete(sessionId);
           this.connectionStates.set(sessionId, update as ConnectionState);
           this.emit('connection.close', statusCode, reason, sessionId);
           this.emit('connection.update', update, sessionId);
 
-          // Auto-reconnect unless logged out
-          const shouldReconnect =
-            statusCode !== DisconnectReason.loggedOut &&
-            autoReconnect &&
-            !this.isShuttingDown;
+          // Decide whether to reconnect.
+          // IMPORTANT: A 401 BEFORE pairing succeeded is NOT a loggedOut event.
+          // It means WhatsApp rejected the pairing request (rate limit, bad
+          // creds, race condition, etc.). We clean up the auth folder so the
+          // next pairing attempt starts fresh, but we do NOT call
+          // sessionManager.deleteSession (the user may want to retry).
+          const isPairingFailure401 = (statusCode === DisconnectReason.loggedOut) && !pairingSucceeded;
 
-          if (shouldReconnect) {
+          if (isPairingFailure401) {
+            this.globalLogger.warn({ sessionId, statusCode, reason }, '[PAIRING] 401 during pairing (before success) — treating as pairing failure, NOT loggedOut. Cleaning auth folder for retry.');
+            this.cleanAuthFolder(sessionId);
+            // Do NOT auto-reconnect here. The caller (index.ts) will handle
+            // re-prompting the user for a phone number and retrying.
+          } else if (statusCode === DisconnectReason.loggedOut) {
+            // Real loggedOut — pairing had succeeded earlier, then user unlinked
+            this.globalLogger.info({ sessionId }, '[PAIRING] Logged out by user (post-success) — clearing session and auth folder');
+            this.cleanAuthFolder(sessionId);
+            await this.sessionManager.deleteSession(sessionId);
+          } else if (autoReconnect && !this.isShuttingDown) {
+            // Other close reasons (408, 428, 515, etc.) — auto-reconnect
             const attempts = (this.reconnectAttempts.get(sessionId) ?? 0) + 1;
             this.reconnectAttempts.set(sessionId, attempts);
             if (attempts <= maxReconnectAttempts) {
               const delay = reconnectBaseDelay * Math.pow(2, Math.min(attempts - 1, 5)) + Math.random() * 1000;
-              this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay) }, '[PAIRING] Reconnecting with exponential backoff (will retry pairing on next start)');
+              this.globalLogger.info({ sessionId, attempts, delay: Math.round(delay), reasonName }, '[PAIRING] Reconnecting with exponential backoff');
               const timer = setTimeout(() => {
                 this.reconnectTimers.delete(sessionId);
                 // After a pairing failure, fall back to regular createConnection
@@ -652,14 +744,10 @@ export class ConnectionManager extends EventEmitter {
             } else {
               this.globalLogger.error({ sessionId, attempts }, '[PAIRING] Max reconnect attempts reached');
             }
-          } else if (statusCode === DisconnectReason.loggedOut) {
-            this.globalLogger.info({ sessionId }, '[PAIRING] Logged out — clearing session');
-            this.cleanAuthFolder(sessionId);
-            this.sessionManager.deleteSession(sessionId).catch(() => {});
           }
         } else if (connection === 'open') {
           this.reconnectAttempts.set(sessionId, 0);
-          pairingAcknowledged = true;
+          pairingSucceeded = true;
           const openCreds = sock.authState?.creds;
           this.globalLogger.info({
             sessionId,
@@ -670,15 +758,24 @@ export class ConnectionManager extends EventEmitter {
           this.connectionStates.set(sessionId, update as ConnectionState);
           this.emit('connection.open', sessionId);
           this.emit('connection.update', update, sessionId);
-          // Send "BOT CONNECTED SUCCESSFULLY" WhatsApp message
+          // Send "BOT CONNECTED SUCCESSFULLY" WhatsApp message + Session ID
           this.sendConnectionSuccessMessage(sessionId).catch((err: any) => {
             this.globalLogger.error({ sessionId, err: err?.message ?? String(err) }, '[PAIRING] Success message send failed (non-blocking)');
           });
+        } else {
+          this.connectionStates.set(sessionId, update as ConnectionState);
+          this.emit('connection.update', update, sessionId);
         }
       });
 
       // ── Save credentials on every update ──
       sock.ev.on('creds.update', async (creds) => {
+        // Track pairing success: if creds.registered becomes true, the
+        // pairing was successful (even if connection.open hasn't fired yet).
+        if (creds?.registered && !pairingSucceeded) {
+          pairingSucceeded = true;
+          this.globalLogger.info({ sessionId }, '[PAIRING] creds.update marked registered=true — pairing succeeded');
+        }
         this.globalLogger.debug({
           sessionId,
           hasMe: !!creds?.me,
@@ -717,107 +814,93 @@ export class ConnectionManager extends EventEmitter {
         });
       }
 
-      // ── Request the pairing code ──
-      // Per Baileys source: requestPairingCode() generates the code locally,
-      // emits creds.update, sends the link_code_companion_reg IQ, and returns
-      // the code immediately. It does NOT wait for WhatsApp's acknowledgement.
+      // ── Wait for the QR event before calling requestPairingCode() ──
+      // The QR event is the WhatsApp server's acknowledgement that:
+      //   1. WebSocket is open
+      //   2. Noise handshake is complete
+      //   3. WhatsApp has accepted the connection
+      //   4. The connection is ready to receive the pairing IQ
       //
-      // We call it immediately after makeWASocket() — Baileys internally
-      // queues the IQ and sends it as soon as the WebSocket handshake
-      // completes. We do NOT need to wait for the QR event.
+      // Calling requestPairingCode() BEFORE this event causes a race condition
+      // where sendNode() throws "Connection Closed" because ws.isOpen is false.
+      this.globalLogger.info({ sessionId, phoneNumber }, '[PAIRING] Waiting for QR event (WhatsApp ack) before calling requestPairingCode()...');
+      try {
+        await Promise.race([
+          waitForQR,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for QR event after 60s')), 60_000)
+          ),
+        ]);
+      } catch (qrWaitErr: any) {
+        this.globalLogger.error({ sessionId, phoneNumber, err: qrWaitErr.message }, '[PAIRING] Failed to receive QR event — connection may have closed before WhatsApp ack');
+        // If the connection closed before QR, clean up and signal failure
+        if (connectionClosedPreQR || connectionClosedPreSuccess) {
+          this.cleanAuthFolder(sessionId);
+        }
+        return { sock, pairingCode: '', pairingFailed: true };
+      }
+
+      // ── Connection is ready — request the pairing code ──
+      // Per Baileys source (socket.js line 351-400):
+      //   1. requestPairingCode() generates the code locally (randomBytes)
+      //   2. Sets authState.creds.me = { id: phoneNumber@s.whatsapp.net, name: '~' }
+      //   3. Emits creds.update (saves the half-baked creds)
+      //   4. Calls sendNode() to send the link_code_companion_reg IQ
+      //   5. Returns the code
       //
-      // After calling it, we wait up to 5 seconds. If the connection closes
-      // in that window, WhatsApp rejected the pairing (invalid phone number,
-      // rate limited, etc.) — we don't display the code. If the connection
-      // stays open, WhatsApp accepted the request and will push a
-      // notification to the user's phone — we display the code.
-      this.globalLogger.info({ sessionId, phoneNumber }, '[PAIRING] Calling requestPairingCode() — IQ will be sent once WebSocket handshake completes');
+      // The `qr` event has fired, so ws.isOpen is true and sendNode() will
+      // succeed. The IQ is sent to WhatsApp, which stores the pairing request
+      // and waits for the user to enter the code on their phone.
+      this.globalLogger.info({ sessionId, phoneNumber }, '[PAIRING] Calling requestPairingCode() — WebSocket is open, IQ will be sent immediately');
       let pairingCode = '';
       try {
         pairingCode = await sock.requestPairingCode(phoneNumber);
-        this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] requestPairingCode() returned — IQ sent to WhatsApp servers');
+        this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] requestPairingCode() returned successfully — IQ sent to WhatsApp servers');
         this.emit('pairing.code', pairingCode, sessionId, phoneNumber);
       } catch (err: any) {
-        this.globalLogger.error({ sessionId, phoneNumber, err: err.message }, '[PAIRING] requestPairingCode() threw an error');
-        return { sock, pairingCode: '' };
+        this.globalLogger.error({ sessionId, phoneNumber, err: err.message }, '[PAIRING] requestPairingCode() threw an error — cleaning auth folder for retry');
+        // Clean up the half-baked creds that requestPairingCode() saved
+        this.cleanAuthFolder(sessionId);
+        // Close the socket so it doesn't try to log in with bad creds
+        try { sock.end(undefined); } catch {}
+        this.sockets.delete(sessionId);
+        return { sock, pairingCode: '', pairingFailed: true };
       }
 
-      // ── Wait for WhatsApp to acknowledge or reject the pairing ──
-      // 5 seconds is enough time for WhatsApp to respond if the phone number
-      // is invalid or the pairing is rate-limited. If no rejection arrives
-      // in 5s, we assume WhatsApp accepted the request and will push the
-      // notification to the user's phone.
-      const acknowledgementTimeout = new Promise<'acknowledged' | 'rejected'>((resolve) =>
-        setTimeout(() => resolve('acknowledged'), 5000)
-      );
-      const rejectionPromise = new Promise<'acknowledged' | 'rejected'>((resolve) => {
-        // Poll for pairingRejected flag every 100ms
-        const interval = setInterval(() => {
-          if (pairingRejected) {
-            clearInterval(interval);
-            resolve('rejected');
-          } else if (pairingAcknowledged) {
-            // connection.open already fired — pairing succeeded
-            clearInterval(interval);
-            resolve('acknowledged');
-          }
-        }, 100);
-        // Clean up interval after 30s regardless
-        setTimeout(() => clearInterval(interval), 30_000);
-      });
+      // ── Return the code immediately ──
+      // We do NOT need to wait for an additional ack — the `qr` event was
+      // already the ack that the connection is ready. The IQ was sent
+      // synchronously inside requestPairingCode(), and WhatsApp has stored
+      // the pairing request. The user can now enter the code on their phone,
+      // and the connection.update handler will fire `connection: 'open'`
+      // when pairing completes.
+      this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] Pairing code generated successfully — display to user and wait for confirmation on phone');
 
-      const result = await Promise.race<'acknowledged' | 'rejected'>([acknowledgementTimeout, rejectionPromise]);
-
-      if (result === 'rejected') {
-        this.globalLogger.error({ sessionId, phoneNumber, rejectionReason }, '[PAIRING] WhatsApp REJECTED the pairing request — not displaying code to user');
-        // eslint-disable-next-line no-console
-        console.log('');
-        // eslint-disable-next-line no-console
-        console.log('  ❌ WhatsApp rejected the pairing request.');
-        // eslint-disable-next-line no-console
-        console.log(`  Reason: ${rejectionReason}`);
-        // eslint-disable-next-line no-console
-        console.log('  The bot will retry. Please check:');
-        // eslint-disable-next-line no-console
-        console.log('    - Phone number is correct (international format, no +)');
-        // eslint-disable-next-line no-console
-        console.log('    - Phone has an active WhatsApp account');
-        // eslint-disable-next-line no-console
-        console.log('    - You haven\'t been rate-limited (wait 5 min and retry)');
-        // eslint-disable-next-line no-console
-        console.log('');
-        return { sock, pairingCode: '' };
-      }
-
-      // ── Pairing request acknowledged — display the code to the user ──
-      if (pairingCode) {
-        this.globalLogger.info({ sessionId, phoneNumber, pairingCode }, '[PAIRING] WhatsApp acknowledged pairing request — displaying code to user');
-        // eslint-disable-next-line no-console
-        console.log('');
-        // eslint-disable-next-line no-console
-        console.log('  ┌─────────────────────────────────────────────────────────┐');
-        // eslint-disable-next-line no-console
-        console.log(`  │  Pairing code acknowledged by WhatsApp for: ${phoneNumber}`);
-        // eslint-disable-next-line no-console
-        console.log(`  │  Code: ${pairingCode}`);
-        // eslint-disable-next-line no-console
-        console.log('  │  Open WhatsApp → Settings → Linked Devices → Link a Device');
-        // eslint-disable-next-line no-console
-        console.log('  │  → "Link with phone number instead" → type the code above');
-        // eslint-disable-next-line no-console
-        console.log('  └─────────────────────────────────────────────────────────┘');
-        // eslint-disable-next-line no-console
-        console.log('');
-      }
-
-      // Don't wait for connection.open here — return immediately so the
-      // caller can finish its setup. The connection.update handler above
-      // will fire connection.open when the user enters the code on their
-      // phone, and the success message will be sent at that point.
-      return { sock, pairingCode };
+      return { sock, pairingCode, pairingFailed: false };
     } finally {
       this.connectingLocks.delete(sessionId);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Check if a session is currently in the middle of pairing (registered=false
+  // but me.id is set). Used by index.ts to decide whether to retry pairing.
+  // ---------------------------------------------------------------------------
+  isPairingInProgress(sessionId: string): boolean {
+    const sock = this.sockets.get(sessionId);
+    if (!sock) return false;
+    const creds = sock.authState?.creds;
+    return !!creds?.me && !creds?.registered;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Check if a session has successfully paired (registered=true).
+  // ---------------------------------------------------------------------------
+  isPaired(sessionId: string): boolean {
+    const sock = this.sockets.get(sessionId);
+    if (!sock) return false;
+    const creds = sock.authState?.creds;
+    return !!creds?.registered;
   }
 
   // ---------------------------------------------------------------------------

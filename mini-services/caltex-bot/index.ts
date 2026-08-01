@@ -575,6 +575,15 @@ class CaltexBot {
               { sessionId, printQR: false },
               phoneNumber
             );
+            if (result.pairingFailed || !result.pairingCode) {
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                error: 'WhatsApp rejected the pairing request before the code could be sent. Wait 60s and retry with a valid phone number that has an active WhatsApp account.',
+                pairingFailed: true,
+              }));
+              return;
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: true,
@@ -583,7 +592,8 @@ class CaltexBot {
                 '1. Open WhatsApp on your phone',
                 '2. Go to Settings > Linked Devices',
                 '3. Tap "Link a Device"',
-                '4. Enter the pairing code: ' + result.pairingCode,
+                '4. Tap "Link with phone number instead"',
+                '5. Enter the pairing code: ' + result.pairingCode,
               ],
             }));
           } catch (err: any) {
@@ -861,56 +871,111 @@ class CaltexBot {
   // This is the primary connection path on Pterodactyl first-start:
   //   1. User provides a phone number (via BOT_OWNER env var or stdin prompt)
   //   2. Bot creates a Baileys socket with Browsers.ubuntu('Chrome')
-  //   3. Bot immediately calls sock.requestPairingCode(phone) — does NOT wait
-  //      for the QR event (Baileys queues the IQ internally)
-  //   4. Bot waits 5 seconds for an error response from WhatsApp
-  //   5. If no error → WhatsApp accepted the pairing request → display code
+  //   3. Bot WAITS for the QR event (WhatsApp's ack that the connection is ready)
+  //   4. Bot calls sock.requestPairingCode(phone) — code is returned locally
+  //   5. Bot displays the code in a banner and waits for user to enter it
   //   6. User enters the code in WhatsApp → connection.open fires → bot
-  //      replies to commands and sends "✅ BOT CONNECTED" message
+  //      sends "✅ BOT CONNECTED" message + Session ID
   //   7. Credentials are saved locally so subsequent restarts auto-connect
+  //
+  // If pairing fails (e.g. WhatsApp rejects the IQ, or 401 before success),
+  // the connection manager returns pairingFailed=true. In that case, we
+  // re-prompt the user for a phone number (up to MAX_PAIRING_RETRIES) so
+  // they can retry without having to restart the server.
   private async connectWithPairingCode(sessionId: string, phoneNumber: string): Promise<void> {
-    try {
-      await this.sessionManager.createSession(sessionId);
+    const MAX_PAIRING_RETRIES = 3;
+    let currentPhone = phoneNumber;
 
-      logger.info({ sessionId, phoneNumber }, '[PAIRING] Starting interactive pairing code flow...');
+    for (let attempt = 1; attempt <= MAX_PAIRING_RETRIES; attempt++) {
+      try {
+        await this.sessionManager.createSession(sessionId);
 
-      const { sock, pairingCode } = await this.connectionManager.createConnectionWithPairingCode(
-        {
-          sessionId,
-          printQR: false, // suppress QR — we use pairing code instead
-          browser: 'CALTEX MD', // overridden to Browsers.ubuntu('Chrome') inside connection.ts
-          autoReconnect: true,
-          maxReconnectAttempts: 10,
-          reconnectBaseDelay: 2000,
-        },
-        phoneNumber
-      );
+        logger.info({ sessionId, phoneNumber: currentPhone, attempt }, '[PAIRING] Starting interactive pairing code flow...');
 
-      this.scheduler.registerSocket(sessionId, sock);
+        const { sock, pairingCode, pairingFailed } = await this.connectionManager.createConnectionWithPairingCode(
+          {
+            sessionId,
+            printQR: false, // suppress QR — we use pairing code instead
+            browser: 'CALTEX MD', // overridden to Browsers.ubuntu('Chrome') inside connection.ts
+            autoReconnect: true,
+            maxReconnectAttempts: 10,
+            reconnectBaseDelay: 2000,
+          },
+          currentPhone
+        );
 
-      if (pairingCode) {
-        // The connection manager has already verified WhatsApp acknowledged
-        // the pairing request before returning a non-empty code, so it's safe
-        // to display the banner here.
-        printPairingCodeBanner(pairingCode, phoneNumber);
-      } else {
-        logger.warn('[PAIRING] No pairing code was returned — WhatsApp may have rejected the request.');
-        // eslint-disable-next-line no-console
-        console.log('\n  ⚠️  Pairing code could not be generated. WhatsApp may have rejected the request.');
-        // eslint-disable-next-line no-console
-        console.log('     Check the bot logs above for the rejection reason.');
-        // eslint-disable-next-line no-console
-        console.log('     The bot will retry automatically. If it keeps failing, verify:');
-        // eslint-disable-next-line no-console
-        console.log('       - Phone number is correct (international format, no +)');
-        // eslint-disable-next-line no-console
-        console.log('       - Phone has an active WhatsApp account');
-        // eslint-disable-next-line no-console
-        console.log('       - You haven\'t been rate-limited (wait 5 min and retry)\n');
+        this.scheduler.registerSocket(sessionId, sock);
+
+        if (pairingFailed) {
+          // Pairing failed before the code was even generated.
+          // Clean up and re-prompt for phone number.
+          logger.warn({ sessionId, attempt, phoneNumber: currentPhone }, '[PAIRING] Pairing failed — re-prompting for phone number');
+          // eslint-disable-next-line no-console
+          console.log(`\n  ⚠️  Pairing attempt ${attempt}/${MAX_PAIRING_RETRIES} failed.`);
+          // eslint-disable-next-line no-console
+          console.log('     The connection was rejected by WhatsApp before the pairing code could be sent.');
+          // eslint-disable-next-line no-console
+          console.log('     This usually means the phone number was entered incorrectly or WhatsApp is rate-limiting.\n');
+
+          if (attempt < MAX_PAIRING_RETRIES) {
+            // Re-prompt for phone number
+            const newPhone = await promptUser(`  [Retry ${attempt + 1}/${MAX_PAIRING_RETRIES}] Enter WhatsApp phone number (or press Enter to use ${currentPhone}): `);
+            if (newPhone.trim()) {
+              const normalized = normalizePhoneNumber(newPhone);
+              if (normalized) {
+                currentPhone = normalized;
+                // eslint-disable-next-line no-console
+                console.log(`  ✅ Using phone number: ${currentPhone}\n`);
+              } else {
+                // eslint-disable-next-line no-console
+                console.log(`  ⚠️  "${newPhone}" could not be parsed — using previous number: ${currentPhone}\n`);
+              }
+            }
+            // Brief delay before retry to let any rate-limit cool down
+            // eslint-disable-next-line no-console
+            console.log('  Waiting 5 seconds before retry...\n');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            continue;
+          } else {
+            // eslint-disable-next-line no-console
+            console.log('  ❌ All pairing attempts failed. Please restart the server from the panel to try again.\n');
+            return;
+          }
+        }
+
+        if (pairingCode) {
+          // Display the pairing code in a banner. The connection manager has
+          // already verified the QR event fired (WhatsApp's ack that the
+          // connection is ready) before returning a non-empty code, so it's
+          // safe to display the banner here.
+          printPairingCodeBanner(pairingCode, currentPhone);
+
+          // After displaying the code, return immediately. The connection.update
+          // handler inside the connection manager will fire connection.open when
+          // the user enters the code on their phone, and the success message +
+          // Session ID will be sent at that point.
+          logger.info({ sessionId, pairingCode, phoneNumber: currentPhone }, '[PAIRING] Pairing code displayed — waiting for user to enter code on phone');
+          return;
+        } else {
+          // pairingFailed was false but no code was returned — unusual but handle it
+          logger.warn({ sessionId, attempt }, '[PAIRING] No pairing code returned (and pairingFailed was false) — unusual state, retrying');
+          if (attempt < MAX_PAIRING_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            continue;
+          }
+        }
+      } catch (err: any) {
+        logger.error({ err: err?.message ?? String(err), sessionId, phoneNumber: currentPhone, attempt }, '[PAIRING] Failed to start pairing code flow');
+        if (attempt < MAX_PAIRING_RETRIES) {
+          // eslint-disable-next-line no-console
+          console.log(`\n  ⚠️  Pairing attempt ${attempt}/${MAX_PAIRING_RETRIES} errored: ${err.message}`);
+          // eslint-disable-next-line no-console
+          console.log('  Retrying in 5 seconds...\n');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        }
+        throw err;
       }
-    } catch (err: any) {
-      logger.error({ err: err?.message ?? String(err), sessionId, phoneNumber }, '[PAIRING] Failed to start pairing code flow');
-      throw err;
     }
   }
 
