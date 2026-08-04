@@ -35,6 +35,9 @@ import {
   WACallEvent,
   proto,
   UserFacingSocketConfig,
+  isJidGroup,
+  isJidBroadcast,
+  isJidNewsletter
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { EventEmitter } from 'events';
@@ -267,9 +270,9 @@ export class ConnectionManager extends EventEmitter {
       // ignore) when jid is missing so Baileys continues processing normally.
       shouldIgnoreJid: (jid: string | undefined | null) => {
         if (!jid || typeof jid !== 'string') return false;
-        const isGroup = jid.endsWith('@g.us');
-        const isBroadcast = jid === 'status@broadcast';
-        const isNewsletter = jid.includes('@newsletter');
+        const isGroup = isJidGroup(jid);
+        const isBroadcast = isJidBroadcast(jid) || jid === 'status@broadcast';
+        const isNewsletter = isJidNewsletter(jid);
         const isUser = jid.endsWith('@s.whatsapp.net');
         return !isGroup && !isBroadcast && !isUser && !isNewsletter;
       },

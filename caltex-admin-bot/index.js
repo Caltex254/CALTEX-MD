@@ -22,15 +22,15 @@
 //  restart does NOT require re-pairing.
 // ============================================================================
 
-const TelegramBot = require('node-telegram-bot-api');
-const makeWASocket = require('@whiskeysockets/baileys').default;
 const {
+  makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   Browsers,
 } = require('@whiskeysockets/baileys');
+const TelegramBot = require('node-telegram-bot-api');
 const { Boom } = require('@hapi/boom');
 const P = require('pino');
 const fs = require('fs');
@@ -81,11 +81,15 @@ async function startWhatsApp() {
   console.log(`[WA] using Baileys v${version.join('.')}, latest=${isLatest}`);
 
   sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false,
-    logger: P({ level: 'warn' }),
-    browser: Browsers.appropriate('Chrome'),
     version,
+    browser: Browsers.appropriate('Chrome'),
+    connectTimeoutMs: 15000,
+    keepAliveIntervalMs: 25000,
+    logger: P({ level: 'warn' }),
+    defaultQueryTimeoutMs: 45000,
+    retryRequestDelayMs: 200,
+    maxMsgRetryCount: 3,
+    auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
     getMessage: async (key) => {
       // We don't keep a message store — return a placeholder.
       // This is only used for retry receipts / quote lookups.
